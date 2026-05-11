@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Brewview</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <header class="site-header">
+      <a href="/"><h1>Brewview</h1></a>
+      <a href="https://github.com/simbados/yoda.cc/tree/main/brewview" target="_blank" rel="noopener noreferrer">
+        <img src="github-mark.png" alt="GitHub" class="header-github">
+      </a>
+    </header>
+    <p class="tagline">Analyse Homebrew formula dependencies.</p>
+    <p class="tagline-sub">All processing happens in your browser. Data is fetched directly from <code>formulae.brew.sh</code> — no data is sent to any other server.</p>
+
+    <form id="form" autocomplete="off">
+      <div class="input-row">
+        <input
+          id="formula-input"
+          type="text"
+          placeholder="Formula name (e.g. ffmpeg, wget, openssl@3)"
+          spellcheck="false"
+          required
+        >
+        <button id="submit-btn" type="submit">Analyse</button>
+      </div>
+      <div class="option-row">
+        <input id="include-build" type="checkbox">
+        <label for="include-build">Include build dependencies</label>
+      </div>
+    </form>
+
+    <p class="note">
+      Install counts are sourced from the Homebrew analytics API and reflect the number of
+      installs over the past 365 days across all versions of the formula.
+    </p>
+
+    <div id="error" hidden></div>
+    <div id="progress" hidden></div>
+    <div id="results" hidden></div>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

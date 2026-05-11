@@ -209,8 +209,10 @@ main { max-width: 980px; margin: 0 auto; }
   margin-bottom: 2rem;
 }
 
-.site-header h1 { margin: 0; width: fit-content; }
-.site-header a:last-child { margin-left: auto; }
+.site-header h1 { margin: 0; width: fit-content; line-height: 1; }
+.site-header a:last-child:not(:first-child) { margin-left: auto; }
+
+.site-header > a { display: flex; align-items: center; text-decoration: none; color: inherit; }
 
 .header-logo {
   display: block;
@@ -256,6 +258,7 @@ h1 {
 }
 
 #url-input,
+#formula-input,
 .token-row input {
   padding: 0.6rem 0.85rem;
   border: 1px solid var(--border);
@@ -267,12 +270,15 @@ h1 {
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
-#url-input { flex: 1; min-width: 280px; }
+#url-input,
+#formula-input { flex: 1; min-width: 280px; }
 
 #url-input::placeholder,
+#formula-input::placeholder,
 .token-row input::placeholder { color: var(--muted); }
 
 #url-input:focus,
+#formula-input:focus,
 .token-row input:focus {
   outline: none;
   border-color: var(--accent);

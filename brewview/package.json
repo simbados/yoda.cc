@@ -1,0 +1,13 @@
+{
+  "name": "brewview",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Analyse Homebrew formula dependencies",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "test": "node --test",
+    "build": "rm web/style.css && cp ../shared/style.css web/style.css"
+  }
+}
