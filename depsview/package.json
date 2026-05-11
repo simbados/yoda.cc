@@ -1,0 +1,17 @@
+{
+  "name": "depsview",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "List all dependencies and subdependencies of a Python project",
+  "bin": {
+    "depsview": "./src/main.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "test": "npm run prepare && node --test",
+    "build": "rm -rf web/src && cp -r src web/src && rm web/style.css && cp ../shared/style.css web/style.css",
+    "prepare": "rm -rf web/src && ln -s ../src web/src"
+  }
+}

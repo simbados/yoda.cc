@@ -1,0 +1,250 @@
+#!/usr/bin/env node
+/**
+ * depsview — CLI entry point.
+ * Supports Python projects (pyproject.toml, requirements.txt, …) and npm
+ * projects (package-lock.json preferred, package.json fallback).
+ * Auto-detects the ecosystem from the files present in the project directory
+ * or GitHub URL; use --npm / --python to override.
+ *
+ * Usage:
+ *   node src/main.js <path-or-github-url> [--npm|--python] [--json] [--debug]
+ *                    [--include-tests] [--download-stats|--ds]
+ */
+
+import fs   from 'node:fs';
+import path from 'node:path';
+
+import { parseDependencyFile    as parsePythonFile   } from './python/parser.js';
+import { resolveDependencies    as resolvePython      } from './python/depResolver.js';
+import { normalizePackageName   as normalizePython    } from './python/pypiClient.js';
+
+import { parseDependencyFile    as parseNpmFile       } from './npm/parser.js';
+import { resolveDependencies    as resolveNpm         } from './npm/depResolver.js';
+import { normalizePackageName   as normalizeNpm       } from './npm/depResolver.js';
+import { parsePackageJson                             } from './npm/parserCore.js';
+
+import { formatTable, formatJson } from './output/formatter.js';
+import { generateReport            } from './output/reportGenerator.js';
+import { fetchSocketScores        } from './socket/client.js';
+import { setDebug                } from './util/debugging.js';
+import { isGithubUrl, parseGithubUrl } from './github/url.js';
+import { parseGithubDependencies, parseGithubNpmDependencies } from './github/parser.js';
+import { listDirectory } from './github/client.js';
+
+/** npm-specific filenames checked during local ecosystem detection. */
+const NPM_FILES    = new Set(['package-lock.json', 'pnpm-lock.yaml', 'package.json']);
+/** Python-specific filenames checked during local ecosystem detection. */
+const PYTHON_FILES = new Set(['pyproject.toml', 'requirements.txt', 'setup.cfg', 'Pipfile', 'manifest.json']);
+
+/**
+ * Parses CLI arguments from process.argv.
+ * Socket.dev credentials can also be supplied via SOCKET_KEY / SOCKET_ORG env vars;
+ * the --socket-key= / --socket-org= flags take precedence when both are present.
+ * @returns {{ projectPath: string, json: boolean, debug: boolean, includeTests: boolean, downloadStats: boolean, ecosystem: 'npm'|'python'|null, socketKey: string|null, socketOrg: string|null, reportPath: string|null }}
+ */
+function parseArgs() {
+  const args = process.argv.slice(2);
+  const jsonFlag          = args.includes('--json');
+  const debugFlag         = args.includes('--debug');
+  const includeTestsFlag  = args.includes('--include-tests');
+  const downloadStatsFlag = args.includes('--download-stats') || args.includes('--ds');
+  const npmFlag           = args.includes('--npm');
+  const pythonFlag        = args.includes('--python');
+  const positional        = args.filter(a => !a.startsWith('--'));
+
+  const socketKeyArg = args.find(a => a.startsWith('--socket-key='));
+  const socketOrgArg = args.find(a => a.startsWith('--socket-org='));
+  const socketKey    = socketKeyArg ? socketKeyArg.slice('--socket-key='.length) : (process.env.SOCKET_KEY ?? null);
+  const socketOrg    = socketOrgArg ? socketOrgArg.slice('--socket-org='.length) : (process.env.SOCKET_ORG ?? null);
+
+  // --report              → write to depsview-report.html
+  // --report=custom.html  → write to custom.html
+  const reportArg = args.find(a => a === '--report' || a.startsWith('--report='));
+  const reportPath = reportArg === undefined
+    ? null
+    : reportArg === '--report'
+      ? 'depsview-report.html'
+      : reportArg.slice('--report='.length);
+
+  if (positional.length === 0) {
+    console.error('Usage: depsview <path-to-project|github-url> [--npm|--python] [--json] [--debug] [--include-tests] [--download-stats|--ds]');
+    console.error('       [--socket-key=<key>] [--socket-org=<slug>] [--report[=<file>]]');
+    console.error('');
+    console.error('Python files: pyproject.toml, manifest.json, requirements.txt, setup.cfg, Pipfile');
+    console.error('npm files:    package-lock.json, pnpm-lock.yaml (preferred), package.json');
+    process.exit(1);
+  }
+
+  const ecosystem = npmFlag ? 'npm' : pythonFlag ? 'python' : null;
+  return { projectPath: positional[0], json: jsonFlag, debug: debugFlag, includeTests: includeTestsFlag, downloadStats: downloadStatsFlag, ecosystem, socketKey, socketOrg, reportPath };
+}
+
+/**
+ * Detects the package ecosystem from local filesystem.
+ * Checks for npm files first; falls back to Python.
+ * @param {string} dirPath - absolute path to the project root
+ * @returns {'npm'|'python'}
+ */
+function detectLocalEcosystem(dirPath) {
+  for (const f of NPM_FILES) {
+    if (fs.existsSync(path.join(dirPath, f))) return 'npm';
+  }
+  return 'python';
+}
+
+/**
+ * Detects the package ecosystem from a GitHub directory listing.
+ * Checks for npm files first; falls back to Python.
+ * @param {Array<{ name: string, type: string }>} listing
+ * @returns {'npm'|'python'|null} null when no recognised files are found
+ */
+function detectGithubEcosystem(listing) {
+  const names = new Set(listing.map(e => e.name));
+  for (const f of NPM_FILES)    { if (names.has(f)) return 'npm'; }
+  for (const f of PYTHON_FILES) { if (names.has(f)) return 'python'; }
+  return null;
+}
+
+/**
+ * Attempts to read a package.json at the project root to extract direct dep names.
+ * Used alongside lock-file resolution to populate the direct/transitive footer.
+ * Returns an empty Set if package.json is absent or unparseable.
+ * @param {string} dirPath
+ * @param {boolean} includeTests
+ * @returns {Set<string>}
+ */
+function readDirectNamesFromPackageJson(dirPath, includeTests) {
+  try {
+    const content = fs.readFileSync(path.join(dirPath, 'package.json'), 'utf8');
+    const direct  = parsePackageJson(content, includeTests);
+    return new Set(direct.map(d => normalizeNpm(d.name)));
+  } catch {
+    return new Set();
+  }
+}
+
+/**
+ * Main entry point.
+ * @returns {Promise<void>}
+ */
+async function main() {
+  const { projectPath, json, debug, includeTests, downloadStats, ecosystem: ecosystemFlag, socketKey, socketOrg, reportPath } = parseArgs();
+  if (debug) setDebug(true);
+
+  const absolutePath = path.resolve(projectPath);
+
+  // ── Step 1: Parse dependency file(s) ──────────────────────────────────────
+  let deps, source, ecosystem, directNames, note = null;
+
+  try {
+    if (isGithubUrl(projectPath)) {
+      const githubRef = parseGithubUrl(projectPath);
+
+      // Detect ecosystem from the root listing unless overridden
+      let eco = ecosystemFlag;
+      if (!eco) {
+        const listing = await listDirectory(githubRef.owner, githubRef.repo, githubRef.subpath, githubRef.ref);
+        // Fall back to 'python' when no files are recognised at the root —
+        // parseGithubDependencies traverses up to MAX_DEPTH levels and throws
+        // a clear error if nothing is found there either (covers HA integrations
+        // where manifest.json sits at custom_components/<name>/).
+        eco = detectGithubEcosystem(listing ?? []) ?? 'python';
+      }
+      ecosystem = eco;
+
+      if (ecosystem === 'npm') {
+        ({ deps, source, note } = await parseGithubNpmDependencies(githubRef, { includeTests }));
+      } else {
+        ({ deps, source } = await parseGithubDependencies(githubRef, { includeTests }));
+      }
+    } else {
+      ecosystem = ecosystemFlag ?? detectLocalEcosystem(absolutePath);
+
+      if (ecosystem === 'npm') {
+        ({ deps, source, note } = parseNpmFile(absolutePath, { includeTests }));
+      } else {
+        ({ deps, source } = parsePythonFile(absolutePath, { includeTests }));
+      }
+    }
+  } catch (err) {
+    console.error(`Error: ${err.message}`);
+    process.exit(1);
+  }
+
+  if (deps.length === 0) {
+    console.error(`No dependencies found in ${source}. The file may be empty or use an unsupported format.`);
+    process.exit(0);
+  }
+
+  // ── Build directNames set ──────────────────────────────────────────────────
+  // For lock-file sources, read package.json to know which deps are direct.
+  // For package.json / Python sources, every input dep is direct.
+  const isLockFile = source === 'package-lock.json' || source === 'pnpm-lock.yaml';
+  if (ecosystem === 'npm') {
+    if (isLockFile) {
+      directNames = isGithubUrl(projectPath)
+        ? new Set()
+        : readDirectNamesFromPackageJson(absolutePath, includeTests);
+    } else {
+      directNames = new Set(deps.map(d => normalizeNpm(d.name)));
+    }
+  } else {
+    directNames = new Set(deps.map(d => normalizePython(d.name)));
+  }
+
+  if (!json) {
+    console.log(`Resolving ${ecosystem} dependencies from ${source} (${deps.length} ${isLockFile ? 'installed' : 'direct'})...\n`);
+    if (note) console.error(`[note] ${note}\n`);
+  }
+
+  // ── Step 2: Resolve all deps ───────────────────────────────────────────────
+  let results;
+  try {
+    if (ecosystem === 'npm') {
+      results = await resolveNpm(deps, {
+        onProgress: json ? undefined : msg => process.stderr.write(msg + '\n'),
+      });
+    } else {
+      results = await resolvePython(deps, {
+        onProgress: json ? undefined : msg => process.stderr.write(msg + '\n'),
+        downloadStats,
+      });
+    }
+  } catch (err) {
+    console.error(`Fatal error during resolution: ${err.message}`);
+    process.exit(1);
+  }
+
+  if (!json) process.stderr.write('\n');
+
+  // ── Step 3: Fetch socket.dev supply chain scores (optional) ───────────────
+  let socketScores = null;
+  if (socketKey && socketOrg) {
+    if (!json) process.stderr.write('Fetching supply chain scores from socket.dev…\n');
+    const packages = [...results.values()]
+      .filter(r => !r.error)
+      .map(r => ({ name: r.name, version: r.version }));
+    const socketEcosystem = ecosystem === 'python' ? 'pypi' : ecosystem;
+    socketScores = await fetchSocketScores(packages, socketKey, socketOrg, socketEcosystem);
+    if (!json) process.stderr.write('\n');
+  }
+
+  // ── Step 4: Format output ──────────────────────────────────────────────────
+  const outputOpts = { downloadStats: ecosystem === 'python' && downloadStats, socketScores };
+
+  if (json) {
+    formatJson(results, outputOpts);
+  } else {
+    formatTable(results, directNames, { ...outputOpts, source: source ?? null });
+  }
+
+  // ── Step 5: Write HTML report (optional) ──────────────────────────────────
+  if (reportPath) {
+    const html = generateReport(results, directNames, { ...outputOpts, source: source ?? null, ecosystem });
+    const resolvedReport = path.resolve(reportPath);
+    fs.writeFileSync(resolvedReport, html, 'utf8');
+    process.stderr.write(`Report written to ${resolvedReport}\n`);
+  }
+}
+
+main();

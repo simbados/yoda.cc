@@ -1,0 +1,8 @@
+{
+  "name": "yoda-landing",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "rm style.css && cp ../shared/style.css style.css",
+    "prepare": "[ -L style.css ] || ln -sf ../shared/style.css style.css"
+  }
+}
