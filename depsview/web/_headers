@@ -1,6 +1,6 @@
 /*
   # Block everything by default; allow only what the app actually needs.
-  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self' https://api.github.com https://pypi.org; img-src 'self'; font-src 'none'; object-src 'none'; worker-src 'none'; manifest-src 'none'; form-action 'none'; frame-ancestors 'none'; base-uri 'self'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self' https://api.github.com https://pypi.org https://registry.npmjs.org https://proxy.golang.org; img-src 'self'; font-src 'none'; object-src 'none'; worker-src 'none'; manifest-src 'none'; form-action 'none'; frame-ancestors 'none'; base-uri 'self'; upgrade-insecure-requests
 
   # Prevent MIME-type sniffing.
   X-Content-Type-Options: nosniff
