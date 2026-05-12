@@ -319,6 +319,32 @@ describe('detectEcosystem', () => {
     assert.equal(detectEcosystem(listing), 'npm');
   });
 
+  it('detects go from go.sum', () => {
+    const listing = [{ name: 'go.sum', type: 'file' }];
+    assert.equal(detectEcosystem(listing), 'go');
+  });
+
+  it('detects go from go.mod', () => {
+    const listing = [{ name: 'go.mod', type: 'file' }];
+    assert.equal(detectEcosystem(listing), 'go');
+  });
+
+  it('npm takes precedence over go when both present', () => {
+    const listing = [
+      { name: 'package.json', type: 'file' },
+      { name: 'go.mod',       type: 'file' },
+    ];
+    assert.equal(detectEcosystem(listing), 'npm');
+  });
+
+  it('go takes precedence over python when both present', () => {
+    const listing = [
+      { name: 'go.mod',           type: 'file' },
+      { name: 'requirements.txt', type: 'file' },
+    ];
+    assert.equal(detectEcosystem(listing), 'go');
+  });
+
   it('detects python from pyproject.toml', () => {
     const listing = [{ name: 'pyproject.toml', type: 'file' }];
     assert.equal(detectEcosystem(listing), 'python');

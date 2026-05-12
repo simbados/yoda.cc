@@ -1,0 +1,6 @@
+github.com/gin-gonic/gin v1.9.1 h1:4idEAncQnU5cB7BeOkPtxjfCSye0AAm1R0RVIqJ+Jmg=
+github.com/gin-gonic/gin v1.9.1/go.mod h1:hPys6V/FZjTp4brEKi3BcqK33XAWAW3Y+vMRuoQvLd8=
+github.com/stretchr/testify v1.8.4 h1:CcVxWJfc4CR216XXITnhSFgOp5zxEtZN/m+f6BoW/aI=
+github.com/stretchr/testify v1.8.4/go.mod h1:sz/lmYIOXD/1dqDmKjjqLyZ2RngseejIcXlSw2iwfAo=
+golang.org/x/crypto v0.21.0 h1:X31++rzVUdKhX5sWmSOFZxx8UW/ldWx8S51I/5Zgm38=
+golang.org/x/crypto v0.21.0/go.mod h1:T0Zf+0xe53aPXKCbB5QQLAfA/GGjLwE2Um4GM5AsGSo=

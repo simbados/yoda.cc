@@ -1,10 +1,10 @@
 # depsview
 
-Lists all dependencies and transitive dependencies of a Python or npm project. For each package it shows the resolved version, release dates, and total number of published versions. All data is fetched live — no local Python or Node.js installation required.
+Lists all dependencies and transitive dependencies of a Python, npm, or Go project. For each package it shows the resolved version, release dates, and total number of published versions. All data is fetched live — no local Python, Node.js, or Go installation required.
 
 Built with [Claude Code](https://claude.ai/code).
 
-**Data sources:** [PyPI](https://pypi.org/) for Python packages, [registry.npmjs.org](https://registry.npmjs.org) for npm packages, [api.github.com](https://docs.github.com/en/rest) for GitHub URL support, [pypistats.org](https://pypistats.org/) for Python download statistics (optional), [socket.dev](https://socket.dev/) for supply chain security scores (optional).
+**Data sources:** [PyPI](https://pypi.org/) for Python packages, [registry.npmjs.org](https://registry.npmjs.org) for npm packages, [proxy.golang.org](https://proxy.golang.org/) for Go modules, [api.github.com](https://docs.github.com/en/rest) for GitHub URL support, [pypistats.org](https://pypistats.org/) for Python download statistics (optional), [socket.dev](https://socket.dev/) for supply chain security scores (optional).
 
 ## Requirements
 
@@ -16,17 +16,19 @@ Node.js 18 or later. No third-party dependencies.
 node src/main.js <path-to-project|github-url> [options]
 ```
 
-The ecosystem (Python or npm) is **auto-detected** from the files present. Use `--npm` or `--python` to override when both are present.
+The ecosystem (Python, npm, or Go) is **auto-detected** from the files present. Use `--npm`, `--python`, or `--go` to override when more than one is present.
 
 ```bash
 # Auto-detect
 node src/main.js ./my-python-project
 node src/main.js ./my-node-project
+node src/main.js ./my-go-project
 node src/main.js https://github.com/owner/repo
 
 # Explicit ecosystem
 node src/main.js ./mixed-repo --npm
 node src/main.js ./mixed-repo --python
+node src/main.js ./mixed-repo --go
 ```
 
 **Example output (npm):**
@@ -64,7 +66,8 @@ Results are sorted by release date (newest first). In the web UI and HTML report
 |---|---|
 | `--npm` | Force npm ecosystem |
 | `--python` | Force Python ecosystem |
-| `--include-tests` | Include dev/test dependencies |
+| `--go` | Force Go ecosystem |
+| `--include-tests` | Include dev/test dependencies (npm / Python only) |
 | `--json` | Machine-readable JSON output |
 | `--download-stats` / `--ds` | Fetch Python download counts from pypistats.org (Python only) |
 | `--socket-key=<key>` | Socket.dev API key — enables the Supply Chain column |
@@ -134,6 +137,36 @@ All standard [PEP 440](https://peps.python.org/pep-0440/) specifiers are support
 
 Pass `--download-stats` (or `--ds`) to also fetch monthly download counts from [pypistats.org](https://pypistats.org/). Disabled by default to avoid rate-limit errors on large projects.
 
+## Go support
+
+Lock files are preferred over module files. The priority order is:
+
+1. `go.sum` (Go modules) — full transitive closure with pinned versions
+2. `go.mod` (fallback) — direct + `// indirect` requirements only
+
+### go.sum
+
+When `go.sum` is present, depsview reads every module zip-hash entry (the lines without the `/go.mod` suffix) and resolves metadata for each pinned version. `/go.mod`-suffixed lines are ignored because they correspond to modules referenced only by lazy-loading traversal and may not actually be in the build graph.
+
+When both `go.sum` and `go.mod` are present, the matching `go.mod` is read alongside to determine which modules are direct (non-`// indirect`) for the footer count.
+
+### go.mod fallback
+
+When only `go.mod` is present, every `require` entry is resolved. Entries marked `// indirect` are flagged as transitive in the footer; entries without the marker are reported as direct.
+
+`module`, `go`, `toolchain`, `replace`, `exclude`, and `retract` directives are ignored.
+
+### Metadata
+
+For each module, depsview queries the [Go module proxy](https://proxy.golang.org/):
+
+- `/{module}/@v/{version}.info` for the release date of the pinned version
+- `/{module}/@v/list` for the total number of tagged releases
+
+Module paths with uppercase letters are encoded per the GOPROXY protocol (e.g. `github.com/BurntSushi/toml` → `github.com/!burnt!sushi/toml`). The "First Release" column is reported as **unknown** for Go modules to avoid one extra request per package; the "Downloads/mo" column does not apply because the proxy does not expose install counts. The `--include-tests` flag has no effect on Go projects — `go.sum` and `go.mod` do not distinguish test-only dependencies.
+
+The supply chain score (with `--socket-key` / `--socket-org`) works for Go modules and is fetched using the `pkg:golang/...` PURL type.
+
 ## GitHub URL support
 
 Pass a GitHub repository URL instead of a local path:
@@ -144,7 +177,7 @@ node src/main.js https://github.com/owner/repo/tree/main
 node src/main.js https://github.com/owner/repo/tree/main/subfolder
 ```
 
-Ecosystem is auto-detected from the root directory listing. Python projects are traversed up to two levels deep; npm projects are read from the specified directory only.
+Ecosystem is auto-detected from the root directory listing. Python projects are traversed up to two levels deep; npm and Go projects are read from the specified directory only.
 
 **Authentication:** the GitHub API allows 60 unauthenticated requests/hour. Set `GITHUB_TOKEN` for private repos or to raise the limit to 5 000/hour:
 
@@ -227,6 +260,8 @@ By default the following are excluded (Python):
 - **Pipenv dev-packages** — `[dev-packages]` in `Pipfile`.
 
 For npm: `devDependencies` in `package.json` and packages flagged `"dev": true` in the lock file are excluded.
+
+For Go: `go.sum` and `go.mod` do not distinguish test-only dependencies, so no filtering applies and `--include-tests` is a no-op.
 
 Pass `--include-tests` to disable all filtering.
 

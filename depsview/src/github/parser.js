@@ -23,6 +23,7 @@ import {
 } from '../python/parserCore.js';
 import { normalizePackageName } from '../python/pypiClient.js';
 import { isTestDirectory, isTestRequirementsFile } from '../python/testFilter.js';
+import { parseGoSum, parseGoMod } from '../go/parserCore.js';
 
 /** Recognised dependency filenames, checked case-sensitively against the repo listing. */
 const DEP_FILENAMES = new Set(['pyproject.toml', 'manifest.json', 'requirements.txt', 'setup.cfg', 'Pipfile']);
@@ -300,4 +301,43 @@ async function parseGithubNpmDependencies({ owner, repo, ref, subpath }, options
   return { deps, source: preferred, note };
 }
 
-export { parseGithubDependencies, parseGithubNpmDependencies, resolvePath, mergeDeps };
+/**
+ * Parses Go dependencies from a GitHub repository.
+ * Checks the starting directory for go.sum first (preferred, full transitive
+ * closure), then falls back to go.mod. No directory traversal is performed;
+ * pass a subpath to point at a nested module root.
+ *
+ * @param {{ owner: string, repo: string, ref: string, subpath: string }} githubRef
+ * @returns {Promise<{ deps: Array<{ name: string, version: string, indirect?: boolean }>, source: string }>}
+ */
+async function parseGithubGoDependencies({ owner, repo, ref, subpath }) {
+  const listing = await listDirectory(owner, repo, subpath, ref);
+  if (!listing) {
+    const dir = subpath || '/';
+    throw new Error(`Directory not found: ${dir} in ${owner}/${repo} at ref "${ref}"`);
+  }
+
+  const fileNames = new Set(
+    listing.filter(e => e.type === 'file').map(e => e.name)
+  );
+
+  const preferred = fileNames.has('go.sum') ? 'go.sum'
+    : fileNames.has('go.mod')               ? 'go.mod'
+    : null;
+
+  if (!preferred) {
+    const location = subpath ? `${owner}/${repo}/${subpath}` : `${owner}/${repo}`;
+    throw new Error(`No Go dependency file found in ${location} (ref: ${ref}). Looked for: go.sum, go.mod`);
+  }
+
+  const filePath = subpath ? `${subpath}/${preferred}` : preferred;
+  const content  = await fetchFileContent(owner, repo, filePath, ref);
+  if (!content) {
+    throw new Error(`Failed to fetch ${filePath} from ${owner}/${repo}`);
+  }
+
+  const deps = preferred === 'go.sum' ? parseGoSum(content) : parseGoMod(content);
+  return { deps, source: preferred };
+}
+
+export { parseGithubDependencies, parseGithubNpmDependencies, parseGithubGoDependencies, resolvePath, mergeDeps };

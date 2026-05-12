@@ -13,9 +13,11 @@
 
 import { parseGithubUrl               } from './src/github/url.js';
 import { parseGithubDependencies,
-         parseGithubNpmDependencies   } from './src/github/parser.js';
+         parseGithubNpmDependencies,
+         parseGithubGoDependencies    } from './src/github/parser.js';
 import { resolveDependencies          } from './src/python/depResolver.js';
 import { resolveDependencies as resolveNpm } from './src/npm/depResolver.js';
+import { resolveDependencies as resolveGo  } from './src/go/depResolver.js';
 import { setGithubToken               } from './src/github/client.js';
 import { listDirectory                } from './src/github/client.js';
 
@@ -104,15 +106,17 @@ export function sortResults(resultsMap) {
 }
 
 /**
- * Detects whether a GitHub directory listing contains npm or Python dep files.
- * npm detection (package-lock.json / package.json) takes precedence.
- * Returns null when neither is detected.
+ * Detects whether a GitHub directory listing contains npm, Go, or Python dep files.
+ * npm takes precedence (package-lock.json / pnpm-lock.yaml / package.json),
+ * then Go (go.sum / go.mod), then Python.
+ * Returns null when none of the three is detected.
  * @param {Array<{ name: string, type: string }>} listing
- * @returns {'npm'|'python'|null}
+ * @returns {'npm'|'go'|'python'|null}
  */
 export function detectEcosystem(listing) {
   const names = new Set(listing.map(e => e.name));
   if (names.has('package-lock.json') || names.has('pnpm-lock.yaml') || names.has('package.json')) return 'npm';
+  if (names.has('go.sum') || names.has('go.mod'))                                                  return 'go';
   if (names.has('pyproject.toml') || names.has('requirements.txt') ||
       names.has('setup.cfg')      || names.has('Pipfile') ||
       names.has('manifest.json'))                                    return 'python';
@@ -330,12 +334,15 @@ if (typeof document !== 'undefined') {
 
       if (ecosystem === 'npm') {
         ({ deps, source, note } = await parseGithubNpmDependencies(githubRef, { includeTests }));
+      } else if (ecosystem === 'go') {
+        ({ deps, source } = await parseGithubGoDependencies(githubRef));
       } else {
         ({ deps, source } = await parseGithubDependencies(githubRef, { includeTests }));
       }
 
-      // Lock files don't carry direct/transitive info — omit the breakdown (directCount = 0)
-      const isLockFile = source === 'package-lock.json' || source === 'pnpm-lock.yaml';
+      // Lock files don't carry direct/transitive info — omit the breakdown (directCount = 0).
+      // go.sum is the Go-ecosystem lock file (full transitive closure with pinned versions).
+      const isLockFile = source === 'package-lock.json' || source === 'pnpm-lock.yaml' || source === 'go.sum';
       directCount = isLockFile ? 0 : deps.length;
 
       appendProgress(
@@ -352,6 +359,16 @@ if (typeof document !== 'undefined') {
         // After resolution, recalculate directCount against resolved names (package.json only)
         if (!isLockFile) {
           const directNames = new Set(deps.map(d => d.name.toLowerCase()));
+          directCount = [...results.values()].filter(r => directNames.has(r.name.toLowerCase())).length;
+        }
+      } else if (ecosystem === 'go') {
+        results = await resolveGo(deps, {
+          onProgress: (msg) => appendProgress(msg + '\n'),
+        });
+        // For go.mod the parser sets `indirect: true` on transitive entries; the
+        // non-indirect names give the direct dep count. go.sum has no such hint.
+        if (source === 'go.mod') {
+          const directNames = new Set(deps.filter(d => !d.indirect).map(d => d.name.toLowerCase()));
           directCount = [...results.values()].filter(r => directNames.has(r.name.toLowerCase())).length;
         }
       } else {

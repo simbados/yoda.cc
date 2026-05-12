@@ -313,8 +313,13 @@ function generateReport(results, directNames, opts = {}) {
   const { downloadStats = true, socketScores = null, source = null, ecosystem = null } = opts;
 
   // Map CLI ecosystem labels to socket.dev URL slugs.
-  // "python" uses "pypi" on socket.dev; "npm" is the same in both.
-  const socketEcosystem = ecosystem === 'python' ? 'pypi' : ecosystem === 'npm' ? 'npm' : null;
+  // socket.dev uses "pypi" for Python and "go" for Go modules; "npm" is shared.
+  // Note this is distinct from the PURL ecosystem sent to the socket API
+  // (`pypi`, `npm`, `golang`) — only the URL slug for human-facing links lives here.
+  const socketEcosystem = ecosystem === 'python' ? 'pypi'
+                       : ecosystem === 'npm'    ? 'npm'
+                       : ecosystem === 'go'     ? 'go'
+                       : null;
 
   const rows       = sortedResults(results, socketScores ?? new Map());
   const showSocket = socketScores != null;

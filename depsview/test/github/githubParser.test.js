@@ -1,6 +1,6 @@
 import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseGithubDependencies, resolvePath, mergeDeps } from '../../src/github/parser.js';
+import { parseGithubDependencies, parseGithubGoDependencies, resolvePath, mergeDeps } from '../../src/github/parser.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -473,6 +473,73 @@ describe('parseGithubDependencies — error handling', () => {
     await assert.rejects(
       () => parseGithubDependencies({ owner: 'owner', repo: 'repo', ref: 'HEAD', subpath: '' }),
       /No dependency file found/
+    );
+  });
+});
+
+// ── parseGithubGoDependencies ─────────────────────────────────────────────────
+
+describe('parseGithubGoDependencies', () => {
+  afterEach(() => { delete globalThis.fetch; });
+
+  const GO_SUM =
+    'github.com/gin-gonic/gin v1.9.1 h1:hash=\n' +
+    'github.com/gin-gonic/gin v1.9.1/go.mod h1:hash=\n' +
+    'golang.org/x/crypto v0.21.0 h1:hash=\n' +
+    'golang.org/x/crypto v0.21.0/go.mod h1:hash=\n';
+
+  const GO_MOD =
+    'module example.com/myapp\n\n' +
+    'go 1.21\n\n' +
+    'require github.com/gin-gonic/gin v1.9.1\n' +
+    'require golang.org/x/crypto v0.21.0 // indirect\n';
+
+  it('prefers go.sum over go.mod when both are present', async () => {
+    globalThis.fetch = makeRouter({
+      [`${API}?ref=HEAD`]: [
+        entry('go.sum', 'file', 'go.sum'),
+        entry('go.mod', 'file', 'go.mod'),
+      ],
+      [`${API}/go.sum?ref=HEAD`]: fileBody(GO_SUM),
+    });
+
+    const { deps, source } = await parseGithubGoDependencies(
+      { owner: 'owner', repo: 'repo', ref: 'HEAD', subpath: '' }
+    );
+    assert.equal(source, 'go.sum');
+    assert.equal(deps.length, 2);
+  });
+
+  it('falls back to go.mod when go.sum is absent', async () => {
+    globalThis.fetch = makeRouter({
+      [`${API}?ref=HEAD`]: [entry('go.mod', 'file', 'go.mod')],
+      [`${API}/go.mod?ref=HEAD`]: fileBody(GO_MOD),
+    });
+
+    const { deps, source } = await parseGithubGoDependencies(
+      { owner: 'owner', repo: 'repo', ref: 'HEAD', subpath: '' }
+    );
+    assert.equal(source, 'go.mod');
+    assert.equal(deps.length, 2);
+    const crypto = deps.find(d => d.name === 'golang.org/x/crypto');
+    assert.equal(crypto.indirect, true);
+  });
+
+  it('throws when no Go file is found', async () => {
+    globalThis.fetch = makeRouter({
+      [`${API}?ref=HEAD`]: [entry('README.md', 'file', 'README.md')],
+    });
+    await assert.rejects(
+      () => parseGithubGoDependencies({ owner: 'owner', repo: 'repo', ref: 'HEAD', subpath: '' }),
+      /No Go dependency file found/
+    );
+  });
+
+  it('throws when the directory cannot be listed', async () => {
+    globalThis.fetch = async () => ({ status: 404, ok: false, headers: { get: () => null }, json: async () => ({}) });
+    await assert.rejects(
+      () => parseGithubGoDependencies({ owner: 'owner', repo: 'repo', ref: 'HEAD', subpath: 'missing' }),
+      /Directory not found/
     );
   });
 });
