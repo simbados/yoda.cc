@@ -221,8 +221,16 @@ function renderRow(row, cfg) {
     return `<tr class="row-error">${nameCell}${errCell}</tr>`;
   }
 
-  const relClass   = daysSince(row.released) <= 7 ? 'age-fresh' : null;
-  const firstClass = cfg.showFirst && daysSince(row.firstReleased) <= 30 ? 'age-new' : null;
+  // Red (.age-new) when < 7 days, yellow (.age-fresh) when < 30 days.
+  // Same logic for both date columns. Strict `<` so a date that's literally
+  // a week / month old isn't flagged — Math.floor inside daysSince can
+  // otherwise round a 30.5-day diff down to 30.
+  const relAge     = daysSince(row.released);
+  const relClass   = relAge < 7 ? 'age-new' : relAge < 30 ? 'age-fresh' : null;
+  const firstAge   = daysSince(row.firstReleased);
+  const firstClass = cfg.showFirst
+    ? (firstAge < 7 ? 'age-new' : firstAge < 30 ? 'age-fresh' : null)
+    : null;
   const { text: scoreText, className: scoreClass } = scoreDisplay(row.supplyChain);
 
   const socketUrl = socketPackageUrl(row.name, cfg.socketSlug);
@@ -350,8 +358,11 @@ function buildRow(r,cfg){
   if(r.error){
     return '<tr class="row-error"><td><a href="'+safeUrl(r.link)+'" target="_blank" rel="noopener noreferrer">'+esc(r.name)+'</a></td><td colspan="'+dataCols+'" title="'+esc(r.error)+'">'+esc(r.version||'error')+'</td></tr>';
   }
-  var rc=daysSince(r.released)<=7?' class="age-fresh"':'';
-  var fc=cfg.showFirst&&daysSince(r.firstReleased)<=30?' class="age-new"':'';
+  var ra=daysSince(r.released),fa=daysSince(r.firstReleased);
+  var rcls=ra<7?'age-new':ra<30?'age-fresh':'';
+  var fcls=cfg.showFirst?(fa<7?'age-new':fa<30?'age-fresh':''):'';
+  var rc=rcls?' class="'+rcls+'"':'';
+  var fc=fcls?' class="'+fcls+'"':'';
   var first=cfg.showFirst?'<td'+fc+'>'+esc(r.firstReleased)+'</td>':'';
   var dl=cfg.showDl?'<td>'+(typeof r.downloadsLastMonth==='number'?r.downloadsLastMonth.toLocaleString('en-US'):'\\u2013')+'</td>':'';
   var si=cfg.showSocket?(function(){

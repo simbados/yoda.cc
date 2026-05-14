@@ -237,33 +237,43 @@ describe('generateReport — package data', () => {
 // ── Age classes ───────────────────────────────────────────────────────────────
 
 describe('generateReport — age CSS classes', () => {
-  it('applies age-fresh class when released within the last 7 days', () => {
+  it('applies age-new (red) when a date is less than 7 days old', () => {
     const fresh = new Date(Date.now() - 3 * 86_400_000).toISOString().slice(0, 10);
     const results = makeResults([
       { name: 'new-release', version: '1.0.0', releaseDate: fresh },
     ]);
     const html = generateReport(results, new Set());
-    assert.ok(html.includes('class="age-fresh"'), `Expected class="age-fresh" in HTML for date ${fresh}`);
+    assert.ok(html.includes('class="age-new"'), `Expected class="age-new" for date ${fresh}`);
   });
 
-  it('applies age-new class when firstReleaseDate within the last 30 days', () => {
-    const recent = new Date(Date.now() - 10 * 86_400_000).toISOString().slice(0, 10);
+  it('applies age-fresh (yellow) when a date is between 7 and 30 days old', () => {
+    const recent = new Date(Date.now() - 14 * 86_400_000).toISOString().slice(0, 10);
+    const results = makeResults([
+      { name: 'recent-release', version: '1.0.0', releaseDate: recent },
+    ]);
+    const html = generateReport(results, new Set());
+    assert.ok(html.includes('class="age-fresh"'), `Expected class="age-fresh" for date ${recent}`);
+  });
+
+  it('applies age-new (red) to a recent firstReleaseDate', () => {
+    const recent = new Date(Date.now() - 3 * 86_400_000).toISOString().slice(0, 10);
     const results = makeResults([
       { name: 'brand-new', version: '0.1.0', releaseDate: '2020-01-01', firstReleaseDate: recent },
     ]);
     const html = generateReport(results, new Set());
-    assert.ok(html.includes('class="age-new"'), `Expected class="age-new" in HTML for first release ${recent}`);
+    assert.ok(html.includes('class="age-new"'), `Expected class="age-new" for first release ${recent}`);
   });
 
-  it('does not apply age-fresh to an old release date', () => {
+  it('does not apply any age class to a release date older than 30 days', () => {
     const results = makeResults([
       { name: 'requests', version: '2.31.0', releaseDate: '2020-01-01' },
     ]);
     const html = generateReport(results, new Set());
     // Check only the <tbody> — the embedded sort script legitimately contains
-    // the string 'class="age-fresh"' as a JS literal, so we must not scan it.
+    // the age-class literals as JS strings, so we must not scan the whole doc.
     const tbody = html.slice(html.indexOf('<tbody>'), html.indexOf('</tbody>') + 8);
-    assert.ok(!tbody.includes('class="age-fresh"'), 'class="age-fresh" must not appear in tbody for an old release');
+    assert.ok(!tbody.includes('class="age-fresh"'), 'no age-fresh on a 5-year-old release');
+    assert.ok(!tbody.includes('class="age-new"'),   'no age-new on a 5-year-old release');
   });
 });
 

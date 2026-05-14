@@ -233,13 +233,15 @@ GITHUB_TOKEN=ghp_... node src/main.js https://github.com/owner/private-repo
 
 ### Color coding (CLI)
 
+Date cells use the same scheme in both the `Released` and `First Release` columns:
+
 | Color | Cell | Meaning |
 |---|---|---|
-| Yellow | Released | Version published within the last 7 days |
-| Red | First Release | Package first appeared within the last 30 days |
-| Green | Supply Chain | Score ≥ 80 % |
+| Red    | Released / First Release | Less than 7 days ago  |
+| Yellow | Released / First Release | Less than 30 days ago |
+| Green  | Supply Chain | Score ≥ 80 % |
 | Yellow | Supply Chain | Score 50–79 % |
-| Red | Supply Chain | Score < 50 % |
+| Red    | Supply Chain | Score < 50 % |
 
 No color codes are emitted when output is piped or redirected.
 

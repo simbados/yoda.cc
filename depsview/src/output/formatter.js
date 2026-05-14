@@ -2,10 +2,14 @@
  * Output formatters for the resolved dependency list.
  * Supports a human-readable padded column table (default) and grouped JSON (--json).
  *
- * The table applies ANSI color coding to individual cells when stdout is a TTY:
- *   "First Release" cell — red    when the package first appeared within the last 30 days
- *   "Released" cell      — yellow when the latest version was released within the last 7 days
- *   "Supply Chain" cell  — green ≥ 80 %, yellow 50–79 %, red < 50 %
+ * The table applies ANSI color coding to date cells when stdout is a TTY.
+ * Both the "Released" and "First Release" columns follow the same scheme:
+ *   red    — less than 7 days ago  (very recent)
+ *   yellow — less than 30 days ago (recent)
+ * Strict `<` (rather than `<=`) so a date that's literally a week / month old
+ * is no longer highlighted — Math.floor inside daysSince can otherwise round
+ * a 30.5-day diff down to 30 and flag a month-old package as "new".
+ * Supply chain scores use a separate tri-colour scale: green ≥ 80 %, yellow 50–79 %, red < 50 %.
  *
  * Multi-ecosystem output is rendered as one section per ecosystem in the fixed
  * order npm → python → go. Single-ecosystem projects are still rendered as a
@@ -216,10 +220,17 @@ function formatTable(results, directNames, opts = {}) {
 
   const now = new Date();
   for (const row of rows) {
-    const releasedCell = applyColor(pad(row.released, colRel), daysSince(row.released, now) <= 7 ? ANSI_YELLOW : null);
-    const firstRelCell = showFirst
-      ? applyColor(pad(row.firstReleased, colFirst), daysSince(row.firstReleased, now) <= 30 ? ANSI_RED : null)
-      : '';
+    // Red < 7 days, yellow < 30 days — applied uniformly to both date columns.
+    const relAge   = daysSince(row.released, now);
+    const relColor = relAge < 7 ? ANSI_RED : relAge < 30 ? ANSI_YELLOW : null;
+    const releasedCell = applyColor(pad(row.released, colRel), relColor);
+
+    let firstRelCell = '';
+    if (showFirst) {
+      const firstAge   = daysSince(row.firstReleased, now);
+      const firstColor = firstAge < 7 ? ANSI_RED : firstAge < 30 ? ANSI_YELLOW : null;
+      firstRelCell = applyColor(pad(row.firstReleased, colFirst), firstColor);
+    }
 
     let socketCell = '';
     if (showSocket) {
