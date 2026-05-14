@@ -1,12 +1,21 @@
 /**
  * Generates a self-contained HTML dependency report.
+ *
  * All CSS is inlined so the output file has no external dependencies and can be
- * opened directly in a browser or attached to a PR / email.
- * The visual design mirrors web/index.html (same dark theme, same color classes).
+ * opened directly in a browser or attached to a PR / email. The visual design
+ * mirrors web/index.html (same dark theme, same color classes).
+ *
+ * Multi-ecosystem support: the report renders one `<section>` per ecosystem
+ * (npm → python → go), each with its own header, summary, and sortable table.
+ * A single embedded sort script handles all sections by reading
+ * `data-section="<id>"` attributes from the `<thead>` rows.
  */
 
 import { randomBytes } from 'node:crypto';
-import { sortedResults } from './formatter.js';
+import { sortedResults, ECOSYSTEM_ORDER, purlEcosystem } from './formatter.js';
+
+/** Maps a depsview ecosystem label to the socket.dev URL slug for "(link)" anchors. */
+const SOCKET_URL_SLUG = { npm: 'npm', python: 'pypi', go: 'go' };
 
 /**
  * Escapes a string for safe insertion into HTML text content or attribute values
@@ -54,8 +63,8 @@ function daysSince(dateStr) {
 }
 
 /**
- * Maps a supply chain score (0–1) to one of three CSS class names.
- * Returns null when score is unavailable so callers can render a neutral dash.
+ * Maps a supply chain score (0–1) to display text and a CSS class name.
+ * Returns null className when score is unavailable so callers can render a neutral dash.
  * @param {number|null} score
  * @returns {{ text: string, className: string|null }}
  */
@@ -68,22 +77,15 @@ function scoreDisplay(score) {
 
 /**
  * Returns the socket.dev package URL for a given package name and ecosystem slug.
- * Returns null when socketEcosystem is falsy (ecosystem unknown) so callers can
- * fall back to plain text instead of a broken link.
- *
- * The package name is percent-encoded via encodeURIComponent to prevent characters
- * such as `?`, `#`, `&`, `<`, `>`, and spaces from corrupting the URL structure.
- * `@` and `/` are restored after encoding because socket.dev expects scoped npm
- * package names in their literal form (e.g. `@scope/name`, not `%40scope%2Fname`).
- *
- * @param {string} name                 - package name as it appears in the registry
- * @param {string|null} socketEcosystem - "npm" or "pypi" (already mapped from CLI ecosystem)
+ * Returns null when socketSlug is falsy so callers can fall back to plain text.
+ * @param {string} name
+ * @param {string|null} socketSlug - the socket.dev URL slug (`npm`, `pypi`, `go`)
  * @returns {string|null}
  */
-function socketPackageUrl(name, socketEcosystem) {
-  if (!socketEcosystem) return null;
+function socketPackageUrl(name, socketSlug) {
+  if (!socketSlug) return null;
   const encoded = encodeURIComponent(name).replace(/%40/g, '@').replace(/%2F/gi, '/');
-  return `https://socket.dev/${socketEcosystem}/package/${encoded}`;
+  return `https://socket.dev/${socketSlug}/package/${encoded}`;
 }
 
 /**
@@ -127,8 +129,27 @@ h1 {
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
-.meta { color: var(--muted); font-size: 0.85rem; margin: 0.25rem 0 1.5rem; }
+h2.section-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+  text-transform: lowercase;
+  color: var(--accent);
+  letter-spacing: 0.02em;
+}
+.report-meta { color: var(--muted); font-size: 0.85rem; margin: 0.25rem 0 2rem; }
+.section { margin-bottom: 2.5rem; }
+.section:last-child { margin-bottom: 0; }
 .summary { color: var(--muted); font-size: 0.88rem; margin: 0 0 0.75rem; }
+.note-warning {
+  color: #fcd34d;
+  background: rgba(146, 64, 14, 0.2);
+  border-left: 3px solid #92400e;
+  border-radius: 0 6px 6px 0;
+  padding: 0.5rem 0.85rem;
+  margin: 0 0 0.85rem;
+  font-size: 0.85rem;
+}
 table {
   width: 100%;
   border-collapse: collapse;
@@ -161,11 +182,18 @@ table a:hover { text-decoration: underline; }
 .score-good { color: var(--green); font-weight: 500; }
 .score-warn { color: #fcd34d; font-weight: 500; }
 .score-bad  { color: var(--red); font-weight: 500; }
+.error-banner {
+  background: rgba(146, 64, 14, 0.2);
+  border-left: 3px solid #92400e;
+  color: #fcd34d;
+  padding: 0.5rem 0.85rem;
+  border-radius: 0 6px 6px 0;
+}
 `.trim();
 
 /**
  * Builds a single `<td>` HTML string, optionally wrapped in a CSS class.
- * @param {string} content  - already-escaped cell text or inner HTML
+ * @param {string} content
  * @param {string|null} [className]
  * @returns {string}
  */
@@ -177,27 +205,27 @@ function td(content, className = null) {
 
 /**
  * Renders one table row for a resolved package.
- * @param {object}      row             - entry from sortedResults()
- * @param {boolean}     showDl          - whether the Downloads/mo column is visible
- * @param {boolean}     showSocket      - whether the Supply Chain column is visible
- * @param {string|null} socketEcosystem - "npm" or "pypi", used to link scores to socket.dev
+ * @param {object} row                   - entry from sortedResults()
+ * @param {object} cfg                   - section render config
+ * @param {boolean} cfg.showFirst
+ * @param {boolean} cfg.showDl
+ * @param {boolean} cfg.showSocket
+ * @param {string|null} cfg.socketSlug
  * @returns {string}
  */
-function renderRow(row, showDl, showSocket, socketEcosystem) {
+function renderRow(row, cfg) {
+  const dataCols = 3 + (cfg.showFirst ? 1 : 0) + (cfg.showDl ? 1 : 0) + (cfg.showSocket ? 1 : 0);
   if (row.error) {
     const nameCell = `<td><a href="${safeHref(row.link)}" target="_blank" rel="noopener noreferrer">${escapeHtml(row.name)}</a></td>`;
-    const errCell  = `<td colspan="${3 + (showDl ? 1 : 0) + (showSocket ? 1 : 0)}" title="${escapeHtml(row.error)}">${escapeHtml(row.version ?? 'error')}</td>`;
+    const errCell  = `<td colspan="${dataCols}" title="${escapeHtml(row.error)}">${escapeHtml(row.version ?? 'error')}</td>`;
     return `<tr class="row-error">${nameCell}${errCell}</tr>`;
   }
 
-  const relClass   = daysSince(row.released)     <= 7  ? 'age-fresh' : null;
-  const firstClass = daysSince(row.firstReleased) <= 30 ? 'age-new'   : null;
+  const relClass   = daysSince(row.released) <= 7 ? 'age-fresh' : null;
+  const firstClass = cfg.showFirst && daysSince(row.firstReleased) <= 30 ? 'age-new' : null;
   const { text: scoreText, className: scoreClass } = scoreDisplay(row.supplyChain);
 
-  // Show the score as coloured text followed by a "(link)" anchor to socket.dev.
-  // The percentage keeps its CSS colour from the parent <td>; the link gets the
-  // accent colour from the shared `table a` rule.
-  const socketUrl = socketPackageUrl(row.name, socketEcosystem);
+  const socketUrl = socketPackageUrl(row.name, cfg.socketSlug);
   const scoreContent = (row.supplyChain != null && socketUrl)
     ? `${escapeHtml(scoreText)} <a href="${safeHref(socketUrl)}" target="_blank" rel="noopener noreferrer">(link)</a>`
     : escapeHtml(scoreText);
@@ -208,53 +236,138 @@ function renderRow(row, showDl, showSocket, socketEcosystem) {
     ${nameCell}
     ${td(escapeHtml(row.version))}
     ${td(escapeHtml(row.released), relClass)}
-    ${td(escapeHtml(row.firstReleased), firstClass)}
+    ${cfg.showFirst  ? td(escapeHtml(row.firstReleased), firstClass) : ''}
     ${td(escapeHtml(String(row.releases)))}
-    ${showDl     ? td(escapeHtml(formatDownloads(row.downloadsLastMonth))) : ''}
-    ${showSocket ? td(scoreContent, scoreClass) : ''}
+    ${cfg.showDl     ? td(escapeHtml(formatDownloads(row.downloadsLastMonth))) : ''}
+    ${cfg.showSocket ? td(scoreContent, scoreClass) : ''}
   </tr>`;
 }
 
 /**
- * Returns the inline JavaScript that handles column sorting in the report.
- * The script is an IIFE that reads the embedded JSON data, re-sorts it on
- * every header click, and rebuilds the <tbody> innerHTML from scratch.
- * All user-supplied strings that go into innerHTML are HTML-escaped inside
- * the script so a malicious package name cannot inject markup.
+ * Builds one section block: heading + summary + table (or error banner when
+ * the orchestrator captured an error for the ecosystem).
+ *
+ * @param {string} ecosystem        - 'npm' | 'python' | 'go'
+ * @param {object} section          - section from orchestrator
+ * @param {boolean} showHeader      - emit a `<h2>` section title above the table
+ * @param {Map<string,number>|null} socketScores
+ * @param {boolean} downloadStats
+ * @returns {{ html: string, scriptCfg: object|null }} HTML + the per-section
+ *   config object embedded into the sort script (null when section is an error).
+ */
+function renderSection(ecosystem, section, showHeader, socketScores, downloadStats) {
+  const sectionId = `sec-${ecosystem}`;
+  const headerHtml = showHeader
+    ? `<h2 class="section-title">${escapeHtml(ecosystem)}</h2>`
+    : '';
+
+  if (section.error) {
+    return {
+      html: `<section class="section" data-section="${escapeHtml(sectionId)}">
+  ${headerHtml}
+  <p class="error-banner">${escapeHtml(section.error)}</p>
+</section>`,
+      scriptCfg: null,
+    };
+  }
+
+  const rows = sortedResults(
+    section.results,
+    socketScores ?? new Map(),
+    { ecosystem }
+  );
+  const total = rows.length;
+
+  const showFirst  = ecosystem !== 'go';
+  const showDl     = downloadStats && ecosystem === 'python';
+  const showSocket = socketScores != null;
+  const socketSlug = SOCKET_URL_SLUG[ecosystem] ?? null;
+
+  // Summary line
+  let summaryText;
+  if (section.directNames && section.directNames.size > 0) {
+    const directCount = rows.filter(r => section.directNames.has(r.name.toLowerCase().replace(/[-_.]+/g, '-'))).length;
+    const transitiveCount = total - directCount;
+    summaryText = `${total} package${total !== 1 ? 's' : ''} total (${directCount} direct, ${transitiveCount} transitive)`;
+  } else {
+    summaryText = `${total} package${total !== 1 ? 's' : ''} total`;
+  }
+  if (section.source) summaryText += ` · from ${section.source}`;
+
+  // Header columns
+  const colDefs = [['Package', 'name'], ['Version', 'version'], ['Released', 'released']];
+  if (showFirst)  colDefs.push(['First Release', 'firstReleased']);
+  colDefs.push(['Releases', 'releases']);
+  if (showDl)     colDefs.push(['Downloads/mo', 'downloadsLastMonth']);
+  if (showSocket) colDefs.push(['Supply Chain', 'supplyChain']);
+
+  const headerCellsHtml = colDefs.map(([label, col]) =>
+    `<th data-col="${escapeHtml(col)}"${col === 'released' ? ' class="th-sort-desc"' : ''}>${escapeHtml(label)}</th>`
+  ).join('');
+
+  const cfg = { showFirst, showDl, showSocket, socketSlug };
+  const bodyHtml = total === 0
+    ? `<tr><td colspan="${colDefs.length}">No dependencies found.</td></tr>`
+    : rows.map(r => renderRow(r, cfg)).join('\n');
+
+  const noteHtml = section.note
+    ? `<p class="note-warning">${escapeHtml(section.note)}</p>`
+    : '';
+
+  const html = `<section class="section" data-section="${escapeHtml(sectionId)}">
+  ${headerHtml}
+  <p class="summary">${escapeHtml(summaryText)}</p>
+  ${noteHtml}
+  <table data-section="${escapeHtml(sectionId)}">
+    <thead><tr>${headerCellsHtml}</tr></thead>
+    <tbody>${bodyHtml}</tbody>
+  </table>
+</section>`;
+
+  return { html, scriptCfg: { id: sectionId, rows, ...cfg } };
+}
+
+/**
+ * Builds the inline JavaScript that wires up click-to-sort on every section.
+ * The script reads an embedded JSON config (one entry per section) and tracks
+ * sort state per section. Strings going into innerHTML are HTML-escaped.
+ *
  * @param {string} scriptDataJson - already-safe JSON string (< > encoded as < >)
  * @returns {string} JavaScript source (no surrounding <script> tags)
  */
 function buildSortScript(scriptDataJson) {
   return `(function(){
 var D=${scriptDataJson};
-var sortCol='released',sortDir='desc';
+var state={};
+D.sections.forEach(function(s){state[s.id]={col:'released',dir:'desc'};});
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');}
 function safeUrl(u){var s=String(u==null?'':u);return/^https?:\\/\\//i.test(s)?s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'):'#';}
 function daysSince(d){if(!d||d==='unknown')return Infinity;var ms=Date.now()-new Date(d).getTime();return isNaN(ms)?Infinity:Math.floor(ms/86400000);}
 function scoreInfo(v){if(v==null||typeof v!=='number')return{text:'\\u2013',cls:''};var p=Math.round(v*100);return{text:p+'%',cls:v>=0.8?'score-good':v>=0.5?'score-warn':'score-bad'};}
-function socketUrl(name){if(!D.socketEcosystem)return null;var n=encodeURIComponent(name).replace(/%40/g,'@').replace(/%2F/gi,'/');return'https://socket.dev/'+D.socketEcosystem+'/package/'+n;}
-function buildRow(r){
+function socketUrl(name,slug){if(!slug)return null;var n=encodeURIComponent(name).replace(/%40/g,'@').replace(/%2F/gi,'/');return'https://socket.dev/'+slug+'/package/'+n;}
+function buildRow(r,cfg){
+  var dataCols=3+(cfg.showFirst?1:0)+(cfg.showDl?1:0)+(cfg.showSocket?1:0);
   if(r.error){
-    var ec=3+(D.showDl?1:0)+(D.showSocket?1:0);
-    return '<tr class="row-error"><td><a href="'+safeUrl(r.link)+'" target="_blank" rel="noopener noreferrer">'+esc(r.name)+'</a></td><td colspan="'+ec+'" title="'+esc(r.error)+'">'+esc(r.version||'error')+'</td></tr>';
+    return '<tr class="row-error"><td><a href="'+safeUrl(r.link)+'" target="_blank" rel="noopener noreferrer">'+esc(r.name)+'</a></td><td colspan="'+dataCols+'" title="'+esc(r.error)+'">'+esc(r.version||'error')+'</td></tr>';
   }
   var rc=daysSince(r.released)<=7?' class="age-fresh"':'';
-  var fc=daysSince(r.firstReleased)<=30?' class="age-new"':'';
-  var dl=D.showDl?'<td>'+(typeof r.downloadsLastMonth==='number'?r.downloadsLastMonth.toLocaleString('en-US'):'\\u2013')+'</td>':'';
-  var si=D.showSocket?(function(){
+  var fc=cfg.showFirst&&daysSince(r.firstReleased)<=30?' class="age-new"':'';
+  var first=cfg.showFirst?'<td'+fc+'>'+esc(r.firstReleased)+'</td>':'';
+  var dl=cfg.showDl?'<td>'+(typeof r.downloadsLastMonth==='number'?r.downloadsLastMonth.toLocaleString('en-US'):'\\u2013')+'</td>':'';
+  var si=cfg.showSocket?(function(){
     var s=scoreInfo(r.supplyChain);
-    var su=socketUrl(r.name);
+    var su=socketUrl(r.name,cfg.socketSlug);
     var inner=r.supplyChain!=null&&su?s.text+' <a href="'+safeUrl(su)+'" target="_blank" rel="noopener noreferrer">(link)</a>':s.text;
     return'<td'+(s.cls?' class="'+s.cls+'"':'')+'>'+inner+'</td>';
   })():'';
-  return'<tr><td><a href="'+safeUrl(r.link)+'" target="_blank" rel="noopener noreferrer">'+esc(r.name)+'</a></td><td>'+esc(r.version)+'</td><td'+rc+'>'+esc(r.released)+'</td><td'+fc+'>'+esc(r.firstReleased)+'</td><td>'+esc(String(r.releases))+'</td>'+dl+si+'</tr>';
+  return'<tr><td><a href="'+safeUrl(r.link)+'" target="_blank" rel="noopener noreferrer">'+esc(r.name)+'</a></td><td>'+esc(r.version)+'</td><td'+rc+'>'+esc(r.released)+'</td>'+first+'<td>'+esc(String(r.releases))+'</td>'+dl+si+'</tr>';
 }
-function sortedRows(){
-  var sign=sortDir==='asc'?1:-1;
-  var isDate=sortCol==='released'||sortCol==='firstReleased';
-  var isNum=sortCol==='releases'||sortCol==='downloadsLastMonth'||sortCol==='supplyChain';
-  return D.rows.slice().sort(function(a,b){
-    var av=a[sortCol],bv=b[sortCol];
+function sortedRows(rows,col,dir){
+  var sign=dir==='asc'?1:-1;
+  var isDate=col==='released'||col==='firstReleased';
+  var isNum=col==='releases'||col==='downloadsLastMonth'||col==='supplyChain';
+  return rows.slice().sort(function(a,b){
+    var av=a[col],bv=b[col];
     if(isDate){
       var au=!av||av==='unknown',bu=!bv||bv==='unknown';
       if(au&&bu)return a.name.localeCompare(b.name);
@@ -273,21 +386,29 @@ function sortedRows(){
     return c!==0?sign*c:a.name.localeCompare(b.name);
   });
 }
-function rerender(){
-  var rows=sortedRows();
-  var ncols=document.querySelectorAll('thead th').length;
-  document.querySelector('tbody').innerHTML=rows.length?rows.map(buildRow).join(''):'<tr><td colspan="'+ncols+'">No dependencies found.</td></tr>';
-  document.querySelectorAll('th[data-col]').forEach(function(th){
+function rerender(s){
+  var st=state[s.id];
+  var rows=sortedRows(s.rows,st.col,st.dir);
+  var tbl=document.querySelector('table[data-section="'+s.id+'"]');
+  var tbody=tbl.querySelector('tbody');
+  var ncols=tbl.querySelectorAll('thead th').length;
+  tbody.innerHTML=rows.length?rows.map(function(r){return buildRow(r,s);}).join(''):'<tr><td colspan="'+ncols+'">No dependencies found.</td></tr>';
+  tbl.querySelectorAll('th[data-col]').forEach(function(th){
     th.classList.remove('th-sort-asc','th-sort-desc');
-    if(th.dataset.col===sortCol)th.classList.add('th-sort-'+sortDir);
+    if(th.dataset.col===st.col)th.classList.add('th-sort-'+st.dir);
   });
 }
-document.querySelectorAll('th[data-col]').forEach(function(th){
-  th.addEventListener('click',function(){
-    var col=th.dataset.col;
-    if(sortCol===col){sortDir=sortDir==='asc'?'desc':'asc';}
-    else{sortCol=col;sortDir=(col==='name'||col==='version')?'asc':'desc';}
-    rerender();
+D.sections.forEach(function(s){
+  var tbl=document.querySelector('table[data-section="'+s.id+'"]');
+  if(!tbl)return;
+  tbl.querySelectorAll('th[data-col]').forEach(function(th){
+    th.addEventListener('click',function(){
+      var col=th.dataset.col;
+      var st=state[s.id];
+      if(st.col===col){st.dir=st.dir==='asc'?'desc':'asc';}
+      else{st.col=col;st.dir=(col==='name'||col==='version')?'asc':'desc';}
+      rerender(s);
+    });
   });
 });
 })();`;
@@ -296,81 +417,42 @@ document.querySelectorAll('th[data-col]').forEach(function(th){
 /**
  * Generates a complete, self-contained HTML dependency report as a string.
  *
- * The report matches the terminal table in data and column layout. It applies
- * the same age-based color classes (age-fresh, age-new) and supply chain score
- * classes (score-good, score-warn, score-bad) as the web UI.
+ * Renders one `<section>` per ecosystem in fixed order (npm → python → go).
+ * Empty/missing ecosystems are skipped. Section headers are emitted only when
+ * two or more sections are present.
  *
- * @param {Map<string, object>} results        - resolved dependency map from depResolver
- * @param {Set<string>}         directNames    - normalised names of direct dependencies
- * @param {object}              [opts]
- * @param {boolean}             [opts.downloadStats=true]   - include the Downloads/mo column
- * @param {Map<string,number>|null} [opts.socketScores=null] - supply chain scores; column shown when non-null
- * @param {string|null}         [opts.source=null]    - source file name shown in the report header
- * @param {string|null}         [opts.ecosystem=null] - ecosystem label shown in the report header
+ * @param {Map<'npm'|'python'|'go', object>} sections  - sections from orchestrator
+ * @param {object} [opts]
+ * @param {boolean}                 [opts.downloadStats=false]
+ * @param {Map<string,number>|null} [opts.socketScores=null]
  * @returns {string} complete HTML document
  */
-function generateReport(results, directNames, opts = {}) {
-  const { downloadStats = true, socketScores = null, source = null, ecosystem = null } = opts;
+function generateReport(sections, opts = {}) {
+  const { downloadStats = false, socketScores = null } = opts;
 
-  // Map CLI ecosystem labels to socket.dev URL slugs.
-  // socket.dev uses "pypi" for Python and "go" for Go modules; "npm" is shared.
-  // Note this is distinct from the PURL ecosystem sent to the socket API
-  // (`pypi`, `npm`, `golang`) — only the URL slug for human-facing links lives here.
-  const socketEcosystem = ecosystem === 'python' ? 'pypi'
-                       : ecosystem === 'npm'    ? 'npm'
-                       : ecosystem === 'go'     ? 'go'
-                       : null;
+  const present = ECOSYSTEM_ORDER.filter(eco => sections.has(eco));
+  const showHeader = present.length >= 2;
 
-  const rows       = sortedResults(results, socketScores ?? new Map());
-  const showSocket = socketScores != null;
-  const showDl     = downloadStats;
-  const total      = rows.length;
-
-  // ── Summary line ────────────────────────────────────────────────────────────
-  let summaryText;
-  if (directNames.size > 0) {
-    const directCount     = rows.filter(r => directNames.has(r.name.toLowerCase().replace(/[-_.]+/g, '-'))).length;
-    const transitiveCount = total - directCount;
-    summaryText = `${total} package${total !== 1 ? 's' : ''} total (${directCount} direct, ${transitiveCount} transitive)`;
-  } else {
-    summaryText = `${total} package${total !== 1 ? 's' : ''} total`;
+  const sectionBlocks = [];
+  const scriptCfgs = [];
+  for (const ecosystem of present) {
+    const { html, scriptCfg } = renderSection(
+      ecosystem,
+      sections.get(ecosystem),
+      showHeader,
+      socketScores,
+      downloadStats
+    );
+    sectionBlocks.push(html);
+    if (scriptCfg) scriptCfgs.push(scriptCfg);
   }
 
-  // ── Meta line ───────────────────────────────────────────────────────────────
-  // Build the plain-text string first, then escape once at the insertion point
-  // (same pattern as summaryText). Pre-escaping individual parts and then
-  // inserting the joined string raw would be fragile and inconsistent.
-  const metaParts = [];
-  if (ecosystem) metaParts.push(ecosystem);
-  if (source)    metaParts.push(`from ${source}`);
-  metaParts.push(`generated ${new Date().toISOString().slice(0, 19).replace('T', ' ')} UTC`);
-  const metaText = metaParts.join(' · ');
+  const ecosystemsText = present.join(', ') || '(none)';
+  const metaText = `${ecosystemsText} · generated ${new Date().toISOString().slice(0, 19).replace('T', ' ')} UTC`;
 
-  // ── Table headers with sort keys ────────────────────────────────────────────
-  const colDefs = [
-    ['Package',       'name'],
-    ['Version',       'version'],
-    ['Released',      'released'],
-    ['First Release', 'firstReleased'],
-    ['Releases',      'releases'],
-  ];
-  if (showDl)     colDefs.push(['Downloads/mo', 'downloadsLastMonth']);
-  if (showSocket) colDefs.push(['Supply Chain', 'supplyChain']);
-
-  // 'released' column starts with descending sort indicator (newest first default).
-  const headerHtml = colDefs.map(([label, col]) =>
-    `<th data-col="${escapeHtml(col)}"${col === 'released' ? ' class="th-sort-desc"' : ''}>${escapeHtml(label)}</th>`
-  ).join('');
-
-  // ── Table rows (initial render, default sort already applied) ───────────────
-  const bodyHtml = total === 0
-    ? `<tr><td colspan="${colDefs.length}">No dependencies found.</td></tr>`
-    : rows.map(r => renderRow(r, showDl, showSocket, socketEcosystem)).join('\n');
-
-  // ── Embed row data for client-side re-sort ───────────────────────────────────
   // Escape </script> sequences inside the JSON so they cannot prematurely close
   // the script block. < / > are valid JSON/JS unicode escapes.
-  const scriptData = JSON.stringify({ rows, showDl, showSocket, socketEcosystem })
+  const scriptData = JSON.stringify({ sections: scriptCfgs })
     .replace(/</g, '\\u003c')
     .replace(/>/g, '\\u003e');
 
@@ -390,12 +472,8 @@ function generateReport(results, directNames, opts = {}) {
 <body>
   <main>
     <h1>Dependency Report</h1>
-    <p class="meta">${escapeHtml(metaText)}</p>
-    <p class="summary">${escapeHtml(summaryText)}</p>
-    <table>
-      <thead><tr>${headerHtml}</tr></thead>
-      <tbody>${bodyHtml}</tbody>
-    </table>
+    <p class="report-meta">${escapeHtml(metaText)}</p>
+${sectionBlocks.join('\n')}
   </main>
   <script nonce="${nonce}">${buildSortScript(scriptData)}</script>
 </body>

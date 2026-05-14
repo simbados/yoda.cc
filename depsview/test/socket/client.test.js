@@ -1,6 +1,6 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { fetchSocketScores, buildPurl, parseNdjson } from '../../src/socket/client.js';
+import { fetchSocketScores, buildPurl, parsePurl, parseNdjson, scoreKey } from '../../src/socket/client.js';
 
 let origFetch;
 beforeEach(() => { origFetch = globalThis.fetch; });
@@ -39,10 +39,41 @@ describe('buildPurl', () => {
     assert.equal(buildPurl('requests', '2.28.0', 'pypi'), 'pkg:pypi/requests@2.28.0');
   });
 
+  it('builds a golang purl', () => {
+    assert.equal(
+      buildPurl('github.com/gin-gonic/gin', 'v1.9.1', 'golang'),
+      'pkg:golang/github.com/gin-gonic/gin@v1.9.1'
+    );
+  });
+
   it('uses a raw @ for scoped npm packages — the socket.dev API expects it unencoded', () => {
-    // The API returns namespace:"@clack", name:"core" in its response, confirming
-    // it accepts and normalises the raw @ itself. Percent-encoding breaks matching.
-    assert.equal(buildPurl('@esbuild/aix-ppc64', '0.21.5', 'npm'), 'pkg:npm/@esbuild/aix-ppc64@0.21.5');
+    assert.equal(buildPurl('@clack/core', '1.3.0', 'npm'), 'pkg:npm/@clack/core@1.3.0');
+  });
+});
+
+// ── parsePurl ──────────────────────────────────────────────────────────────────
+
+describe('parsePurl', () => {
+  it('parses a simple npm purl', () => {
+    assert.deepEqual(parsePurl('pkg:npm/lodash@4.17.21'),
+      { type: 'npm', name: 'lodash', version: '4.17.21' });
+  });
+
+  it('parses a scoped npm purl', () => {
+    assert.deepEqual(parsePurl('pkg:npm/@clack/core@1.3.0'),
+      { type: 'npm', name: '@clack/core', version: '1.3.0' });
+  });
+
+  it('parses a hierarchical golang purl', () => {
+    assert.deepEqual(parsePurl('pkg:golang/github.com/gin-gonic/gin@v1.9.1'),
+      { type: 'golang', name: 'github.com/gin-gonic/gin', version: 'v1.9.1' });
+  });
+
+  it('returns null for non-purl strings', () => {
+    assert.equal(parsePurl('not-a-purl'), null);
+    assert.equal(parsePurl(null), null);
+    assert.equal(parsePurl(''), null);
+    assert.equal(parsePurl('pkg:npm/no-version'), null);
   });
 });
 
@@ -69,65 +100,84 @@ describe('parseNdjson', () => {
   });
 });
 
+// ── scoreKey ──────────────────────────────────────────────────────────────────
+
+describe('scoreKey', () => {
+  it('builds ecosystem-tagged keys with lowercased name', () => {
+    assert.equal(scoreKey('npm', 'Express', '4.19.2'), 'npm:express@4.19.2');
+    assert.equal(scoreKey('pypi', 'Requests', '2.28.0'), 'pypi:requests@2.28.0');
+    assert.equal(scoreKey('golang', 'github.com/BurntSushi/toml', 'v1.3.2'), 'golang:github.com/burntsushi/toml@v1.3.2');
+  });
+});
+
 // ── fetchSocketScores ──────────────────────────────────────────────────────────
 
 describe('fetchSocketScores — empty input', () => {
   it('returns an empty Map without making a network request', async () => {
     let called = false;
     globalThis.fetch = async () => { called = true; };
-    const result = await fetchSocketScores([], 'key', 'org', 'npm');
+    const result = await fetchSocketScores([], 'key', 'org');
     assert.equal(called, false);
     assert.equal(result.size, 0);
   });
 });
 
-describe('fetchSocketScores — npm success', () => {
-  it('returns a Map keyed by name@version with supplyChain score', async () => {
-    mockNdjson([
-      JSON.stringify({ name: 'eslint', version: '8.57.0', score: { supplyChain: 0.9, overall: 0.5 } }),
-      JSON.stringify({ name: 'lodash', version: '4.17.21', score: { supplyChain: 0.75, overall: 0.8 } }),
-    ]);
-    const result = await fetchSocketScores(
-      [{ name: 'eslint', version: '8.57.0' }, { name: 'lodash', version: '4.17.21' }],
-      'key', 'org', 'npm'
-    );
-    assert.equal(result.size, 2);
-    assert.equal(result.get('eslint@8.57.0'), 0.9);
-    assert.equal(result.get('lodash@4.17.21'), 0.75);
-  });
-
-  it('recombines namespace and name for scoped packages', async () => {
-    // The socket.dev API splits "@clack/core" into namespace:"@clack", name:"core".
-    // The key must be "@clack/core@1.3.0" to match the rest of the codebase.
-    mockNdjson([
-      JSON.stringify({ namespace: '@clack', name: 'core', version: '1.3.0', score: { supplyChain: 1.0 } }),
-    ]);
-    const result = await fetchSocketScores(
-      [{ name: '@clack/core', version: '1.3.0' }],
-      'key', 'org', 'npm'
-    );
-    assert.equal(result.size, 1);
-    assert.equal(result.get('@clack/core@1.3.0'), 1.0);
-  });
-});
-
-describe('fetchSocketScores — pypi success', () => {
-  it('builds pypi purls and returns scores', async () => {
+describe('fetchSocketScores — mixed ecosystems', () => {
+  it('sends one batched request with per-item PURL types', async () => {
     let capturedBody;
     globalThis.fetch = async (url, opts) => {
       capturedBody = JSON.parse(opts.body);
       return {
         ok: true, status: 200,
         headers: { get: () => null },
-        text: async () => JSON.stringify({ name: 'requests', version: '2.28.0', score: { supplyChain: 0.85 } }),
+        text: async () => [
+          JSON.stringify({ purl: 'pkg:npm/express@4.19.2',                       score: { supplyChain: 0.9 } }),
+          JSON.stringify({ purl: 'pkg:pypi/requests@2.28.0',                     score: { supplyChain: 0.85 } }),
+          JSON.stringify({ purl: 'pkg:golang/github.com/gin-gonic/gin@v1.9.1',  score: { supplyChain: 0.7 } }),
+        ].join('\n'),
       };
     };
+
     const result = await fetchSocketScores(
-      [{ name: 'requests', version: '2.28.0' }],
-      'key', 'org', 'pypi'
+      [
+        { name: 'express',                  version: '4.19.2',  ecosystem: 'npm' },
+        { name: 'requests',                 version: '2.28.0',  ecosystem: 'pypi' },
+        { name: 'github.com/gin-gonic/gin', version: 'v1.9.1',  ecosystem: 'golang' },
+      ],
+      'key', 'org'
     );
-    assert.equal(capturedBody.components[0].purl, 'pkg:pypi/requests@2.28.0');
-    assert.equal(result.get('requests@2.28.0'), 0.85);
+
+    assert.deepEqual(capturedBody.components.map(c => c.purl), [
+      'pkg:npm/express@4.19.2',
+      'pkg:pypi/requests@2.28.0',
+      'pkg:golang/github.com/gin-gonic/gin@v1.9.1',
+    ]);
+    assert.equal(result.size, 3);
+    assert.equal(result.get('npm:express@4.19.2'),                       0.9);
+    assert.equal(result.get('pypi:requests@2.28.0'),                     0.85);
+    assert.equal(result.get('golang:github.com/gin-gonic/gin@v1.9.1'),  0.7);
+  });
+
+  it('uses echoed purl field when present in response', async () => {
+    mockNdjson([
+      JSON.stringify({ purl: 'pkg:npm/eslint@8.57.0', score: { supplyChain: 0.9 } }),
+    ]);
+    const result = await fetchSocketScores(
+      [{ name: 'eslint', version: '8.57.0', ecosystem: 'npm' }],
+      'key', 'org'
+    );
+    assert.equal(result.get('npm:eslint@8.57.0'), 0.9);
+  });
+
+  it('falls back to type/namespace/name fields when purl is absent', async () => {
+    mockNdjson([
+      JSON.stringify({ type: 'npm', namespace: '@clack', name: 'core', version: '1.3.0', score: { supplyChain: 1.0 } }),
+    ]);
+    const result = await fetchSocketScores(
+      [{ name: '@clack/core', version: '1.3.0', ecosystem: 'npm' }],
+      'key', 'org'
+    );
+    assert.equal(result.get('npm:@clack/core@1.3.0'), 1.0);
   });
 });
 
@@ -142,7 +192,7 @@ describe('fetchSocketScores — authorization header', () => {
         text: async () => '',
       };
     };
-    await fetchSocketScores([{ name: 'express', version: '4.19.2' }], 'my-api-key', 'org', 'npm');
+    await fetchSocketScores([{ name: 'express', version: '4.19.2', ecosystem: 'npm' }], 'my-api-key', 'org');
     assert.equal(capturedHeaders['Authorization'], 'Bearer my-api-key');
   });
 });
@@ -150,13 +200,13 @@ describe('fetchSocketScores — authorization header', () => {
 describe('fetchSocketScores — HTTP error', () => {
   it('returns an empty Map on 401', async () => {
     mockError(401);
-    const result = await fetchSocketScores([{ name: 'express', version: '4.19.2' }], 'bad-key', 'org', 'npm');
+    const result = await fetchSocketScores([{ name: 'express', version: '4.19.2', ecosystem: 'npm' }], 'bad-key', 'org');
     assert.equal(result.size, 0);
   });
 
   it('returns an empty Map on 500', async () => {
     mockError(500);
-    const result = await fetchSocketScores([{ name: 'express', version: '4.19.2' }], 'key', 'org', 'npm');
+    const result = await fetchSocketScores([{ name: 'express', version: '4.19.2', ecosystem: 'npm' }], 'key', 'org');
     assert.equal(result.size, 0);
   });
 });
@@ -164,23 +214,27 @@ describe('fetchSocketScores — HTTP error', () => {
 describe('fetchSocketScores — missing score fields', () => {
   it('skips entries without score.supplyChain', async () => {
     mockNdjson([
-      JSON.stringify({ name: 'pkg-a', version: '1.0.0', score: {} }),
-      JSON.stringify({ name: 'pkg-b', version: '2.0.0' }),
-      JSON.stringify({ name: 'pkg-c', version: '3.0.0', score: { supplyChain: 0.6 } }),
+      JSON.stringify({ purl: 'pkg:npm/lodash@4.17.21', score: {} }),
+      JSON.stringify({ purl: 'pkg:npm/vite@5.1.0' }),
+      JSON.stringify({ purl: 'pkg:npm/eslint@8.57.0', score: { supplyChain: 0.6 } }),
     ]);
     const result = await fetchSocketScores(
-      [{ name: 'pkg-a', version: '1.0.0' }, { name: 'pkg-b', version: '2.0.0' }, { name: 'pkg-c', version: '3.0.0' }],
-      'key', 'org', 'npm'
+      [
+        { name: 'lodash', version: '4.17.21', ecosystem: 'npm' },
+        { name: 'vite',   version: '5.1.0',   ecosystem: 'npm' },
+        { name: 'eslint', version: '8.57.0',  ecosystem: 'npm' },
+      ],
+      'key', 'org'
     );
     assert.equal(result.size, 1);
-    assert.equal(result.get('pkg-c@3.0.0'), 0.6);
+    assert.equal(result.get('npm:eslint@8.57.0'), 0.6);
   });
 });
 
 describe('fetchSocketScores — network error', () => {
   it('returns an empty Map when fetch throws', async () => {
     globalThis.fetch = async () => { throw new Error('ECONNREFUSED'); };
-    const result = await fetchSocketScores([{ name: 'express', version: '4.19.2' }], 'key', 'org', 'npm');
+    const result = await fetchSocketScores([{ name: 'express', version: '4.19.2', ecosystem: 'npm' }], 'key', 'org');
     assert.equal(result.size, 0);
   });
 });
@@ -188,9 +242,9 @@ describe('fetchSocketScores — network error', () => {
 describe('fetchSocketScores — name lowercasing', () => {
   it('lowercases the name in the map key', async () => {
     mockNdjson([
-      JSON.stringify({ name: 'MyPkg', version: '1.0.0', score: { supplyChain: 0.7 } }),
+      JSON.stringify({ purl: 'pkg:npm/Vite@5.1.0', score: { supplyChain: 0.7 } }),
     ]);
-    const result = await fetchSocketScores([{ name: 'MyPkg', version: '1.0.0' }], 'key', 'org', 'npm');
-    assert.ok(result.has('mypkg@1.0.0'));
+    const result = await fetchSocketScores([{ name: 'Vite', version: '5.1.0', ecosystem: 'npm' }], 'key', 'org');
+    assert.ok(result.has('npm:vite@5.1.0'));
   });
 });

@@ -10,6 +10,7 @@ import path from 'node:path';
 import { parsePackageJson } from './parserCore.js';
 import { parsePackageLock } from './lockParser.js';
 import { parsePnpmLock, getPnpmMajorVersion } from './pnpmLockParser.js';
+import { normalizePackageName } from './depResolver.js';
 
 /**
  * Reads and parses npm dependency files from a project directory.
@@ -58,4 +59,24 @@ function parseDependencyFile(projectPath, options = {}) {
   throw new Error(`No npm dependency file found in ${projectPath}. Looked for: package-lock.json, pnpm-lock.yaml, package.json`);
 }
 
-export { parseDependencyFile };
+/**
+ * Reads package.json at a project root and returns the set of direct dep names
+ * (PEP 503-style normalised: lowercased, [-_.]+ collapsed to '-' indirectly via
+ * the npm normaliser). Used to populate the direct/transitive footer when
+ * resolution was driven by a lock file. Returns an empty Set when package.json
+ * is absent, unreadable, or unparseable — the footer simply omits the breakdown.
+ * @param {string} dirPath
+ * @param {boolean} includeTests
+ * @returns {Set<string>}
+ */
+function readDirectNamesFromPackageJson(dirPath, includeTests) {
+  try {
+    const content = fs.readFileSync(path.join(dirPath, 'package.json'), 'utf8');
+    const direct  = parsePackageJson(content, includeTests);
+    return new Set(direct.map(d => normalizePackageName(d.name)));
+  } catch {
+    return new Set();
+  }
+}
+
+export { parseDependencyFile, readDirectNamesFromPackageJson };

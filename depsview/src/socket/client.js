@@ -1,7 +1,7 @@
 /**
  * Socket.dev API client.
- * Fetches supply chain security scores for npm and PyPI packages in a single
- * batched POST request using Package URL (PURL) identifiers.
+ * Fetches supply chain security scores for npm, PyPI, and Go packages in a
+ * single batched POST request using Package URL (PURL) identifiers.
  * API reference: https://docs.socket.dev/reference/batchpackagefetchbyorg
  */
 
@@ -11,13 +11,37 @@ const SOCKET_API = 'https://api.socket.dev/v0/orgs';
 
 /**
  * Builds a Package URL (PURL) string for a given package.
+ * The PURL type for Python on socket.dev is `pypi`, for Node.js is `npm`,
+ * and for Go modules is `golang`.
  * @param {string} name       - package name (e.g. "express" or "@esbuild/aix-ppc64")
  * @param {string} version    - exact version string
- * @param {'npm'|'pypi'} ecosystem
- * @returns {string} e.g. "pkg:npm/express@4.19.2" or "pkg:npm/@esbuild/aix-ppc64@0.21.5"
+ * @param {'npm'|'pypi'|'golang'} ecosystem - PURL type
+ * @returns {string} e.g. "pkg:npm/express@4.19.2" or "pkg:golang/github.com/gin-gonic/gin@v1.9.1"
  */
 function buildPurl(name, version, ecosystem) {
   return `pkg:${ecosystem}/${name}@${version}`;
+}
+
+/**
+ * Parses a PURL string back into its component fields.
+ * Format: pkg:<type>/<name>@<version> (where <name> may itself contain slashes
+ * for hierarchical names like Go module paths or scoped npm packages).
+ * Returns null when the string does not look like a PURL.
+ * @param {string} purl
+ * @returns {{ type: string, name: string, version: string }|null}
+ */
+function parsePurl(purl) {
+  if (typeof purl !== 'string' || !purl.startsWith('pkg:')) return null;
+  const body = purl.slice(4);
+  const at = body.lastIndexOf('@');
+  if (at === -1) return null;
+  const version = body.slice(at + 1);
+  const slash = body.indexOf('/');
+  if (slash === -1) return null;
+  const type = body.slice(0, slash);
+  const name = body.slice(slash + 1, at);
+  if (!type || !name || !version) return null;
+  return { type, name, version };
 }
 
 /**
@@ -42,22 +66,37 @@ function parseNdjson(text) {
 }
 
 /**
- * Fetches supply chain security scores for a batch of packages from socket.dev.
- * All packages are sent in a single POST request to stay within API quota.
- * Any failure (network, auth, parse error) returns an empty Map so callers
- * can treat scores as optional enrichment without breaking the main flow.
- *
- * @param {Array<{name: string, version: string}>} packages
- * @param {string} apiKey   - Socket.dev API key (used as HTTP Basic auth username)
- * @param {string} orgSlug  - Socket.dev organisation slug
- * @param {'npm'|'pypi'} ecosystem
- * @returns {Promise<Map<string, number>>} Map of "name@version" → supplyChain score (0–1)
+ * Builds the canonical Map key for an ecosystem-tagged package + version pair.
+ * Used both when ingesting the socket response and when looking up scores from
+ * the formatter / report, so the two sides stay aligned.
+ * @param {string} ecosystem - PURL type (`npm`, `pypi`, `golang`)
+ * @param {string} name      - package name
+ * @param {string} version
+ * @returns {string}
  */
-async function fetchSocketScores(packages, apiKey, orgSlug, ecosystem) {
+function scoreKey(ecosystem, name, version) {
+  return `${ecosystem}:${name.toLowerCase()}@${version}`;
+}
+
+/**
+ * Fetches supply chain security scores for a mixed batch of packages from socket.dev.
+ * All packages from every ecosystem are sent in a single POST request to stay within
+ * API quota. Each input item carries its own PURL type so the request can mix
+ * `pkg:npm/...`, `pkg:pypi/...`, and `pkg:golang/...` entries in one call.
+ *
+ * Any failure (network, auth, parse error) returns an empty Map so callers can
+ * treat scores as optional enrichment without breaking the main flow.
+ *
+ * @param {Array<{ name: string, version: string, ecosystem: 'npm'|'pypi'|'golang' }>} packages
+ * @param {string} apiKey  - Socket.dev API key (Bearer token)
+ * @param {string} orgSlug - Socket.dev organisation slug
+ * @returns {Promise<Map<string, number>>} Map keyed by `${ecosystem}:${name.toLowerCase()}@${version}` → supplyChain score (0–1)
+ */
+async function fetchSocketScores(packages, apiKey, orgSlug) {
   if (packages.length === 0) return new Map();
 
   try {
-    const components = packages.map(({ name, version }) => ({
+    const components = packages.map(({ name, version, ecosystem }) => ({
       purl: buildPurl(name, version, ecosystem),
     }));
 
@@ -87,12 +126,23 @@ async function fetchSocketScores(packages, apiKey, orgSlug, ecosystem) {
 
     const scores = new Map();
     for (const obj of parseNdjson(text)) {
-      if (!obj.name || !obj.version || obj.score?.supplyChain == null) continue;
-      // For scoped npm packages the API splits the name into `namespace` (@scope)
-      // and `name` (bare package name). Recombine them so the key matches the
-      // "name@version" format used by the rest of the codebase.
-      const fullName = obj.namespace ? `${obj.namespace}/${obj.name}` : obj.name;
-      const key = `${fullName.toLowerCase()}@${obj.version}`;
+      if (obj.score?.supplyChain == null) continue;
+
+      // Prefer the echoed PURL when present — it preserves the original ecosystem
+      // tag we sent. Fall back to assembling from type/namespace/name fields.
+      let ecosystem, fullName, version;
+      const parsed = parsePurl(obj.purl);
+      if (parsed) {
+        ({ type: ecosystem, name: fullName, version } = parsed);
+      } else if (obj.type && obj.name && obj.version) {
+        ecosystem = obj.type;
+        fullName  = obj.namespace ? `${obj.namespace}/${obj.name}` : obj.name;
+        version   = obj.version;
+      } else {
+        continue;
+      }
+
+      const key = scoreKey(ecosystem, fullName, version);
       if (!scores.has(key)) scores.set(key, obj.score.supplyChain);
     }
     return scores;
@@ -101,4 +151,4 @@ async function fetchSocketScores(packages, apiKey, orgSlug, ecosystem) {
   }
 }
 
-export { fetchSocketScores, buildPurl, parseNdjson };
+export { fetchSocketScores, buildPurl, parsePurl, parseNdjson, scoreKey };

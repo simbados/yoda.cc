@@ -16,19 +16,17 @@ Node.js 18 or later. No third-party dependencies.
 node src/main.js <path-to-project|github-url> [options]
 ```
 
-The ecosystem (Python, npm, or Go) is **auto-detected** from the files present. Use `--npm`, `--python`, or `--go` to override when more than one is present.
+Every ecosystem detected at the project root is resolved and rendered as its own section, in the fixed order **npm → python → go**. Pass any combination of `--npm`, `--python`, `--go` to *filter* — with no flags all detected ecosystems are included.
 
 ```bash
-# Auto-detect
+# Auto-detect every ecosystem present
 node src/main.js ./my-python-project
-node src/main.js ./my-node-project
-node src/main.js ./my-go-project
+node src/main.js ./mixed-repo                      # polyglot: each ecosystem gets its own section
 node src/main.js https://github.com/owner/repo
 
-# Explicit ecosystem
-node src/main.js ./mixed-repo --npm
-node src/main.js ./mixed-repo --python
-node src/main.js ./mixed-repo --go
+# Restrict to specific ecosystems
+node src/main.js ./mixed-repo --npm                # only the npm section
+node src/main.js ./mixed-repo --python --go        # python + go sections only
 ```
 
 **Example output (npm):**
@@ -58,15 +56,50 @@ certifi   2024.2.2  2024-02-02   2011-09-30     29        https://pypi.org/proje
 2 packages total  (2 direct, 0 transitive)
 ```
 
-Results are sorted by release date (newest first). In the web UI and HTML report, click any column header to re-sort — clicking a sorted column toggles ascending/descending.
+**Example output (polyglot — `package.json` + `go.mod`):**
+
+```
+Resolving ecosystems: npm, go…
+
+=== npm ===
+Package  Version  Released     First Release  Releases  Link
+-------------------------------------------------------------
+vite     5.1.0    2024-02-08   2020-04-25     89        https://www.npmjs.com/package/vite
+…
+142 packages total
+
+=== go ===
+Package                      Version  Released     Releases  Link
+------------------------------------------------------------------
+github.com/gin-gonic/gin     v1.9.1   2023-06-01   28        https://pkg.go.dev/github.com/gin-gonic/gin@v1.9.1
+…
+3 packages total  (2 direct, 1 transitive)
+```
+
+Each section is sorted independently by release date (newest first). In the web UI and HTML report, click any column header to re-sort — each table has its own sort state.
+
+## Multi-ecosystem projects
+
+Polyglot repos (e.g. a project with both `package.json` and `go.mod`, or a Python monorepo that also bundles a JS frontend) are resolved **per ecosystem**. Every detected ecosystem produces its own section with its own table, summary, and sort state. Sections always appear in the order **npm → python → go**.
+
+Behaviour per surface:
+
+- **CLI text:** each section is separated by a `=== <ecosystem> ===` header (header omitted when only one ecosystem is present).
+- **JSON:** top-level object keyed by ecosystem — see the [JSON output](#json-output) section below.
+- **HTML report:** one `<section>` per ecosystem with an independently-sortable table.
+- **Web UI:** one block per ecosystem, each block sortable on its own.
+
+Errors are isolated per section — if `go.mod` is malformed but `package.json` is fine, only the Go section reports the error and npm still resolves.
+
+When `--socket-key` / `--socket-org` are supplied, a **single** batched request to socket.dev covers packages from every ecosystem (mixing `pkg:npm/…`, `pkg:pypi/…`, and `pkg:golang/…` PURLs in one call).
 
 ## Flags
 
 | Flag | Description |
 |---|---|
-| `--npm` | Force npm ecosystem |
-| `--python` | Force Python ecosystem |
-| `--go` | Force Go ecosystem |
+| `--npm` | Restrict the run to npm sections |
+| `--python` | Restrict the run to Python sections |
+| `--go` | Restrict the run to Go sections |
 | `--include-tests` | Include dev/test dependencies (npm / Python only) |
 | `--json` | Machine-readable JSON output |
 | `--download-stats` / `--ds` | Fetch Python download counts from pypistats.org (Python only) |
@@ -216,18 +249,36 @@ No color codes are emitted when output is piped or redirected.
 node src/main.js <path-or-url> --json
 ```
 
+Output is a top-level object keyed by ecosystem (always in the fixed order `npm` → `python` → `go`). Ecosystems with no detected files are omitted.
+
 ```json
-[
-  {
-    "name": "lodash",
-    "version": "4.17.21",
-    "released": "2021-02-20",
-    "firstReleased": "2012-01-13",
-    "releases": 116,
-    "link": "https://www.npmjs.com/package/lodash"
-  }
-]
+{
+  "npm": [
+    {
+      "name": "lodash",
+      "version": "4.17.21",
+      "released": "2021-02-20",
+      "firstReleased": "2012-01-13",
+      "releases": 116,
+      "link": "https://www.npmjs.com/package/lodash"
+    }
+  ],
+  "go": [
+    {
+      "name": "github.com/gin-gonic/gin",
+      "version": "v1.9.1",
+      "released": "2023-06-01",
+      "releases": 28,
+      "link": "https://pkg.go.dev/github.com/gin-gonic/gin@v1.9.1"
+    }
+  ]
+}
 ```
+
+Per-ecosystem field rules:
+- `firstReleased` is **omitted for Go entries** (the Go module proxy does not expose a cheap first-release timestamp).
+- `downloadsLastMonth` is included **only for Python entries when `--download-stats` is passed**.
+- `supplyChainScore` is included on every entry when socket.dev credentials are provided.
 
 When `--socket-key` and `--socket-org` are provided, each entry additionally contains:
 

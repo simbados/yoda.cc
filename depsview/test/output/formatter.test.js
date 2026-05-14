@@ -6,7 +6,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { formatTable, formatJson, daysSince, ANSI_RED, ANSI_YELLOW, ANSI_GREEN } from '../../src/output/formatter.js';
+import { formatTable, formatMulti, formatJson, daysSince, ECOSYSTEM_ORDER, ANSI_RED, ANSI_YELLOW, ANSI_GREEN } from '../../src/output/formatter.js';
 
 /**
  * Temporarily replaces console.log, runs fn(), then restores it.
@@ -29,7 +29,7 @@ function captureConsole(fn) {
  * stores when pypistats.org is unavailable for a package.
  * firstReleased defaults to 'unknown' when omitted.
  * @param {Array<{ name: string, version: string, released: string, firstReleased?: string, releases?: number, downloadsLastMonth?: number|null, error?: string }>} items
- * @returns {Map<string, { name: string, version: string, releaseDate: string, firstReleaseDate: string, releaseCount: number, downloadsLastMonth: number|null, error?: string }>}
+ * @returns {Map<string, object>}
  */
 function makeResults(items) {
   const map = new Map();
@@ -47,6 +47,26 @@ function makeResults(items) {
   return map;
 }
 
+/**
+ * Wraps a results Map in a single-section structure and runs formatJson,
+ * returning the rows array for the requested ecosystem. The formatter's
+ * `formatJson` always emits a grouped object keyed by ecosystem; this helper
+ * keeps the existing tests (which were written before grouping) terse.
+ *
+ * @param {Map<string, object>} results
+ * @param {object} [opts]            - forwarded to formatJson
+ * @param {'npm'|'python'|'go'} [ecosystem='python']
+ * @returns {Array<object>}
+ */
+function runFormatJsonRows(results, opts = {}, ecosystem = 'python') {
+  const sections = new Map([[ecosystem, { results, directNames: new Set() }]]);
+  // downloadStats defaults to true so the existing tests that expect
+  // downloadsLastMonth in the JSON keep passing without modification.
+  const merged = { downloadStats: true, ...opts };
+  const output = captureConsole(() => formatJson(sections, merged));
+  return JSON.parse(output)[ecosystem] ?? [];
+}
+
 // ── Sort order ────────────────────────────────────────────────────────────────
 
 describe('sortedResults — date descending', () => {
@@ -59,8 +79,7 @@ describe('sortedResults — date descending', () => {
       { name: 'click',    version: '8.1.3',  released: '2022-04-28' },
       { name: 'certifi',  version: '2024.1.1', released: '2024-01-01' },
     ]);
-    const output = captureConsole(() => formatJson(results));
-    const rows = JSON.parse(output);
+    const rows = runFormatJsonRows(results);
     assert.equal(rows[0].name, 'certifi');
     assert.equal(rows[1].name, 'requests');
     assert.equal(rows[2].name, 'click');
@@ -75,8 +94,7 @@ describe('sortedResults — date descending', () => {
       { name: 'certifi',  version: '2024.1.1', released: '2024-01-01' },
       { name: 'requests', version: '2.31.0', released: '2023-05-22' },
     ]);
-    const output = captureConsole(() => formatJson(results));
-    const rows = JSON.parse(output);
+    const rows = runFormatJsonRows(results);
     assert.equal(rows[0].name, 'certifi');
     assert.equal(rows[1].name, 'requests');
     assert.equal(rows[2].name, 'click');
@@ -92,8 +110,7 @@ describe('sortedResults — date descending', () => {
       { name: 'c', version: '1.0', released: '2022-03-10' },
       { name: 'd', version: '1.0', released: '2024-11-20' },
     ]);
-    const output = captureConsole(() => formatJson(results));
-    const rows = JSON.parse(output);
+    const rows = runFormatJsonRows(results);
     for (let i = 0; i < rows.length - 1; i++) {
       assert.ok(
         rows[i].released >= rows[i + 1].released,
@@ -114,8 +131,7 @@ describe('sortedResults — tiebreak on equal date', () => {
       { name: 'certifi',  version: '2023.1', released: '2023-03-10' },
       { name: 'requests', version: '2.28.0', released: '2023-03-10' },
     ]);
-    const output = captureConsole(() => formatJson(results));
-    const rows = JSON.parse(output);
+    const rows = runFormatJsonRows(results);
     assert.equal(rows[0].name, 'certifi');
     assert.equal(rows[1].name, 'requests');
     assert.equal(rows[2].name, 'urllib3');
@@ -133,8 +149,7 @@ describe('sortedResults — unknown release date', () => {
       { name: 'requests', version: '2.31.0', released: '2023-05-22' },
       { name: 'click',    version: '8.1.3',  released: '2022-04-28' },
     ]);
-    const output = captureConsole(() => formatJson(results));
-    const rows = JSON.parse(output);
+    const rows = runFormatJsonRows(results);
     assert.equal(rows[rows.length - 1].name, 'aaa');
   });
 
@@ -148,8 +163,7 @@ describe('sortedResults — unknown release date', () => {
       { name: 'requests', version: '2.31.0', released: '2023-05-22' },
       { name: 'aaa',      version: '1.0', released: 'unknown' },
     ]);
-    const output = captureConsole(() => formatJson(results));
-    const rows = JSON.parse(output);
+    const rows = runFormatJsonRows(results);
     assert.equal(rows[0].name, 'requests');
     assert.equal(rows[1].name, 'aaa');
     assert.equal(rows[2].name, 'zzz');
@@ -164,8 +178,7 @@ describe('sortedResults — unknown release date', () => {
       { name: 'requests', version: '1.0', released: 'unknown' },
       { name: 'click',    version: '1.0', released: 'unknown' },
     ]);
-    const output = captureConsole(() => formatJson(results));
-    const rows = JSON.parse(output);
+    const rows = runFormatJsonRows(results);
     assert.equal(rows[0].name, 'click');
     assert.equal(rows[1].name, 'requests');
   });
@@ -181,8 +194,7 @@ describe('formatJson', () => {
     const results = makeResults([
       { name: 'requests', version: '2.31.0', released: '2023-05-22' },
     ]);
-    const output = captureConsole(() => formatJson(results));
-    assert.doesNotThrow(() => JSON.parse(output));
+    assert.doesNotThrow(() => runFormatJsonRows(results));
   });
 
   /**
@@ -192,8 +204,7 @@ describe('formatJson', () => {
     const results = makeResults([
       { name: 'requests', version: '2.31.0', released: '2023-05-22', firstReleased: '2011-02-14', releases: 42, downloadsLastMonth: 5000000 },
     ]);
-    const output = captureConsole(() => formatJson(results));
-    const rows = JSON.parse(output);
+    const rows = runFormatJsonRows(results);
     assert.equal(rows.length, 1);
     assert.ok('name' in rows[0]);
     assert.ok('version' in rows[0]);
@@ -211,8 +222,7 @@ describe('formatJson', () => {
     const results = makeResults([
       { name: 'requests', version: '2.31.0', released: '2023-05-22' },
     ]);
-    const output = captureConsole(() => formatJson(results));
-    const rows = JSON.parse(output);
+    const rows = runFormatJsonRows(results);
     assert.equal(rows[0].link, 'https://pypi.org/project/requests/');
   });
 
@@ -223,8 +233,7 @@ describe('formatJson', () => {
     const results = makeResults([
       { name: 'requests', version: '2.31.0', released: '2023-05-22', firstReleased: '2011-02-14' },
     ]);
-    const output = captureConsole(() => formatJson(results));
-    const rows = JSON.parse(output);
+    const rows = runFormatJsonRows(results);
     assert.equal(rows[0].firstReleased, '2011-02-14');
   });
 
@@ -235,8 +244,7 @@ describe('formatJson', () => {
     const results = makeResults([
       { name: 'requests', version: '2.31.0', released: '2023-05-22' },
     ]);
-    const output = captureConsole(() => formatJson(results));
-    const rows = JSON.parse(output);
+    const rows = runFormatJsonRows(results);
     assert.equal(rows[0].firstReleased, 'unknown');
   });
 
@@ -247,8 +255,7 @@ describe('formatJson', () => {
     const results = makeResults([
       { name: 'requests', version: '2.31.0', released: '2023-05-22', releases: 87 },
     ]);
-    const output = captureConsole(() => formatJson(results));
-    const rows = JSON.parse(output);
+    const rows = runFormatJsonRows(results);
     assert.equal(rows[0].releases, 87);
   });
 
@@ -259,8 +266,7 @@ describe('formatJson', () => {
     const results = makeResults([
       { name: 'requests', version: '2.31.0', released: '2023-05-22' },
     ]);
-    const output = captureConsole(() => formatJson(results));
-    const rows = JSON.parse(output);
+    const rows = runFormatJsonRows(results);
     assert.equal(rows[0].releases, 0);
   });
 
@@ -271,8 +277,7 @@ describe('formatJson', () => {
     const results = makeResults([
       { name: 'requests', version: '2.31.0', released: '2023-05-22', downloadsLastMonth: 34567890 },
     ]);
-    const output = captureConsole(() => formatJson(results));
-    const rows = JSON.parse(output);
+    const rows = runFormatJsonRows(results);
     assert.equal(rows[0].downloadsLastMonth, 34567890);
   });
 
@@ -284,8 +289,7 @@ describe('formatJson', () => {
     const results = makeResults([
       { name: 'requests', version: '2.31.0', released: '2023-05-22' },
     ]);
-    const output = captureConsole(() => formatJson(results));
-    const rows = JSON.parse(output);
+    const rows = runFormatJsonRows(results);
     assert.equal(rows[0].downloadsLastMonth, null);
   });
 
@@ -296,8 +300,7 @@ describe('formatJson', () => {
     const results = makeResults([
       { name: 'broken', version: 'error', released: 'unknown', error: 'Package not found on PyPI' },
     ]);
-    const output = captureConsole(() => formatJson(results));
-    const rows = JSON.parse(output);
+    const rows = runFormatJsonRows(results);
     assert.equal(rows[0].error, 'Package not found on PyPI');
   });
 
@@ -308,8 +311,7 @@ describe('formatJson', () => {
     const results = makeResults([
       { name: 'requests', version: '2.31.0', released: '2023-05-22' },
     ]);
-    const output = captureConsole(() => formatJson(results));
-    const rows = JSON.parse(output);
+    const rows = runFormatJsonRows(results);
     assert.ok(!('error' in rows[0]));
   });
 
@@ -317,8 +319,7 @@ describe('formatJson', () => {
    * An empty results map should produce an empty JSON array, not throw.
    */
   test('empty results produce empty JSON array', () => {
-    const output = captureConsole(() => formatJson(new Map()));
-    const rows = JSON.parse(output);
+    const rows = runFormatJsonRows(new Map());
     assert.deepEqual(rows, []);
   });
 });
@@ -357,7 +358,7 @@ describe('formatTable', () => {
     const results = makeResults([
       { name: 'requests', version: '2.31.0', released: '2023-05-22', firstReleased: '2011-02-14', releases: 42, downloadsLastMonth: 1000 },
     ]);
-    const output = captureConsole(() => formatTable(results, new Set()));
+    const output = captureConsole(() => formatTable(results, new Set(), { downloadStats: true }));
     assert.ok(output.includes('Package'));
     assert.ok(output.includes('Version'));
     assert.ok(output.includes('Released'));
@@ -420,7 +421,7 @@ describe('formatTable', () => {
     const results = makeResults([
       { name: 'requests', version: '2.31.0', released: '2023-05-22', downloadsLastMonth: 34567890 },
     ]);
-    const output = captureConsole(() => formatTable(results, new Set()));
+    const output = captureConsole(() => formatTable(results, new Set(), { downloadStats: true }));
     assert.ok(output.includes('34,567,890'), `Expected formatted number in:\n${output}`);
   });
 
@@ -497,8 +498,7 @@ describe('formatJson — downloadStats: false', () => {
     const results = makeResults([
       { name: 'requests', version: '2.31.0', released: '2023-05-22', downloadsLastMonth: null },
     ]);
-    const output = captureConsole(() => formatJson(results, { downloadStats: false }));
-    const rows = JSON.parse(output);
+    const rows = runFormatJsonRows(results, { downloadStats: false });
     assert.ok(!('downloadsLastMonth' in rows[0]), 'downloadsLastMonth must not appear in JSON when downloadStats is false');
   });
 
@@ -509,8 +509,7 @@ describe('formatJson — downloadStats: false', () => {
     const results = makeResults([
       { name: 'requests', version: '2.31.0', released: '2023-05-22', firstReleased: '2011-02-14', releases: 42 },
     ]);
-    const output = captureConsole(() => formatJson(results, { downloadStats: false }));
-    const rows = JSON.parse(output);
+    const rows = runFormatJsonRows(results, { downloadStats: false });
     assert.ok('name' in rows[0]);
     assert.ok('version' in rows[0]);
     assert.ok('released' in rows[0]);
@@ -526,8 +525,7 @@ describe('formatJson — downloadStats: false', () => {
     const results = makeResults([
       { name: 'requests', version: '2.31.0', released: '2023-05-22', downloadsLastMonth: 1234 },
     ]);
-    const output = captureConsole(() => formatJson(results, { downloadStats: true }));
-    const rows = JSON.parse(output);
+    const rows = runFormatJsonRows(results, { downloadStats: true });
     assert.ok('downloadsLastMonth' in rows[0]);
     assert.equal(rows[0].downloadsLastMonth, 1234);
   });
@@ -717,9 +715,9 @@ describe('formatJson — socketScores', () => {
     const results = makeResults([
       { name: 'requests', version: '2.31.0', released: '2023-05-22' },
     ]);
-    const socketScores = new Map([['requests@2.31.0', 0.87]]);
-    const output = captureConsole(() => formatJson(results, { socketScores }));
-    const rows = JSON.parse(output);
+    // Score keys are ecosystem-tagged so multi-ecosystem reports share one map.
+    const socketScores = new Map([['pypi:requests@2.31.0', 0.87]]);
+    const rows = runFormatJsonRows(results, { socketScores });
     assert.ok('supplyChainScore' in rows[0], 'supplyChainScore must be present');
     assert.equal(rows[0].supplyChainScore, 0.87);
   });
@@ -731,8 +729,7 @@ describe('formatJson — socketScores', () => {
     const results = makeResults([
       { name: 'requests', version: '2.31.0', released: '2023-05-22' },
     ]);
-    const output = captureConsole(() => formatJson(results));
-    const rows = JSON.parse(output);
+    const rows = runFormatJsonRows(results);
     assert.ok(!('supplyChainScore' in rows[0]), 'supplyChainScore must not appear without socketScores');
   });
 
@@ -744,8 +741,7 @@ describe('formatJson — socketScores', () => {
       { name: 'requests', version: '2.31.0', released: '2023-05-22' },
     ]);
     const socketScores = new Map(); // empty
-    const output = captureConsole(() => formatJson(results, { socketScores }));
-    const rows = JSON.parse(output);
+    const rows = runFormatJsonRows(results, { socketScores });
     assert.equal(rows[0].supplyChainScore, null);
   });
 
@@ -756,8 +752,88 @@ describe('formatJson — socketScores', () => {
     const results = makeResults([
       { name: 'requests', version: '2.31.0', released: '2023-05-22' },
     ]);
-    const output = captureConsole(() => formatJson(results, { socketScores: new Map() }));
-    const rows = JSON.parse(output);
+    const rows = runFormatJsonRows(results, { socketScores: new Map() });
     assert.ok('supplyChainScore' in rows[0]);
+  });
+});
+
+// ── Multi-section output ──────────────────────────────────────────────────────
+
+describe('formatJson — grouped multi-section output', () => {
+  test('emits one top-level key per ecosystem in fixed order: npm, python, go', () => {
+    const sections = new Map([
+      ['go',     { results: makeResults([{ name: 'github.com/gin-gonic/gin', version: 'v1.9.1', released: '2023-06-01' }]), directNames: new Set() }],
+      ['npm',    { results: makeResults([{ name: 'express',  version: '4.19.2', released: '2024-03-25' }]),                directNames: new Set() }],
+      ['python', { results: makeResults([{ name: 'requests', version: '2.31.0', released: '2023-05-22' }]),                directNames: new Set() }],
+    ]);
+    const output = captureConsole(() => formatJson(sections));
+    const obj = JSON.parse(output);
+    assert.deepEqual(Object.keys(obj), ['npm', 'python', 'go']);
+  });
+
+  test('omits firstReleased entries for Go sections', () => {
+    const sections = new Map([
+      ['go', { results: makeResults([{ name: 'github.com/gin-gonic/gin', version: 'v1.9.1', released: '2023-06-01' }]), directNames: new Set() }],
+    ]);
+    const output = captureConsole(() => formatJson(sections));
+    const obj = JSON.parse(output);
+    assert.ok(!('firstReleased' in obj.go[0]));
+  });
+
+  test('downloadsLastMonth is included only for python sections when downloadStats is true', () => {
+    const sections = new Map([
+      ['python', { results: makeResults([{ name: 'requests', version: '2.31.0', released: '2023-05-22', downloadsLastMonth: 100 }]), directNames: new Set() }],
+      ['npm',    { results: makeResults([{ name: 'express',  version: '4.19.2', released: '2024-03-25' }]), directNames: new Set() }],
+    ]);
+    const output = captureConsole(() => formatJson(sections, { downloadStats: true }));
+    const obj = JSON.parse(output);
+    assert.ok('downloadsLastMonth' in obj.python[0]);
+    assert.ok(!('downloadsLastMonth' in obj.npm[0]));
+  });
+
+  test('skips ecosystems not present in the sections map', () => {
+    const sections = new Map([
+      ['npm', { results: makeResults([{ name: 'express', version: '4.19.2', released: '2024-03-25' }]), directNames: new Set() }],
+    ]);
+    const output = captureConsole(() => formatJson(sections));
+    const obj = JSON.parse(output);
+    assert.deepEqual(Object.keys(obj), ['npm']);
+  });
+});
+
+describe('formatMulti — multi-section text output', () => {
+  test('emits section headers in fixed order when ≥2 ecosystems are present', () => {
+    const sections = new Map([
+      ['python', { results: makeResults([{ name: 'requests', version: '2.31.0', released: '2023-05-22' }]), directNames: new Set() }],
+      ['npm',    { results: makeResults([{ name: 'express',  version: '4.19.2', released: '2024-03-25' }]), directNames: new Set() }],
+    ]);
+    const output = captureConsole(() => formatMulti(sections));
+    const npmIdx = output.indexOf('=== npm ===');
+    const pyIdx  = output.indexOf('=== python ===');
+    assert.ok(npmIdx >= 0, 'expected npm section header');
+    assert.ok(pyIdx >= 0,  'expected python section header');
+    assert.ok(npmIdx < pyIdx, 'npm should come before python in render order');
+  });
+
+  test('omits section headers when only one ecosystem is present', () => {
+    const sections = new Map([
+      ['npm', { results: makeResults([{ name: 'express', version: '4.19.2', released: '2024-03-25' }]), directNames: new Set() }],
+    ]);
+    const output = captureConsole(() => formatMulti(sections));
+    assert.ok(!output.includes('=== npm ==='));
+  });
+
+  test('omits the First Release column header for Go sections', () => {
+    const sections = new Map([
+      ['go', { results: makeResults([{ name: 'github.com/gin-gonic/gin', version: 'v1.9.1', released: '2023-06-01' }]), directNames: new Set() }],
+    ]);
+    const output = captureConsole(() => formatMulti(sections));
+    assert.ok(!output.includes('First Release'));
+  });
+});
+
+describe('ECOSYSTEM_ORDER', () => {
+  test('is the fixed npm → python → go sequence', () => {
+    assert.deepEqual(ECOSYSTEM_ORDER, ['npm', 'python', 'go']);
   });
 });

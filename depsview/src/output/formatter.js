@@ -1,16 +1,38 @@
 /**
  * Output formatters for the resolved dependency list.
- * Supports a human-readable padded column table (default) and JSON (--json flag).
+ * Supports a human-readable padded column table (default) and grouped JSON (--json).
+ *
  * The table applies ANSI color coding to individual cells when stdout is a TTY:
- *   "First Release" cell — red   when the package first appeared within the last 30 days
+ *   "First Release" cell — red    when the package first appeared within the last 30 days
  *   "Released" cell      — yellow when the latest version was released within the last 7 days
- * Both can be colored simultaneously on the same row.
+ *   "Supply Chain" cell  — green ≥ 80 %, yellow 50–79 %, red < 50 %
+ *
+ * Multi-ecosystem output is rendered as one section per ecosystem in the fixed
+ * order npm → python → go. Single-ecosystem projects are still rendered as a
+ * single section; an explicit section header is only emitted when at least two
+ * ecosystems are present.
  */
 
 const ANSI_RED    = '\x1b[31m';
 const ANSI_YELLOW = '\x1b[33m';
 const ANSI_GREEN  = '\x1b[32m';
 const ANSI_RESET  = '\x1b[0m';
+
+/** Ecosystems are always rendered in this fixed order. */
+const ECOSYSTEM_ORDER = ['npm', 'python', 'go'];
+
+/**
+ * Maps a depsview ecosystem label to the corresponding socket.dev PURL type.
+ * Used only for looking up supply chain scores by the canonical map key
+ * (`${purl}:${name.toLowerCase()}@${version}`).
+ * @param {'npm'|'python'|'go'} ecosystem
+ * @returns {'npm'|'pypi'|'golang'}
+ */
+function purlEcosystem(ecosystem) {
+  return ecosystem === 'python' ? 'pypi'
+       : ecosystem === 'go'     ? 'golang'
+       : 'npm';
+}
 
 /**
  * Returns the number of whole days between a date string and a reference date.
@@ -62,12 +84,21 @@ function socketScoreDisplay(score) {
  * Packages whose release date is "unknown" always sort to the bottom because
  * the letter 'u' would otherwise rank above any digit in a descending compare.
  * Secondary sort (tiebreaker): package name ascending for deterministic output.
- * Supply chain scores from socket.dev are joined by "name@version" key.
- * @param {Map<string, { name: string, version: string, releaseDate: string, firstReleaseDate: string, releaseCount: number, downloadsLastMonth: number|null, error?: string }>} results
- * @param {Map<string, number>} [socketScores] - optional Map of "name@version" → score (0–1)
- * @returns {Array<{ name: string, version: string, released: string, firstReleased: string, releases: number, downloadsLastMonth: number|null, supplyChain: number|null, error?: string }>}
+ *
+ * Supply chain scores from socket.dev are joined by the ecosystem-tagged
+ * canonical key `${purlEcosystem}:${name.toLowerCase()}@${version}`. When no
+ * ecosystem is provided, lookups are attempted unscoped for backwards-compat
+ * with existing tests.
+ *
+ * @param {Map<string, object>} results - per-ecosystem resolved package map
+ * @param {Map<string, number>} [socketScores] - shared scores Map
+ * @param {{ ecosystem?: 'npm'|'python'|'go' }} [opts]
+ * @returns {Array<object>}
  */
-function sortedResults(results, socketScores = new Map()) {
+function sortedResults(results, socketScores = new Map(), opts = {}) {
+  const { ecosystem } = opts;
+  const purlEco = ecosystem ? purlEcosystem(ecosystem) : null;
+
   return [...results.values()]
     .map(r => ({
       name:               r.name,
@@ -78,7 +109,9 @@ function sortedResults(results, socketScores = new Map()) {
       downloadsLastMonth: r.downloadsLastMonth ?? null,
       link:               r.link ?? `https://pypi.org/project/${r.name}/`,
       error:              r.error,
-      supplyChain:        socketScores.get(`${r.name.toLowerCase()}@${r.version}`) ?? null,
+      supplyChain:        purlEco
+        ? (socketScores.get(`${purlEco}:${r.name.toLowerCase()}@${r.version}`) ?? null)
+        : (socketScores.get(`${r.name.toLowerCase()}@${r.version}`) ?? null),
     }))
     .sort((a, b) => {
       const aUnknown = a.released === 'unknown';
@@ -104,38 +137,61 @@ function formatDownloads(count) {
 }
 
 /**
- * Formats the resolved dependency map as a padded plain-text table.
- * Default columns: Package, Version, Released, First Release, Releases, Downloads/mo, Link.
- * The Downloads/mo column is omitted when opts.downloadStats is false.
- * The Supply Chain column is shown when opts.socketScores is provided (even if empty).
- * When stdout is a TTY, individual cells are colored by recency or score severity:
- *   "Released" cell      — yellow when the latest version is ≤ 7 days old
- *   "First Release" cell — red    when the package first appeared ≤ 30 days ago
- *   "Supply Chain" cell  — green ≥ 80 %, yellow 50–79 %, red < 50 %
- * Packages with errors are flagged inline after the last column.
- * @param {Map<string, { name: string, version: string, releaseDate: string, firstReleaseDate: string, releaseCount: number, downloadsLastMonth: number|null, error?: string }>} results
- * @param {Set<string>} directNames - normalized names of direct (non-transitive) dependencies,
- *   used to report counts at the footer
- * @param {{ downloadStats?: boolean, socketScores?: Map<string,number>|null, source?: string|null }} [opts]
- * @param {boolean}                    [opts.downloadStats=true]  - when false, the Downloads/mo column is omitted
- * @param {Map<string,number>|null}    [opts.socketScores=null]   - when provided, adds a Supply Chain column
- * @param {string|null}                [opts.source=null]         - dependency file name(s) shown in the footer
+ * Formats one section (one ecosystem) as a padded plain-text table.
+ *
+ * Column visibility:
+ *   - First Release: shown unless `firstRelease: false` (Go modules hide this).
+ *   - Downloads/mo:  shown only when `downloadStats: true` (Python only).
+ *   - Supply Chain:  shown when `socketScores` is provided (any ecosystem).
+ *
+ * When `printHeader` is true (multi-ecosystem output), a section heading is
+ * emitted above the table.
+ *
+ * @param {Map<string, object>} results
+ * @param {Set<string>} directNames - normalised direct dep names for the footer
+ * @param {object} [opts]
+ * @param {'npm'|'python'|'go'}      [opts.ecosystem]           - used for socket key lookup & defaults
+ * @param {boolean}                  [opts.downloadStats=false] - show Downloads/mo column
+ * @param {Map<string,number>|null}  [opts.socketScores=null]   - shared supply chain scores
+ * @param {string|null}              [opts.source=null]         - dep file name(s) shown in footer
+ * @param {string|null}              [opts.note=null]           - per-section warning shown after header
+ * @param {boolean}                  [opts.firstRelease=true]   - show First Release column
+ * @param {boolean}                  [opts.printHeader=false]   - emit a section heading
  */
 function formatTable(results, directNames, opts = {}) {
-  const { downloadStats = true, socketScores = null, source = null } = opts;
-  const rows = sortedResults(results, socketScores ?? new Map());
+  const {
+    ecosystem      = null,
+    downloadStats  = false,
+    socketScores   = null,
+    source         = null,
+    note           = null,
+    firstRelease   = true,
+    printHeader    = false,
+  } = opts;
+
+  if (printHeader && ecosystem) {
+    console.log(`=== ${ecosystem} ===`);
+  }
+  if (note) console.log(`[note] ${note}`);
+
+  const rows = sortedResults(results, socketScores ?? new Map(), { ecosystem });
   if (rows.length === 0) {
     console.log('No dependencies found.');
+    if (source) console.log(`Files: ${source}`);
+    if (printHeader) console.log('');
     return;
   }
 
   const showSocket = socketScores != null;
+  const showFirst  = firstRelease;
 
   // Compute column widths based on the widest value in each column
   const colName   = Math.max(7,  ...rows.map(r => r.name.length))     + 2;
   const colVer    = Math.max(7,  ...rows.map(r => r.version.length))   + 2;
   const colRel    = Math.max(8,  ...rows.map(r => r.released.length))  + 2;
-  const colFirst  = Math.max(13, ...rows.map(r => r.firstReleased.length)) + 2;
+  const colFirst  = showFirst
+    ? Math.max(13, ...rows.map(r => r.firstReleased.length)) + 2
+    : 0;
   const colPop    = Math.max(8,  ...rows.map(r => String(r.releases).length)) + 2;
   const colDl     = downloadStats
     ? Math.max(12, ...rows.map(r => formatDownloads(r.downloadsLastMonth).length)) + 2
@@ -150,7 +206,8 @@ function formatTable(results, directNames, opts = {}) {
 
   console.log(
     pad('Package', colName) + pad('Version', colVer) + pad('Released', colRel) +
-    pad('First Release', colFirst) + pad('Releases', colPop) +
+    (showFirst ? pad('First Release', colFirst) : '') +
+    pad('Releases', colPop) +
     (downloadStats ? pad('Downloads/mo', colDl) : '') +
     (showSocket    ? pad('Supply Chain', colSocket) : '') +
     pad('Link', colLink)
@@ -159,11 +216,10 @@ function formatTable(results, directNames, opts = {}) {
 
   const now = new Date();
   for (const row of rows) {
-    // Pad each cell to its column width first, then apply color.
-    // Padding must happen before colorizing because ANSI escape sequences
-    // are counted as characters by padEnd and would break alignment.
-    const releasedCell = applyColor(pad(row.released,      colRel),   daysSince(row.released,      now) <= 7  ? ANSI_YELLOW : null);
-    const firstRelCell = applyColor(pad(row.firstReleased, colFirst),  daysSince(row.firstReleased, now) <= 30 ? ANSI_RED    : null);
+    const releasedCell = applyColor(pad(row.released, colRel), daysSince(row.released, now) <= 7 ? ANSI_YELLOW : null);
+    const firstRelCell = showFirst
+      ? applyColor(pad(row.firstReleased, colFirst), daysSince(row.firstReleased, now) <= 30 ? ANSI_RED : null)
+      : '';
 
     let socketCell = '';
     if (showSocket) {
@@ -192,32 +248,85 @@ function formatTable(results, directNames, opts = {}) {
     console.log(`${rows.length} packages total`);
   }
   if (source) console.log(`Files: ${source}`);
+  if (printHeader) console.log('');
 }
 
 /**
- * Formats the resolved dependency map as a JSON array and prints it to stdout.
- * Each element has `name`, `version`, `released`, `firstReleased`, and `releases` fields.
- * `downloadsLastMonth` is included only when opts.downloadStats is true; omitting it
- * when downloads were not fetched avoids misleading null values in the output.
- * `supplyChainScore` is included only when opts.socketScores is provided; its value is
- * a float 0–1 or null when the package was not returned by the socket.dev API.
- * No ANSI codes are ever included in JSON output.
- * Packages with resolution errors include an additional `error` field.
- * @param {Map<string, { name: string, version: string, releaseDate: string, firstReleaseDate: string, releaseCount: number, downloadsLastMonth: number|null, error?: string }>} results
- * @param {{ downloadStats?: boolean, socketScores?: Map<string,number>|null }} [opts]
- * @param {boolean} [opts.downloadStats=true] - when false, downloadsLastMonth is omitted
- * @param {Map<string,number>|null} [opts.socketScores=null] - when provided, adds supplyChainScore to each entry
+ * Renders a multi-ecosystem text report. Sections are emitted in the fixed
+ * order npm → python → go, with a per-section heading when at least two
+ * ecosystems are present. Empty/missing ecosystems are skipped.
+ *
+ * @param {Map<'npm'|'python'|'go', { source, results, directNames, note? }>} sections
+ * @param {object} [opts]
+ * @param {boolean}                 [opts.downloadStats=false]
+ * @param {Map<string,number>|null} [opts.socketScores=null]
  */
-function formatJson(results, opts = {}) {
-  const { downloadStats = true, socketScores = null } = opts;
-  const rows = sortedResults(results, socketScores ?? new Map()).map(r => {
-    const obj = { name: r.name, version: r.version, released: r.released, firstReleased: r.firstReleased, releases: r.releases, link: r.link };
-    if (downloadStats)     obj.downloadsLastMonth = r.downloadsLastMonth;
-    if (socketScores != null) obj.supplyChainScore = r.supplyChain;
-    if (r.error)           obj.error = r.error;
-    return obj;
-  });
-  console.log(JSON.stringify(rows, null, 2));
+function formatMulti(sections, opts = {}) {
+  const { downloadStats = false, socketScores = null } = opts;
+  const present = ECOSYSTEM_ORDER.filter(eco => sections.has(eco));
+  const printHeader = present.length >= 2;
+
+  for (const ecosystem of present) {
+    const { results, directNames, source, note } = sections.get(ecosystem);
+    formatTable(results, directNames, {
+      ecosystem,
+      // Per-ecosystem column rules:
+      downloadStats: downloadStats && ecosystem === 'python',
+      socketScores,
+      source,
+      note,
+      firstRelease: ecosystem !== 'go',
+      printHeader,
+    });
+  }
 }
 
-export { formatTable, formatJson, sortedResults, daysSince, ANSI_RED, ANSI_YELLOW, ANSI_GREEN, ANSI_RESET };
+/**
+ * Emits the resolved dependencies as a grouped JSON object keyed by ecosystem.
+ * Single-ecosystem invocations still produce a one-key object so downstream
+ * consumers always know the shape.
+ *
+ * Each row contains name, version, released, releases, link and (per-ecosystem):
+ *   - firstReleased        — npm/python only
+ *   - downloadsLastMonth   — python only, when `downloadStats: true`
+ *   - supplyChainScore     — any ecosystem, when `socketScores` is provided
+ *   - error                — when resolution failed for that package
+ *
+ * @param {Map<'npm'|'python'|'go', { results }>} sections
+ * @param {object} [opts]
+ * @param {boolean}                 [opts.downloadStats=false]
+ * @param {Map<string,number>|null} [opts.socketScores=null]
+ */
+function formatJson(sections, opts = {}) {
+  const { downloadStats = false, socketScores = null } = opts;
+  const out = {};
+
+  for (const ecosystem of ECOSYSTEM_ORDER) {
+    if (!sections.has(ecosystem)) continue;
+    const { results } = sections.get(ecosystem);
+    const includeFirst    = ecosystem !== 'go';
+    const includeDownloads = downloadStats && ecosystem === 'python';
+
+    out[ecosystem] = sortedResults(results, socketScores ?? new Map(), { ecosystem }).map(r => {
+      const obj = { name: r.name, version: r.version, released: r.released, releases: r.releases, link: r.link };
+      if (includeFirst)        obj.firstReleased       = r.firstReleased;
+      if (includeDownloads)    obj.downloadsLastMonth  = r.downloadsLastMonth;
+      if (socketScores != null) obj.supplyChainScore   = r.supplyChain;
+      if (r.error)             obj.error               = r.error;
+      return obj;
+    });
+  }
+
+  console.log(JSON.stringify(out, null, 2));
+}
+
+export {
+  formatTable,
+  formatMulti,
+  formatJson,
+  sortedResults,
+  daysSince,
+  purlEcosystem,
+  ECOSYSTEM_ORDER,
+  ANSI_RED, ANSI_YELLOW, ANSI_GREEN, ANSI_RESET,
+};

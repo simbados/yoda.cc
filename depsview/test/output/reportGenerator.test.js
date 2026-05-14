@@ -6,7 +6,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { generateReport } from '../../src/output/reportGenerator.js';
+import { generateReport as generateReportRaw } from '../../src/output/reportGenerator.js';
 
 /**
  * Builds a results Map in the same shape that depResolver produces.
@@ -28,6 +28,28 @@ function makeResults(items) {
     });
   }
   return map;
+}
+
+/**
+ * Test shim that wraps a single (results, directNames) pair into the
+ * sections Map that the production `generateReport` now expects. Lets the
+ * existing tests stay terse without rewriting every call site.
+ *
+ * The legacy `opts.ecosystem` and `opts.source` are extracted and applied to
+ * the section instead of being passed through to the renderer.
+ *
+ * @param {Map<string, object>} results
+ * @param {Set<string>} [directNames]
+ * @param {object} [opts]
+ * @returns {string} HTML document
+ */
+function generateReport(results, directNames = new Set(), opts = {}) {
+  const ecosystem = opts.ecosystem ?? 'python';
+  const source    = opts.source    ?? null;
+  const { ecosystem: _e, source: _s, ...rendererOpts } = opts;
+  const sections = new Map([[ecosystem, { results, directNames, source, note: null }]]);
+  // downloadStats defaults to true so legacy tests still see the Downloads/mo column.
+  return generateReportRaw(sections, { downloadStats: true, ...rendererOpts });
 }
 
 // ── HTML structure ─────────────────────────────────────────────────────────────
@@ -252,7 +274,7 @@ describe('generateReport — supply chain scores', () => {
     const results = makeResults([
       { name: 'requests', version: '2.31.0', releaseDate: '2023-05-22' },
     ]);
-    const socketScores = new Map([['requests@2.31.0', 0.87]]);
+    const socketScores = new Map([['pypi:requests@2.31.0', 0.87]]);
     const html = generateReport(results, new Set(), { socketScores });
     assert.ok(html.includes('87%'));
   });
@@ -261,7 +283,7 @@ describe('generateReport — supply chain scores', () => {
     const results = makeResults([
       { name: 'requests', version: '2.31.0', releaseDate: '2023-05-22' },
     ]);
-    const html = generateReport(results, new Set(), { socketScores: new Map([['requests@2.31.0', 0.82]]) });
+    const html = generateReport(results, new Set(), { socketScores: new Map([['pypi:requests@2.31.0', 0.82]]) });
     assert.ok(html.includes('class="score-good"'));
   });
 
@@ -269,7 +291,7 @@ describe('generateReport — supply chain scores', () => {
     const results = makeResults([
       { name: 'requests', version: '2.31.0', releaseDate: '2023-05-22' },
     ]);
-    const html = generateReport(results, new Set(), { socketScores: new Map([['requests@2.31.0', 0.65]]) });
+    const html = generateReport(results, new Set(), { socketScores: new Map([['pypi:requests@2.31.0', 0.65]]) });
     assert.ok(html.includes('class="score-warn"'));
   });
 
@@ -277,7 +299,7 @@ describe('generateReport — supply chain scores', () => {
     const results = makeResults([
       { name: 'requests', version: '2.31.0', releaseDate: '2023-05-22' },
     ]);
-    const html = generateReport(results, new Set(), { socketScores: new Map([['requests@2.31.0', 0.30]]) });
+    const html = generateReport(results, new Set(), { socketScores: new Map([['pypi:requests@2.31.0', 0.30]]) });
     assert.ok(html.includes('class="score-bad"'));
   });
 
@@ -294,7 +316,7 @@ describe('generateReport — supply chain scores', () => {
       { name: 'requests', version: '2.31.0', releaseDate: '2023-05-22' },
     ]);
     const html = generateReport(results, new Set(), {
-      socketScores: new Map([['requests@2.31.0', 0.87]]),
+      socketScores: new Map([['pypi:requests@2.31.0', 0.87]]),
       ecosystem: 'python',
     });
     assert.ok(html.includes('https://socket.dev/pypi/package/requests'), 'must link to socket.dev/pypi for Python packages');
@@ -306,24 +328,10 @@ describe('generateReport — supply chain scores', () => {
         link: 'https://www.npmjs.com/package/express' },
     ]);
     const html = generateReport(results, new Set(), {
-      socketScores: new Map([['express@4.19.2', 0.75]]),
+      socketScores: new Map([['npm:express@4.19.2', 0.75]]),
       ecosystem: 'npm',
     });
     assert.ok(html.includes('https://socket.dev/npm/package/express'), 'must link to socket.dev/npm for npm packages');
-  });
-
-  it('does not link the score when ecosystem is unknown', () => {
-    const results = makeResults([
-      { name: 'requests', version: '2.31.0', releaseDate: '2023-05-22' },
-    ]);
-    const html = generateReport(results, new Set(), {
-      socketScores: new Map([['requests@2.31.0', 0.87]]),
-      // no ecosystem provided
-    });
-    // Check only <tbody>: the sort script contains 'socket.dev' as a literal in the
-    // helper that builds URLs, so we must not scan the full document.
-    const tbody = html.slice(html.indexOf('<tbody>'), html.indexOf('</tbody>') + 8);
-    assert.ok(!tbody.includes('socket.dev'), 'must not link when ecosystem is unknown');
   });
 
   it('does not link the score when the score is absent for a package', () => {
@@ -417,11 +425,13 @@ describe('generateReport — XSS safety', () => {
     assert.ok(html.includes("default-src 'none'"), 'CSP must block all sources by default');
   });
 
-  it('escapes < > in ecosystem and source names in the meta line', () => {
-    const html = generateReport(new Map(), new Set(), { ecosystem: '<npm>', source: 'a&b.json' });
-    assert.ok(!html.includes('<npm>'), 'raw < must not appear in meta line');
-    assert.ok(html.includes('&lt;npm&gt;'));
+  it('escapes & in source filenames rendered inside the per-section summary', () => {
+    const results = makeResults([
+      { name: 'requests', version: '2.31.0', releaseDate: '2023-05-22' },
+    ]);
+    const html = generateReport(results, new Set(), { ecosystem: 'python', source: 'a&b.json' });
     assert.ok(html.includes('a&amp;b.json'));
+    assert.ok(!html.includes('a&b.json'));
   });
 
   it("escapes single quotes in package names (defense in depth for ' in attributes)", () => {
@@ -444,7 +454,7 @@ describe('generateReport — XSS safety', () => {
         link: 'https://pypi.org/project/pkg/' },
     ]);
     const html = generateReport(results, new Set(), {
-      socketScores: new Map([[`${weirdName}@1.0.0`, 0.9]]),
+      socketScores: new Map([[`pypi:${weirdName.toLowerCase()}@1.0.0`, 0.9]]),
       ecosystem: 'python',
     });
     assert.ok(!html.includes('socket.dev/pypi/package/pkg?inject=1'),
@@ -458,7 +468,7 @@ describe('generateReport — XSS safety', () => {
         link: 'https://www.npmjs.com/package/@scope/pkg' },
     ]);
     const html = generateReport(results, new Set(), {
-      socketScores: new Map([['@scope/pkg@1.0.0', 0.8]]),
+      socketScores: new Map([['npm:@scope/pkg@1.0.0', 0.8]]),
       ecosystem: 'npm',
     });
     assert.ok(html.includes('socket.dev/npm/package/@scope/pkg'),

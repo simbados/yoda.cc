@@ -389,6 +389,18 @@ h1 {
 /* ── Results ──────────────────────────────────────────────────────────────── */
 #results { margin-top: 2rem; }
 
+.result-section { margin-bottom: 2.5rem; }
+.result-section:last-child { margin-bottom: 0; }
+
+.section-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+  text-transform: lowercase;
+  color: var(--accent);
+  letter-spacing: 0.02em;
+}
+
 .summary {
   font-size: 0.88rem;
   color: var(--muted);

@@ -6,7 +6,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { formatNumber, daysSince, sortResults, sortResultsBy, detectEcosystem } from '../web/app.js';
+import { formatNumber, daysSince, sortResults, sortResultsBy, detectEcosystem, detectEcosystems, ECOSYSTEM_ORDER } from '../web/app.js';
 
 // ── formatNumber ───────────────────────────────────────────────────────────────
 
@@ -398,5 +398,38 @@ describe('detectEcosystem', () => {
       { name: 'LICENSE',   type: 'file' },
     ];
     assert.equal(detectEcosystem(listing), null);
+  });
+});
+
+// ── detectEcosystems (multi-valued) ──────────────────────────────────────────
+
+describe('detectEcosystems', () => {
+  it('returns every ecosystem present in the listing', () => {
+    const listing = [
+      { name: 'package.json',     type: 'file' },
+      { name: 'go.mod',           type: 'file' },
+      { name: 'requirements.txt', type: 'file' },
+    ];
+    const set = detectEcosystems(listing);
+    assert.equal(set.size, 3);
+    assert.ok(set.has('npm'));
+    assert.ok(set.has('go'));
+    assert.ok(set.has('python'));
+  });
+
+  it('returns a single-element set when only one ecosystem is present', () => {
+    const listing = [{ name: 'go.sum', type: 'file' }];
+    const set = detectEcosystems(listing);
+    assert.deepEqual([...set], ['go']);
+  });
+
+  it('returns an empty set when no recognised files are present', () => {
+    assert.equal(detectEcosystems([]).size, 0);
+  });
+});
+
+describe('ECOSYSTEM_ORDER', () => {
+  it('is the fixed npm → python → go sequence', () => {
+    assert.deepEqual(ECOSYSTEM_ORDER, ['npm', 'python', 'go']);
   });
 });

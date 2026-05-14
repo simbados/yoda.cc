@@ -69,6 +69,12 @@
       <span class="legend-swatch age-new">■</span> Package first appeared on its registry within the last 30 days
     </p>
 
+    <p class="note">
+      Projects with files from more than one ecosystem (e.g. a repo with both
+      <code>package.json</code> and <code>go.mod</code>) are resolved per
+      ecosystem and rendered as separate sections, sorted independently.
+    </p>
+
     <div id="error" hidden></div>
     <div id="progress" hidden></div>
     <div id="results" hidden></div>

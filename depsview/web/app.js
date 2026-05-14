@@ -1,11 +1,13 @@
 /**
  * Browser entry point for depsview.
- * Wires the HTML form to the dependency-resolution pipeline and renders
- * results into a table. All HTTP calls go directly to the GitHub Contents API
- * and the PyPI / npm registry APIs from the browser — no server-side component.
+ * Wires the HTML form to the dependency-resolution pipeline and renders one
+ * section per detected ecosystem. All HTTP calls go directly to the GitHub
+ * Contents API, the PyPI / npm registry APIs, and proxy.golang.org from the
+ * browser — no server-side component.
  *
- * Ecosystem auto-detection: after the GitHub root directory is listed, the
- * presence of package-lock.json or package.json selects npm; otherwise Python.
+ * Ecosystem auto-detection: after the GitHub root directory is listed, every
+ * ecosystem whose dependency files are present produces its own section. The
+ * fixed render order is npm → python → go.
  *
  * Pure utility functions are exported for testing with the Node.js test runner
  * without a DOM. DOM-manipulation code runs only when `document` is available.
@@ -20,6 +22,9 @@ import { resolveDependencies as resolveNpm } from './src/npm/depResolver.js';
 import { resolveDependencies as resolveGo  } from './src/go/depResolver.js';
 import { setGithubToken               } from './src/github/client.js';
 import { listDirectory                } from './src/github/client.js';
+
+/** Fixed rendering order for ecosystem sections. */
+export const ECOSYSTEM_ORDER = ['npm', 'python', 'go'];
 
 // ── Pure utility functions (exported for testing) ─────────────────────────────
 
@@ -50,10 +55,9 @@ export function daysSince(dateStr) {
 /**
  * Sorts a Map of resolved dependency results by an arbitrary column.
  * "unknown" date strings and null numeric values always sink to the bottom
- * regardless of direction, so the table stays readable.
- * String columns (name, version) use localeCompare; date columns compare
- * ISO-8601 strings lexicographically (valid because YYYY-MM-DD is zero-padded);
- * numeric columns compare by value. All sorts use name as a tiebreaker.
+ * regardless of direction. String columns use localeCompare; date columns compare
+ * ISO-8601 strings lexicographically; numeric columns compare by value.
+ * All sorts use name as a tiebreaker.
  * @param {Map<string, object>} resultsMap
  * @param {'name'|'version'|'releaseDate'|'firstReleaseDate'|'releaseCount'|'downloadsLastMonth'|'supplyChain'} column
  * @param {'asc'|'desc'} direction
@@ -88,7 +92,6 @@ export function sortResultsBy(resultsMap, column, direction) {
       return cmp !== 0 ? sign * cmp : a.name.localeCompare(b.name);
     }
 
-    // String columns: name, version
     const cmp = String(aVal ?? '').localeCompare(String(bVal ?? ''));
     return cmp !== 0 ? sign * cmp : 0;
   });
@@ -106,20 +109,33 @@ export function sortResults(resultsMap) {
 }
 
 /**
- * Detects whether a GitHub directory listing contains npm, Go, or Python dep files.
- * npm takes precedence (package-lock.json / pnpm-lock.yaml / package.json),
- * then Go (go.sum / go.mod), then Python.
- * Returns null when none of the three is detected.
+ * Returns the set of ecosystems whose dependency files appear in a directory listing.
+ * @param {Array<{ name: string, type: string }>} listing
+ * @returns {Set<'npm'|'python'|'go'>}
+ */
+export function detectEcosystems(listing) {
+  const names = new Set(listing.map(e => e.name));
+  const found = new Set();
+  if (names.has('package-lock.json') || names.has('pnpm-lock.yaml') || names.has('package.json')) found.add('npm');
+  if (names.has('go.sum') || names.has('go.mod'))                                                 found.add('go');
+  if (names.has('pyproject.toml') || names.has('requirements.txt') ||
+      names.has('setup.cfg')      || names.has('Pipfile') ||
+      names.has('manifest.json'))                                                                 found.add('python');
+  return found;
+}
+
+/**
+ * Legacy single-ecosystem detection retained for backwards compatibility with
+ * older tests. Returns the first detected ecosystem in priority order
+ * (npm → go → python) or null when none are found.
  * @param {Array<{ name: string, type: string }>} listing
  * @returns {'npm'|'go'|'python'|null}
  */
 export function detectEcosystem(listing) {
-  const names = new Set(listing.map(e => e.name));
-  if (names.has('package-lock.json') || names.has('pnpm-lock.yaml') || names.has('package.json')) return 'npm';
-  if (names.has('go.sum') || names.has('go.mod'))                                                  return 'go';
-  if (names.has('pyproject.toml') || names.has('requirements.txt') ||
-      names.has('setup.cfg')      || names.has('Pipfile') ||
-      names.has('manifest.json'))                                    return 'python';
+  const set = detectEcosystems(listing);
+  if (set.has('npm'))    return 'npm';
+  if (set.has('go'))     return 'go';
+  if (set.has('python')) return 'python';
   return null;
 }
 
@@ -139,73 +155,94 @@ function addCell(row, text) {
 }
 
 /**
- * Populates the results container with a summary line and a dependency table.
- * Applies age-based CSS classes to the Released and First Release cells.
- * Package names link to their registry page (PyPI or npmjs.com) via each
- * result's `link` property.
+ * Renders one ecosystem section (heading + summary + sortable table) into the
+ * given container. Returns the section element so the caller can attach
+ * per-section sort handlers.
+ *
+ * Column visibility:
+ *   - First Release: shown unless `ecosystem === 'go'`.
+ *   - Releases:      always shown.
+ *
  * @param {HTMLElement} container
- * @param {Array<object>} sorted   - result objects from sortResults()
- * @param {number} directCount     - 0 when unknown (lock-file resolution without package.json)
- * @param {string|null} [note]     - optional informational note shown below the summary
- * @param {string|null} [source]   - dependency file name(s) shown below the summary
+ * @param {object}      cfg
+ * @param {'npm'|'python'|'go'} cfg.ecosystem
+ * @param {boolean}     cfg.showHeader        - emit a section title above the table
+ * @param {Array<object>} cfg.sorted          - already-sorted rows from sortResultsBy
+ * @param {number}      cfg.directCount       - 0 when unknown (lock-file resolution)
+ * @param {string|null} cfg.source            - dependency file name
+ * @param {string|null} cfg.note              - informational note (e.g. pnpm-lock v9)
+ * @param {string|null} cfg.sortCol           - current sort column for sort indicators
+ * @param {string|null} cfg.sortDir           - 'asc' or 'desc'
+ * @returns {HTMLElement} the section element
  */
-function renderResults(container, sorted, directCount, note = null, source = null) {
-  container.hidden = false;
-  container.innerHTML = '';
+function renderSection(container, cfg) {
+  const sectionEl = document.createElement('section');
+  sectionEl.className = 'result-section';
+  sectionEl.dataset.ecosystem = cfg.ecosystem;
 
-  const total = sorted.length;
+  if (cfg.showHeader) {
+    const h2 = document.createElement('h2');
+    h2.className = 'section-title';
+    h2.textContent = cfg.ecosystem;
+    sectionEl.appendChild(h2);
+  }
 
+  const total = cfg.sorted.length;
   const summary = document.createElement('p');
   summary.className = 'summary';
-  if (directCount > 0) {
-    const transitiveCount = total - directCount;
-    summary.textContent = `${total} package${total !== 1 ? 's' : ''} total (${directCount} direct, ${transitiveCount} transitive)`;
+  if (cfg.directCount > 0) {
+    const transitiveCount = total - cfg.directCount;
+    summary.textContent = `${total} package${total !== 1 ? 's' : ''} total (${cfg.directCount} direct, ${transitiveCount} transitive)`;
   } else {
     summary.textContent = `${total} package${total !== 1 ? 's' : ''} total`;
   }
-  container.appendChild(summary);
+  sectionEl.appendChild(summary);
 
-  if (source) {
+  if (cfg.source) {
     const sourceEl = document.createElement('p');
     sourceEl.className = 'source-files';
-    sourceEl.textContent = `Files: ${source}`;
-    container.appendChild(sourceEl);
+    sourceEl.textContent = `Files: ${cfg.source}`;
+    sectionEl.appendChild(sourceEl);
   }
 
-  if (note) {
+  if (cfg.note) {
     const noteEl = document.createElement('p');
     noteEl.className = 'note note-warning';
-    noteEl.textContent = `ⓘ ${note}`;
-    container.appendChild(noteEl);
+    noteEl.textContent = `ⓘ ${cfg.note}`;
+    sectionEl.appendChild(noteEl);
   }
 
   if (total === 0) {
     const msg = document.createElement('p');
     msg.textContent = 'No dependencies found.';
-    container.appendChild(msg);
-    return;
+    sectionEl.appendChild(msg);
+    container.appendChild(sectionEl);
+    return sectionEl;
   }
 
-  const table = document.createElement('table');
+  const showFirst = cfg.ecosystem !== 'go';
 
+  const table = document.createElement('table');
   const thead = table.createTHead();
   const headerRow = thead.insertRow();
   const COL_DEFS = [
-    ['Package',       'name'],
-    ['Version',       'version'],
-    ['Released',      'releaseDate'],
-    ['First Release', 'firstReleaseDate'],
-    ['Releases',      'releaseCount'],
+    ['Package',  'name'],
+    ['Version',  'version'],
+    ['Released', 'releaseDate'],
   ];
+  if (showFirst) COL_DEFS.push(['First Release', 'firstReleaseDate']);
+  COL_DEFS.push(['Releases', 'releaseCount']);
+
   for (const [label, col] of COL_DEFS) {
     const th = document.createElement('th');
     th.textContent = label;
     th.dataset.col = col;
+    if (col === cfg.sortCol) th.classList.add(`th-sort-${cfg.sortDir}`);
     headerRow.appendChild(th);
   }
 
   const tbody = table.createTBody();
-  for (const pkg of sorted) {
+  for (const pkg of cfg.sorted) {
     const tr = tbody.insertRow();
 
     const nameTd = tr.insertCell();
@@ -219,7 +256,7 @@ function renderResults(container, sorted, directCount, note = null, source = nul
     if (pkg.error) {
       tr.className = 'row-error';
       const td = addCell(tr, pkg.version ?? 'error');
-      td.colSpan = 4;
+      td.colSpan = COL_DEFS.length - 1;
       td.title = pkg.error;
       continue;
     }
@@ -229,13 +266,100 @@ function renderResults(container, sorted, directCount, note = null, source = nul
     const relCell = addCell(tr, pkg.releaseDate ?? 'unknown');
     if (daysSince(pkg.releaseDate) <= 7) relCell.className = 'age-fresh';
 
-    const firstCell = addCell(tr, pkg.firstReleaseDate ?? 'unknown');
-    if (daysSince(pkg.firstReleaseDate) <= 30) firstCell.className = 'age-new';
+    if (showFirst) {
+      const firstCell = addCell(tr, pkg.firstReleaseDate ?? 'unknown');
+      if (daysSince(pkg.firstReleaseDate) <= 30) firstCell.className = 'age-new';
+    }
 
     addCell(tr, formatNumber(pkg.releaseCount ?? 0));
   }
 
-  container.appendChild(table);
+  sectionEl.appendChild(table);
+  container.appendChild(sectionEl);
+  return sectionEl;
+}
+
+/**
+ * Renders one section into an error banner. Used when a single ecosystem's
+ * parse / resolve threw — the other sections still render normally.
+ * @param {HTMLElement} container
+ * @param {'npm'|'python'|'go'} ecosystem
+ * @param {string} message
+ * @param {boolean} showHeader
+ */
+function renderSectionError(container, ecosystem, message, showHeader) {
+  const sectionEl = document.createElement('section');
+  sectionEl.className = 'result-section';
+  if (showHeader) {
+    const h2 = document.createElement('h2');
+    h2.className = 'section-title';
+    h2.textContent = ecosystem;
+    sectionEl.appendChild(h2);
+  }
+  const errorEl = document.createElement('p');
+  errorEl.className = 'note note-warning';
+  errorEl.textContent = `ⓘ [${ecosystem}] ${message}`;
+  sectionEl.appendChild(errorEl);
+  container.appendChild(sectionEl);
+}
+
+// ── Per-ecosystem parse + resolve (browser side) ──────────────────────────────
+
+/**
+ * Runs the parse → resolve pipeline for one ecosystem against a GitHub ref.
+ * Returns the section's data needed to render it: deps, resolved results,
+ * direct dep names, source filename, and any note.
+ *
+ * @param {'npm'|'python'|'go'} ecosystem
+ * @param {object} githubRef
+ * @param {{ includeTests: boolean, onProgress: (msg: string) => void }} opts
+ * @returns {Promise<object>}
+ */
+async function resolveEcosystem(ecosystem, githubRef, opts) {
+  const { includeTests, onProgress } = opts;
+
+  let deps, source, note = null;
+  if (ecosystem === 'npm') {
+    ({ deps, source, note } = await parseGithubNpmDependencies(githubRef, { includeTests }));
+  } else if (ecosystem === 'go') {
+    ({ deps, source } = await parseGithubGoDependencies(githubRef));
+  } else {
+    ({ deps, source } = await parseGithubDependencies(githubRef, { includeTests }));
+  }
+
+  const isLockFile = source === 'package-lock.json' || source === 'pnpm-lock.yaml' || source === 'go.sum';
+  onProgress(`[${ecosystem}] Found ${deps.length} ${isLockFile ? 'installed' : 'direct'} dep${deps.length === 1 ? '' : 's'} in ${source}. Resolving…\n`);
+
+  let results;
+  if (ecosystem === 'npm') {
+    results = await resolveNpm(deps, { onProgress: (msg) => onProgress(`[npm] ${msg}\n`) });
+  } else if (ecosystem === 'go') {
+    results = await resolveGo(deps, { onProgress: (msg) => onProgress(`[go] ${msg}\n`) });
+  } else {
+    results = await resolveDependencies(deps, { onProgress: (msg) => onProgress(`[python] ${msg}\n`) });
+  }
+
+  // Direct-count computation (post-resolution so the names line up):
+  // - Lock files: npm = unknown (need package.json), go.sum = unknown (need go.mod)
+  // - package.json / go.mod / requirements.txt etc.: every parsed dep is direct,
+  //   except go.mod where `// indirect` deps are explicitly flagged.
+  let directCount = 0;
+  if (ecosystem === 'npm') {
+    if (!isLockFile) {
+      const directNames = new Set(deps.map(d => d.name.toLowerCase()));
+      directCount = [...results.values()].filter(r => directNames.has(r.name.toLowerCase())).length;
+    }
+  } else if (ecosystem === 'go') {
+    if (source === 'go.mod') {
+      const directNames = new Set(deps.filter(d => !d.indirect).map(d => d.name.toLowerCase()));
+      directCount = [...results.values()].filter(r => directNames.has(r.name.toLowerCase())).length;
+    }
+  } else {
+    const directNames = new Set(deps.map(d => d.name.toLowerCase()));
+    directCount = [...results.values()].filter(r => directNames.has(r.name.toLowerCase())).length;
+  }
+
+  return { ecosystem, deps, results, directCount, source, note };
 }
 
 // ── Browser initialisation ────────────────────────────────────────────────────
@@ -317,97 +441,78 @@ if (typeof document !== 'undefined') {
     }
 
     submitBtn.disabled = true;
-    appendProgress('Detecting ecosystem…\n');
+    appendProgress('Detecting ecosystems…\n');
 
     try {
-      // List the root directory to detect ecosystem
       const listing = await listDirectory(githubRef.owner, githubRef.repo, githubRef.subpath, githubRef.ref);
-      // Fall back to 'python' when no files are recognised at the root —
-      // parseGithubDependencies will traverse up to MAX_DEPTH levels and throw
-      // a clear error if nothing is found there either (covers HA integrations
-      // where manifest.json sits at custom_components/<name>/).
-      const ecosystem = detectEcosystem(listing ?? []) ?? 'python';
+      let ecosystems = detectEcosystems(listing ?? []);
+      // Fall back to 'python' so the depth-2 traversal still gets a chance
+      // (covers HA-style nested manifest.json layouts).
+      if (ecosystems.size === 0) ecosystems = new Set(['python']);
 
-      appendProgress(`Detected: ${ecosystem}. Fetching dependency files from GitHub…\n`);
+      const ordered = ECOSYSTEM_ORDER.filter(eco => ecosystems.has(eco));
+      appendProgress(`Detected: ${ordered.join(', ')}. Resolving…\n`);
 
-      let deps, source, directCount, note = null;
-
-      if (ecosystem === 'npm') {
-        ({ deps, source, note } = await parseGithubNpmDependencies(githubRef, { includeTests }));
-      } else if (ecosystem === 'go') {
-        ({ deps, source } = await parseGithubGoDependencies(githubRef));
-      } else {
-        ({ deps, source } = await parseGithubDependencies(githubRef, { includeTests }));
-      }
-
-      // Lock files don't carry direct/transitive info — omit the breakdown (directCount = 0).
-      // go.sum is the Go-ecosystem lock file (full transitive closure with pinned versions).
-      const isLockFile = source === 'package-lock.json' || source === 'pnpm-lock.yaml' || source === 'go.sum';
-      directCount = isLockFile ? 0 : deps.length;
-
-      appendProgress(
-        `Found ${deps.length} ${isLockFile ? 'installed' : 'direct'} ` +
-        `${deps.length === 1 ? 'dependency' : 'dependencies'} in: ${source}\n` +
-        `Resolving…\n`
+      // Parse + resolve every detected ecosystem in parallel. Each section
+      // captures its own error so a failure in one does not abort the others.
+      const settled = await Promise.all(
+        ordered.map(eco =>
+          resolveEcosystem(eco, githubRef, { includeTests, onProgress: appendProgress })
+            .then(section => ({ ok: true, section }))
+            .catch(err   => ({ ok: false, ecosystem: eco, error: err.message }))
+        )
       );
-
-      let results;
-      if (ecosystem === 'npm') {
-        results = await resolveNpm(deps, {
-          onProgress: (msg) => appendProgress(msg + '\n'),
-        });
-        // After resolution, recalculate directCount against resolved names (package.json only)
-        if (!isLockFile) {
-          const directNames = new Set(deps.map(d => d.name.toLowerCase()));
-          directCount = [...results.values()].filter(r => directNames.has(r.name.toLowerCase())).length;
-        }
-      } else if (ecosystem === 'go') {
-        results = await resolveGo(deps, {
-          onProgress: (msg) => appendProgress(msg + '\n'),
-        });
-        // For go.mod the parser sets `indirect: true` on transitive entries; the
-        // non-indirect names give the direct dep count. go.sum has no such hint.
-        if (source === 'go.mod') {
-          const directNames = new Set(deps.filter(d => !d.indirect).map(d => d.name.toLowerCase()));
-          directCount = [...results.values()].filter(r => directNames.has(r.name.toLowerCase())).length;
-        }
-      } else {
-        const directNames = new Set(deps.map(d => d.name.toLowerCase()));
-        results = await resolveDependencies(deps, {
-          onProgress: (msg) => appendProgress(msg + '\n'),
-        });
-        directCount = [...results.values()].filter(r => directNames.has(r.name.toLowerCase())).length;
-      }
 
       progressDiv.hidden = true;
 
-      // Sort state lives in this submission's closure so each new search
-      // starts fresh without affecting a concurrent tab or previous state.
-      let sortCol = 'releaseDate';
-      let sortDir = 'desc';
+      const showHeader = ordered.length >= 2;
 
-      function rerender() {
-        renderResults(resultsDiv, sortResultsBy(results, sortCol, sortDir), directCount, note, source);
+      // Each section keeps its own sort state in its own closure.
+      for (const entry of settled) {
+        if (!entry.ok) {
+          renderSectionError(resultsDiv, entry.ecosystem, entry.error, showHeader);
+          continue;
+        }
 
-        // Wire sort handlers onto the freshly rendered headers.
-        resultsDiv.querySelectorAll('th[data-col]').forEach(th => {
-          const col = th.dataset.col;
-          th.classList.toggle('th-sort-asc',  col === sortCol && sortDir === 'asc');
-          th.classList.toggle('th-sort-desc', col === sortCol && sortDir === 'desc');
-          th.addEventListener('click', () => {
-            if (sortCol === col) {
-              sortDir = sortDir === 'asc' ? 'desc' : 'asc';
-            } else {
-              sortCol = col;
-              // Dates and counts default to descending; strings default to ascending.
-              sortDir = (col === 'name' || col === 'version') ? 'asc' : 'desc';
-            }
-            rerender();
+        const section = entry.section;
+        let sortCol = 'releaseDate';
+        let sortDir = 'desc';
+
+        function rerender() {
+          // Tear down the existing section element if it exists, then redraw.
+          const prior = resultsDiv.querySelector(`section[data-ecosystem="${section.ecosystem}"]`);
+          if (prior) prior.remove();
+
+          const sortedRows = sortResultsBy(section.results, sortCol, sortDir);
+          const sectionEl = renderSection(resultsDiv, {
+            ecosystem:   section.ecosystem,
+            showHeader,
+            sorted:      sortedRows,
+            directCount: section.directCount,
+            source:      section.source,
+            note:        section.note,
+            sortCol,
+            sortDir,
           });
-        });
+
+          sectionEl.querySelectorAll('th[data-col]').forEach(th => {
+            const col = th.dataset.col;
+            th.addEventListener('click', () => {
+              if (sortCol === col) {
+                sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+              } else {
+                sortCol = col;
+                sortDir = (col === 'name' || col === 'version') ? 'asc' : 'desc';
+              }
+              rerender();
+            });
+          });
+        }
+
+        rerender();
       }
 
-      rerender();
+      resultsDiv.hidden = false;
     } catch (err) {
       showError(err.message);
     } finally {

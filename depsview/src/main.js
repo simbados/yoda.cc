@@ -1,53 +1,56 @@
 #!/usr/bin/env node
 /**
  * depsview — CLI entry point.
- * Supports Python projects (pyproject.toml, requirements.txt, …) and npm
- * projects (package-lock.json preferred, package.json fallback).
- * Auto-detects the ecosystem from the files present in the project directory
- * or GitHub URL; use --npm / --python to override.
+ *
+ * Supports Python, npm, and Go projects. Auto-detects every ecosystem present
+ * in the project directory or GitHub URL and renders one section per ecosystem
+ * (npm → python → go). Pass `--npm`, `--python`, and/or `--go` to filter.
  *
  * Usage:
- *   node src/main.js <path-or-github-url> [--npm|--python] [--json] [--debug]
- *                    [--include-tests] [--download-stats|--ds]
+ *   node src/main.js <path-or-github-url> [--npm] [--python] [--go]
+ *                    [--json] [--debug] [--include-tests] [--download-stats|--ds]
+ *                    [--socket-key=<key>] [--socket-org=<slug>] [--report[=<file>]]
  */
 
 import fs   from 'node:fs';
 import path from 'node:path';
 
-import { parseDependencyFile    as parsePythonFile   } from './python/parser.js';
-import { resolveDependencies    as resolvePython      } from './python/depResolver.js';
-import { normalizePackageName   as normalizePython    } from './python/pypiClient.js';
+import { orchestrate, packagesForSocket } from './orchestrator.js';
+import { formatMulti, formatJson, ECOSYSTEM_ORDER } from './output/formatter.js';
+import { generateReport                  } from './output/reportGenerator.js';
+import { fetchSocketScores               } from './socket/client.js';
+import { setDebug                        } from './util/debugging.js';
+import { isGithubUrl, parseGithubUrl     } from './github/url.js';
+import { listDirectory                   } from './github/client.js';
 
-import { parseDependencyFile    as parseNpmFile       } from './npm/parser.js';
-import { resolveDependencies    as resolveNpm         } from './npm/depResolver.js';
-import { normalizePackageName   as normalizeNpm       } from './npm/depResolver.js';
-import { parsePackageJson                             } from './npm/parserCore.js';
-
-import { parseDependencyFile    as parseGoFile,
-         readDirectNamesFromGoMod                     } from './go/parser.js';
-import { resolveDependencies    as resolveGo          } from './go/depResolver.js';
-import { normalizeGoModulePath, parseGoMod            } from './go/parserCore.js';
-
-import { formatTable, formatJson } from './output/formatter.js';
-import { generateReport            } from './output/reportGenerator.js';
-import { fetchSocketScores        } from './socket/client.js';
-import { setDebug                } from './util/debugging.js';
-import { isGithubUrl, parseGithubUrl } from './github/url.js';
-import { parseGithubDependencies, parseGithubNpmDependencies, parseGithubGoDependencies } from './github/parser.js';
-import { listDirectory, fetchFileContent } from './github/client.js';
-
-/** npm-specific filenames checked during local ecosystem detection. */
+/** npm-specific filenames checked during ecosystem detection. */
 const NPM_FILES    = new Set(['package-lock.json', 'pnpm-lock.yaml', 'package.json']);
-/** Go-specific filenames checked during local ecosystem detection. */
+/** Go-specific filenames checked during ecosystem detection. */
 const GO_FILES     = new Set(['go.sum', 'go.mod']);
-/** Python-specific filenames checked during local ecosystem detection. */
+/** Python-specific filenames checked during ecosystem detection. */
 const PYTHON_FILES = new Set(['pyproject.toml', 'requirements.txt', 'setup.cfg', 'Pipfile', 'manifest.json']);
 
 /**
  * Parses CLI arguments from process.argv.
- * Socket.dev credentials can also be supplied via SOCKET_KEY / SOCKET_ORG env vars;
- * the --socket-key= / --socket-org= flags take precedence when both are present.
- * @returns {{ projectPath: string, json: boolean, debug: boolean, includeTests: boolean, downloadStats: boolean, ecosystem: 'npm'|'python'|null, socketKey: string|null, socketOrg: string|null, reportPath: string|null }}
+ *
+ * Ecosystem flags (`--npm`, `--python`, `--go`) act as filters: any combination
+ * restricts the run to those ecosystems. With no flags, every ecosystem detected
+ * at the project root is included.
+ *
+ * Socket.dev credentials can also be supplied via `SOCKET_KEY` / `SOCKET_ORG`
+ * env vars; the `--socket-key` / `--socket-org` flags take precedence.
+ *
+ * @returns {{
+ *   projectPath: string,
+ *   json: boolean,
+ *   debug: boolean,
+ *   includeTests: boolean,
+ *   downloadStats: boolean,
+ *   requestedEcosystems: Set<'npm'|'python'|'go'>,
+ *   socketKey: string|null,
+ *   socketOrg: string|null,
+ *   reportPath: string|null,
+ * }}
  */
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -55,10 +58,13 @@ function parseArgs() {
   const debugFlag         = args.includes('--debug');
   const includeTestsFlag  = args.includes('--include-tests');
   const downloadStatsFlag = args.includes('--download-stats') || args.includes('--ds');
-  const npmFlag           = args.includes('--npm');
-  const pythonFlag        = args.includes('--python');
-  const goFlag            = args.includes('--go');
-  const positional        = args.filter(a => !a.startsWith('--'));
+
+  const requestedEcosystems = new Set();
+  if (args.includes('--npm'))    requestedEcosystems.add('npm');
+  if (args.includes('--python')) requestedEcosystems.add('python');
+  if (args.includes('--go'))     requestedEcosystems.add('go');
+
+  const positional = args.filter(a => !a.startsWith('--'));
 
   const socketKeyArg = args.find(a => a.startsWith('--socket-key='));
   const socketOrgArg = args.find(a => a.startsWith('--socket-org='));
@@ -75,83 +81,71 @@ function parseArgs() {
       : reportArg.slice('--report='.length);
 
   if (positional.length === 0) {
-    console.error('Usage: depsview <path-to-project|github-url> [--npm|--python|--go] [--json] [--debug] [--include-tests] [--download-stats|--ds]');
-    console.error('       [--socket-key=<key>] [--socket-org=<slug>] [--report[=<file>]]');
+    console.error('Usage: depsview <path-to-project|github-url> [--npm] [--python] [--go] [--json] [--debug] [--include-tests]');
+    console.error('       [--download-stats|--ds] [--socket-key=<key>] [--socket-org=<slug>] [--report[=<file>]]');
     console.error('');
+    console.error('Ecosystem flags act as filters; with none, every detected ecosystem is included.');
     console.error('Python files: pyproject.toml, manifest.json, requirements.txt, setup.cfg, Pipfile');
     console.error('npm files:    package-lock.json, pnpm-lock.yaml (preferred), package.json');
     console.error('Go files:     go.sum (preferred), go.mod');
     process.exit(1);
   }
 
-  const ecosystem = npmFlag ? 'npm' : pythonFlag ? 'python' : goFlag ? 'go' : null;
-  return { projectPath: positional[0], json: jsonFlag, debug: debugFlag, includeTests: includeTestsFlag, downloadStats: downloadStatsFlag, ecosystem, socketKey, socketOrg, reportPath };
+  return {
+    projectPath: positional[0],
+    json: jsonFlag,
+    debug: debugFlag,
+    includeTests: includeTestsFlag,
+    downloadStats: downloadStatsFlag,
+    requestedEcosystems,
+    socketKey,
+    socketOrg,
+    reportPath,
+  };
 }
 
 /**
- * Detects the package ecosystem from local filesystem.
- * Checks npm files first, then Go, then falls back to Python.
- * @param {string} dirPath - absolute path to the project root
- * @returns {'npm'|'go'|'python'}
- */
-function detectLocalEcosystem(dirPath) {
-  for (const f of NPM_FILES) {
-    if (fs.existsSync(path.join(dirPath, f))) return 'npm';
-  }
-  for (const f of GO_FILES) {
-    if (fs.existsSync(path.join(dirPath, f))) return 'go';
-  }
-  return 'python';
-}
-
-/**
- * Detects the package ecosystem from a GitHub directory listing.
- * Checks npm files first, then Go, then Python.
- * @param {Array<{ name: string, type: string }>} listing
- * @returns {'npm'|'go'|'python'|null} null when no recognised files are found
- */
-function detectGithubEcosystem(listing) {
-  const names = new Set(listing.map(e => e.name));
-  for (const f of NPM_FILES)    { if (names.has(f)) return 'npm'; }
-  for (const f of GO_FILES)     { if (names.has(f)) return 'go'; }
-  for (const f of PYTHON_FILES) { if (names.has(f)) return 'python'; }
-  return null;
-}
-
-/**
- * Attempts to fetch go.mod from a GitHub repo subpath to extract direct (non-indirect)
- * module names. Returns an empty Set when go.mod is absent or unparseable.
- * Mirrors readDirectNamesFromGoMod for the GitHub code path.
- * @param {{ owner: string, repo: string, ref: string, subpath: string }} githubRef
- * @returns {Promise<Set<string>>}
- */
-async function readDirectGoNamesFromGithub({ owner, repo, ref, subpath }) {
-  const filePath = subpath ? `${subpath}/go.mod` : 'go.mod';
-  const content = await fetchFileContent(owner, repo, filePath, ref);
-  if (!content) return new Set();
-  try {
-    return new Set(parseGoMod(content).filter(d => !d.indirect).map(d => d.name.toLowerCase()));
-  } catch {
-    return new Set();
-  }
-}
-
-/**
- * Attempts to read a package.json at the project root to extract direct dep names.
- * Used alongside lock-file resolution to populate the direct/transitive footer.
- * Returns an empty Set if package.json is absent or unparseable.
+ * Returns the set of ecosystems whose dep files are present in a local directory.
  * @param {string} dirPath
- * @param {boolean} includeTests
- * @returns {Set<string>}
+ * @returns {Set<'npm'|'python'|'go'>}
  */
-function readDirectNamesFromPackageJson(dirPath, includeTests) {
-  try {
-    const content = fs.readFileSync(path.join(dirPath, 'package.json'), 'utf8');
-    const direct  = parsePackageJson(content, includeTests);
-    return new Set(direct.map(d => normalizeNpm(d.name)));
-  } catch {
-    return new Set();
-  }
+function detectLocalEcosystems(dirPath) {
+  const found = new Set();
+  for (const f of NPM_FILES)    { if (fs.existsSync(path.join(dirPath, f))) { found.add('npm');    break; } }
+  for (const f of GO_FILES)     { if (fs.existsSync(path.join(dirPath, f))) { found.add('go');     break; } }
+  for (const f of PYTHON_FILES) { if (fs.existsSync(path.join(dirPath, f))) { found.add('python'); break; } }
+  return found;
+}
+
+/**
+ * Returns the set of ecosystems whose dep files appear in a GitHub directory listing.
+ * @param {Array<{ name: string, type: string }>} listing
+ * @returns {Set<'npm'|'python'|'go'>}
+ */
+function detectGithubEcosystems(listing) {
+  const names = new Set(listing.map(e => e.name));
+  const found = new Set();
+  for (const f of NPM_FILES)    { if (names.has(f)) { found.add('npm');    break; } }
+  for (const f of GO_FILES)     { if (names.has(f)) { found.add('go');     break; } }
+  for (const f of PYTHON_FILES) { if (names.has(f)) { found.add('python'); break; } }
+  return found;
+}
+
+/**
+ * Resolves the set of ecosystems to actually run for this invocation.
+ * If the user passed ecosystem flags, those win (intersected with what's
+ * sensible). Otherwise, fall back to detection. When detection finds nothing
+ * we still try Python so that HA-style nested manifest.json files (which can
+ * only be discovered via the depth-2 GitHub traversal) get a chance.
+ *
+ * @param {Set<'npm'|'python'|'go'>} requested
+ * @param {Set<'npm'|'python'|'go'>} detected
+ * @returns {Set<'npm'|'python'|'go'>}
+ */
+function resolveEcosystems(requested, detected) {
+  if (requested.size > 0) return requested;
+  if (detected.size > 0)  return detected;
+  return new Set(['python']);
 }
 
 /**
@@ -159,141 +153,82 @@ function readDirectNamesFromPackageJson(dirPath, includeTests) {
  * @returns {Promise<void>}
  */
 async function main() {
-  const { projectPath, json, debug, includeTests, downloadStats, ecosystem: ecosystemFlag, socketKey, socketOrg, reportPath } = parseArgs();
+  const {
+    projectPath, json, debug, includeTests, downloadStats,
+    requestedEcosystems, socketKey, socketOrg, reportPath,
+  } = parseArgs();
   if (debug) setDebug(true);
 
-  const absolutePath = path.resolve(projectPath);
+  const isGithub = isGithubUrl(projectPath);
+  const githubRef = isGithub ? parseGithubUrl(projectPath) : null;
+  const absolutePath = isGithub ? null : path.resolve(projectPath);
 
-  // ── Step 1: Parse dependency file(s) ──────────────────────────────────────
-  let deps, source, ecosystem, directNames, note = null;
-
-  try {
-    if (isGithubUrl(projectPath)) {
-      const githubRef = parseGithubUrl(projectPath);
-
-      // Detect ecosystem from the root listing unless overridden
-      let eco = ecosystemFlag;
-      if (!eco) {
-        const listing = await listDirectory(githubRef.owner, githubRef.repo, githubRef.subpath, githubRef.ref);
-        // Fall back to 'python' when no files are recognised at the root —
-        // parseGithubDependencies traverses up to MAX_DEPTH levels and throws
-        // a clear error if nothing is found there either (covers HA integrations
-        // where manifest.json sits at custom_components/<name>/).
-        eco = detectGithubEcosystem(listing ?? []) ?? 'python';
-      }
-      ecosystem = eco;
-
-      if (ecosystem === 'npm') {
-        ({ deps, source, note } = await parseGithubNpmDependencies(githubRef, { includeTests }));
-      } else if (ecosystem === 'go') {
-        ({ deps, source } = await parseGithubGoDependencies(githubRef));
-      } else {
-        ({ deps, source } = await parseGithubDependencies(githubRef, { includeTests }));
-      }
-    } else {
-      ecosystem = ecosystemFlag ?? detectLocalEcosystem(absolutePath);
-
-      if (ecosystem === 'npm') {
-        ({ deps, source, note } = parseNpmFile(absolutePath, { includeTests }));
-      } else if (ecosystem === 'go') {
-        ({ deps, source } = parseGoFile(absolutePath));
-      } else {
-        ({ deps, source } = parsePythonFile(absolutePath, { includeTests }));
-      }
-    }
-  } catch (err) {
-    console.error(`Error: ${err.message}`);
-    process.exit(1);
-  }
-
-  if (deps.length === 0) {
-    console.error(`No dependencies found in ${source}. The file may be empty or use an unsupported format.`);
-    process.exit(0);
-  }
-
-  // ── Build directNames set ──────────────────────────────────────────────────
-  // For lock-file sources, read the manifest (package.json / go.mod) to know
-  // which deps are direct. For manifest-only sources, every input dep is direct.
-  const isLockFile = source === 'package-lock.json' || source === 'pnpm-lock.yaml' || source === 'go.sum';
-  if (ecosystem === 'npm') {
-    if (isLockFile) {
-      directNames = isGithubUrl(projectPath)
-        ? new Set()
-        : readDirectNamesFromPackageJson(absolutePath, includeTests);
-    } else {
-      directNames = new Set(deps.map(d => normalizeNpm(d.name)));
-    }
-  } else if (ecosystem === 'go') {
-    // The formatter normalises names with `[-_.]+` → `-` when matching directNames,
-    // so we must apply the same transform here for Go module paths to compare equal.
-    const formatterNorm = (name) => name.toLowerCase().replace(/[-_.]+/g, '-');
-    if (source === 'go.sum') {
-      const rawDirect = isGithubUrl(projectPath)
-        ? await readDirectGoNamesFromGithub(parseGithubUrl(projectPath))
-        : readDirectNamesFromGoMod(absolutePath);
-      directNames = new Set([...rawDirect].map(formatterNorm));
-    } else {
-      directNames = new Set(deps.filter(d => !d.indirect).map(d => formatterNorm(d.name)));
-    }
+  // ── Detection ─────────────────────────────────────────────────────────────
+  let detected;
+  if (isGithub) {
+    const listing = await listDirectory(githubRef.owner, githubRef.repo, githubRef.subpath, githubRef.ref);
+    detected = detectGithubEcosystems(listing ?? []);
   } else {
-    directNames = new Set(deps.map(d => normalizePython(d.name)));
+    detected = detectLocalEcosystems(absolutePath);
   }
+
+  const ecosystems = resolveEcosystems(requestedEcosystems, detected);
 
   if (!json) {
-    console.log(`Resolving ${ecosystem} dependencies from ${source} (${deps.length} ${isLockFile ? 'installed' : 'direct'})...\n`);
-    if (note) console.error(`[note] ${note}\n`);
+    const list = [...ecosystems].join(', ') || '(none)';
+    console.log(`Resolving ecosystems: ${list}…\n`);
   }
 
-  // ── Step 2: Resolve all deps ───────────────────────────────────────────────
-  let results;
-  try {
-    if (ecosystem === 'npm') {
-      results = await resolveNpm(deps, {
-        onProgress: json ? undefined : msg => process.stderr.write(msg + '\n'),
-      });
-    } else if (ecosystem === 'go') {
-      results = await resolveGo(deps, {
-        onProgress: json ? undefined : msg => process.stderr.write(msg + '\n'),
-      });
-    } else {
-      results = await resolvePython(deps, {
-        onProgress: json ? undefined : msg => process.stderr.write(msg + '\n'),
-        downloadStats,
-      });
+  // ── Orchestrate parse + resolve in parallel ───────────────────────────────
+  const sections = await orchestrate(
+    { isGithub, githubRef, absolutePath },
+    {
+      ecosystems,
+      includeTests,
+      downloadStats,
+      onProgress: json ? undefined : msg => process.stderr.write(msg + '\n'),
     }
-  } catch (err) {
-    console.error(`Fatal error during resolution: ${err.message}`);
-    process.exit(1);
+  );
+
+  // ── Surface per-ecosystem failures to stderr ──────────────────────────────
+  let anyResults = false;
+  for (const ecosystem of ECOSYSTEM_ORDER) {
+    const section = sections.get(ecosystem);
+    if (!section) continue;
+    if (section.error) {
+      console.error(`[${ecosystem}] failed: ${section.error}`);
+    } else if (section.results && section.results.size > 0) {
+      anyResults = true;
+    }
+  }
+  if (!anyResults && [...sections.values()].every(s => s.error || !s.results || s.results.size === 0)) {
+    // Every section either errored or returned no packages. Exit cleanly with no output.
+    if (!json) console.error('No dependencies resolved in any ecosystem.');
+    process.exit(0);
   }
 
   if (!json) process.stderr.write('\n');
 
-  // ── Step 3: Fetch socket.dev supply chain scores (optional) ───────────────
+  // ── Single socket.dev call across all ecosystems ──────────────────────────
   let socketScores = null;
   if (socketKey && socketOrg) {
     if (!json) process.stderr.write('Fetching supply chain scores from socket.dev…\n');
-    const packages = [...results.values()]
-      .filter(r => !r.error)
-      .map(r => ({ name: r.name, version: r.version }));
-    const socketEcosystem = ecosystem === 'python' ? 'pypi'
-                         : ecosystem === 'go'     ? 'golang'
-                         : ecosystem;
-    socketScores = await fetchSocketScores(packages, socketKey, socketOrg, socketEcosystem);
+    const packages = packagesForSocket(sections);
+    socketScores = await fetchSocketScores(packages, socketKey, socketOrg);
     if (!json) process.stderr.write('\n');
   }
 
-  // ── Step 4: Format output ──────────────────────────────────────────────────
-  const outputOpts = { downloadStats: ecosystem === 'python' && downloadStats, socketScores };
+  // ── Output ────────────────────────────────────────────────────────────────
+  const outputOpts = { downloadStats, socketScores };
 
   if (json) {
-    formatJson(results, outputOpts);
+    formatJson(sections, outputOpts);
   } else {
-    formatTable(results, directNames, { ...outputOpts, source: source ?? null });
+    formatMulti(sections, outputOpts);
   }
 
-  // ── Step 5: Write HTML report (optional) ──────────────────────────────────
   if (reportPath) {
-    const html = generateReport(results, directNames, { ...outputOpts, source: source ?? null, ecosystem });
+    const html = generateReport(sections, outputOpts);
     const resolvedReport = path.resolve(reportPath);
     fs.writeFileSync(resolvedReport, html, 'utf8');
     process.stderr.write(`Report written to ${resolvedReport}\n`);
