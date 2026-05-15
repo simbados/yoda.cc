@@ -30,28 +30,79 @@ export async function fetchFormula(name) {
   return res.json();
 }
 
+/** GitHub login of Homebrew's CI machine account that publishes releases. */
+const BREW_TEST_BOT = 'BrewTestBot';
+
+/** How many recent commits to scan when locating the latest BrewTestBot commit. */
+const COMMIT_PAGE_SIZE = 100;
+
 /**
- * Fetches the date of the most recent commit to a formula's Ruby source file
- * in the homebrew-core repository, which corresponds to when that formula's
- * version was last bumped. Returns an ISO date string (YYYY-MM-DD) or null
- * when the path is missing, the API is unavailable, or the response is empty.
+ * Error raised when the GitHub API responds with a rate-limit status (403/429).
+ * A dedicated type lets callers distinguish "rate limited" from ordinary
+ * failures and surface a specific message to the user.
+ */
+export class RateLimitError extends Error {
+  constructor(message = 'GitHub API rate limit reached') {
+    super(message);
+    this.name = 'RateLimitError';
+  }
+}
+
+/**
+ * Fetches the date a formula was last released by looking up the most recent
+ * commit to its Ruby source file made by BrewTestBot.
+ *
+ * BrewTestBot is Homebrew's CI machine account; it only commits release-related
+ * changes (version bumps and bottle publishing), never human style/audit/relabel
+ * edits — so its latest commit is a reliable "last released" signal.
+ *
+ * A commit counts when BrewTestBot is *either* its author or its committer: on
+ * some commits it is only the committer (the change was authored by the original
+ * PR contributor), on others only the author. The GitHub commits API cannot OR
+ * `author` and `committer` server-side, so instead of a filtered query we fetch
+ * one page of recent commits and scan it client-side — still a single request.
+ *
+ * Returns the committer date as an ISO date string (YYYY-MM-DD), or null when the
+ * path is missing, the API is unavailable, or no BrewTestBot commit appears in the
+ * most recent page (e.g. a niche or recently-renamed formula).
+ *
+ * Throws a {@link RateLimitError} when GitHub responds 403/429 — the
+ * unauthenticated limit (primary 60/hr, or the secondary concurrent-request
+ * limit) has been hit. Callers should catch this and surface it to the user
+ * rather than silently showing a missing date.
+ *
  * Uses the public GitHub commits API — unauthenticated, rate-limited to 60 req/hr.
  * @param {string|null} rubySourcePath - e.g. "Formula/w/wget.rb"
  * @returns {Promise<string|null>}
+ * @throws {RateLimitError} when the GitHub API rate limit is exceeded
  */
 export async function fetchFormulaLastUpdated(rubySourcePath) {
   if (!rubySourcePath) return null;
   try {
     const res = await fetch(
       `https://api.github.com/repos/Homebrew/homebrew-core/commits` +
-      `?path=${encodeURIComponent(rubySourcePath)}&per_page=1`,
+      `?path=${encodeURIComponent(rubySourcePath)}&per_page=${COMMIT_PAGE_SIZE}`,
       { headers: { Accept: 'application/vnd.github.v3+json' } }
     );
+    // 403/429 from GitHub means the rate limit was hit. Raise it distinctly so
+    // resolve() can report it instead of letting the date silently go missing.
+    if (res.status === 403 || res.status === 429) {
+      throw new RateLimitError();
+    }
     if (!res.ok) return null;
-    const [commit] = await res.json();
-    const date = commit?.commit?.author?.date;
+    const commits = await res.json();
+    if (!Array.isArray(commits)) return null;
+
+    // Commits come back newest-first; the first BrewTestBot match is the latest.
+    const hit = commits.find(c =>
+      c?.author?.login === BREW_TEST_BOT || c?.committer?.login === BREW_TEST_BOT
+    );
+    const date = hit?.commit?.committer?.date;
     return date ? date.slice(0, 10) : null;
-  } catch {
+  } catch (err) {
+    // Propagate rate-limit errors so the caller can surface them; ordinary
+    // network/parse failures just mean the date is unavailable → null.
+    if (err instanceof RateLimitError) throw err;
     return null;
   }
 }

@@ -210,12 +210,22 @@ if (typeof document !== 'undefined') {
     submitBtn.disabled = true;
 
     try {
-      const results = await resolve(formulaName, {
+      const { results, rateLimited } = await resolve(formulaName, {
         includeBuildDeps,
         onProgress: msg => appendProgress(msg + '\n'),
       });
 
       progressDiv.hidden = true;
+
+      // Non-fatal: the dependency tree resolved, but GitHub rate-limited the
+      // update-date lookups, so some "Updated" cells will be blank. Surface it
+      // in the (amber) banner so the missing dates are explained.
+      if (rateLimited) {
+        showError(
+          'GitHub API rate limit reached — some "Updated" dates could not be fetched. ' +
+          'The unauthenticated limit (60 requests/hour) resets within an hour.'
+        );
+      }
 
       let sortCol = 'updatedAt';
       let sortDir = 'desc';

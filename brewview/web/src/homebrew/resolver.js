@@ -8,7 +8,7 @@
  * OS-provided and not Homebrew packages.
  */
 
-import { fetchFormula, fetchFormulaLastUpdated } from './client.js';
+import { fetchFormula, fetchFormulaLastUpdated, RateLimitError } from './client.js';
 
 /**
  * Sums all install counts from an analytics period object.
@@ -59,9 +59,15 @@ export function parseFormula(data, opts = {}) {
  * Each resolved package carries a `depth` field: 0 = root, 1 = direct dep,
  * 2+ = transitive dep. Packages that fail to fetch are recorded with error = message.
  * Does not mutate any input; returns a new Map on each call.
+ *
+ * `rateLimited` is true when at least one update-date request hit the GitHub
+ * API rate limit — in that case some packages' `updatedAt` will be null even
+ * though the formula itself resolved fine, and the caller should surface it.
+ *
  * @param {string} rootName - formula name to start from
  * @param {{ includeBuildDeps?: boolean, onProgress?: (msg: string) => void }} [opts]
- * @returns {Promise<Map<string, object>>} name → package record (includes updatedAt)
+ * @returns {Promise<{ results: Map<string, object>, rateLimited: boolean }>}
+ *   results: name → package record (includes updatedAt); rateLimited: see above
  */
 export async function resolve(rootName, opts = {}) {
   const { includeBuildDeps = false, onProgress } = opts;
@@ -109,14 +115,25 @@ export async function resolve(rootName, opts = {}) {
   // ── Phase 2: fetch last-updated dates in parallel ─────────────────────────
   // Queries the GitHub commits API for each formula's Ruby source file in
   // homebrew-core. All requests fire concurrently to minimise total latency.
+  // A rate-limit response (403/429) on any one request is caught and recorded;
+  // the affected package's updatedAt stays null and resolution still completes.
   onProgress?.('Fetching update dates from GitHub…');
+  let rateLimited = false;
   await Promise.all(
     [...results.values()]
       .filter(pkg => !pkg.error && pkg.rubySourcePath)
       .map(async pkg => {
-        pkg.updatedAt = await fetchFormulaLastUpdated(pkg.rubySourcePath);
+        try {
+          pkg.updatedAt = await fetchFormulaLastUpdated(pkg.rubySourcePath);
+        } catch (err) {
+          pkg.updatedAt = null;
+          if (err instanceof RateLimitError) rateLimited = true;
+        }
       })
   );
+  if (rateLimited) {
+    onProgress?.('⚠ GitHub API rate limit reached — some update dates are unavailable.');
+  }
 
-  return results;
+  return { results, rateLimited };
 }

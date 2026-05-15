@@ -16,7 +16,7 @@ Optionally check **Include build dependencies** to include packages that are onl
 
 1. **BFS resolution** — starting from the root formula, brewview fetches each formula's metadata from the Homebrew API and walks the dependency graph breadth-first. Runtime and recommended dependencies are always included; build dependencies are included when the checkbox is checked. System libraries (`uses_from_macos`) are excluded.
 
-2. **Parallel date fetch** — once the full dependency tree is resolved, brewview queries the GitHub commits API for each formula's Ruby source file in homebrew-core to determine when that formula's version was last bumped. All requests fire concurrently to minimise latency.
+2. **Parallel date fetch** — once the full dependency tree is resolved, brewview queries the GitHub commits API for each formula's Ruby source file in homebrew-core to determine when it was last released. It takes the most recent commit where BrewTestBot — Homebrew's CI account, which only commits release activity (version bumps and bottle publishing), never human style/audit edits — is either the author or the committer. This keeps the "Updated" date tied to real releases. One page of recent commits is fetched per formula and scanned client-side (the API cannot OR author/committer server-side); all requests fire concurrently to minimise latency.
 
 ## Output columns
 
@@ -24,7 +24,7 @@ Optionally check **Include build dependencies** to include packages that are onl
 |---|---|
 | Package | Formula name (links to formulae.brew.sh) |
 | Version | Current stable version |
-| Updated | Date the formula was last updated in homebrew-core |
+| Updated | Date of the most recent BrewTestBot commit (author or committer) to the formula — last release |
 | Installs/year | Total installs over the past 365 days (all versions combined) |
 
 ### Color coding
@@ -47,7 +47,7 @@ The summary line above the table shows:
 
 ## Rate limits
 
-The GitHub commits API allows 60 unauthenticated requests per hour. Large dependency trees (e.g. `ffmpeg`) may exhaust this limit; affected packages will simply show no updated date rather than failing.
+The GitHub commits API allows 60 unauthenticated requests per hour. Large dependency trees (e.g. `ffmpeg`) may exhaust this limit; affected packages will simply show no updated date rather than failing. A formula with no BrewTestBot commit in its 100 most recent commits (e.g. a recently-renamed formula) also shows no date.
 
 ## Running tests
 
