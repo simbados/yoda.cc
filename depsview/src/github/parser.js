@@ -26,7 +26,7 @@ import { isTestDirectory, isTestRequirementsFile } from '../python/testFilter.js
 import { parseGoSum, parseGoMod } from '../go/parserCore.js';
 
 /** Recognised dependency filenames, checked case-sensitively against the repo listing. */
-const DEP_FILENAMES = new Set(['pyproject.toml', 'manifest.json', 'requirements.txt', 'setup.cfg', 'Pipfile']);
+const DEP_FILENAMES = new Set(['pyproject.toml', 'manifest.json', 'requirements.txt', 'requirements_all.txt', 'setup.cfg', 'Pipfile']);
 
 /**
  * How many directory levels below the starting path to search.
@@ -238,7 +238,8 @@ async function parseGithubDependencies({ owner, repo, ref, subpath }, options = 
         const baseDir = dirPath || '';
         if (name === 'pyproject.toml')     return { filePath, deps: parsePyprojectToml(content, includeTests) };
         if (name === 'manifest.json')      return { filePath, deps: parseManifestJson(content) };
-        if (name === 'requirements.txt')   return { filePath, deps: await parseRequirementsTxtAsync(content, owner, repo, baseDir, ref, new Set([filePath]), includeTests) };
+        if (name === 'requirements.txt' || name === 'requirements_all.txt')
+          return { filePath, deps: await parseRequirementsTxtAsync(content, owner, repo, baseDir, ref, new Set([filePath]), includeTests) };
         if (name === 'setup.cfg')          return { filePath, deps: parseSetupCfg(content) };
         if (name === 'Pipfile')            return { filePath, deps: parsePipfile(content, includeTests) };
         return { filePath, deps: [] };

@@ -9,6 +9,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { isTestRequirementsFile } from './testFilter.js';
+import { normalizePackageName } from './pypiClient.js';
 import {
   parseDependencyString,
   parseRequiresDist,
@@ -17,6 +18,14 @@ import {
   parsePipfile,
   parseManifestJson,
 } from './parserCore.js';
+
+/**
+ * Recognised plain-text requirements filenames, in parse priority order.
+ * `requirements_all.txt` is parsed before `requirements.txt` so that, if it
+ * pulls `requirements.txt` in via a `-r` include, the shared `visited` set
+ * stops the latter from being parsed a second time as a standalone file.
+ */
+const REQUIREMENTS_FILES = ['requirements_all.txt', 'requirements.txt'];
 
 /**
  * Parses a requirements.txt file into a list of dependencies.
@@ -85,9 +94,81 @@ function parseRequirementsTxt(content, filePath, projectRoot, visited = new Set(
 }
 
 /**
- * Detects and parses the Python dependency file in a given project directory.
- * Priority order: pyproject.toml → manifest.json → requirements.txt → setup.cfg → Pipfile.
- * Returns the parsed dependencies and a label indicating which file was used.
+ * Merges dependency lists drawn from multiple requirements files into a single
+ * deduplicated array. Packages are keyed by their PEP 503-normalised name.
+ * When the same package appears in more than one file, its version constraints
+ * are combined with a comma so resolveVersion treats them as a joint constraint.
+ * The first occurrence's original name casing is preserved.
+ * Does not mutate the input array.
+ * @param {Array<{ name: string, versionSpec: string|null }>} allDeps
+ * @returns {Array<{ name: string, versionSpec: string|null }>}
+ */
+function mergeRequirementsDeps(allDeps) {
+  /** @type {Map<string, { name: string, versionSpec: string|null }>} */
+  const map = new Map();
+
+  for (const dep of allDeps) {
+    const key = normalizePackageName(dep.name);
+    if (!map.has(key)) {
+      map.set(key, { name: dep.name, versionSpec: dep.versionSpec });
+    } else {
+      const existing = map.get(key);
+      if (dep.versionSpec && existing.versionSpec) {
+        existing.versionSpec = `${existing.versionSpec},${dep.versionSpec}`;
+      } else if (dep.versionSpec) {
+        existing.versionSpec = dep.versionSpec;
+      }
+    }
+  }
+
+  return [...map.values()];
+}
+
+/**
+ * Parses every plain-text requirements file present in a project directory
+ * (`requirements_all.txt` and `requirements.txt`) and merges the results.
+ *
+ * The two parses share one `visited` set: if `requirements_all.txt` pulls in
+ * `requirements.txt` via a `-r` include, the standalone parse of
+ * `requirements.txt` is skipped so its packages are not counted twice. Any
+ * remaining overlap (the same package listed independently in both files) is
+ * collapsed by mergeRequirementsDeps.
+ *
+ * @param {string} projectPath - absolute path to the Python project root
+ * @param {boolean} includeTests - forwarded to parseRequirementsTxt
+ * @returns {{ deps: Array<{ name: string, versionSpec: string|null }>, source: string }|null}
+ *   null when no requirements file is present in the directory
+ */
+function parseRequirementsFiles(projectPath, includeTests) {
+  const visited = new Set();
+  const allDeps = [];
+  const sources = [];
+
+  for (const file of REQUIREMENTS_FILES) {
+    const fullPath = path.join(projectPath, file);
+    if (!fs.existsSync(fullPath) || fs.statSync(fullPath).isDirectory()) continue;
+    // Already pulled in via a `-r` include from an earlier requirements file —
+    // don't parse it again as a standalone source.
+    if (visited.has(fullPath)) continue;
+    try {
+      const content = fs.readFileSync(fullPath, 'utf8');
+      allDeps.push(...parseRequirementsTxt(content, fullPath, projectPath, visited, includeTests));
+      sources.push(file);
+    } catch (err) {
+      throw new Error(`Failed to parse ${file}: ${err.message}`);
+    }
+  }
+
+  if (sources.length === 0) return null;
+  return { deps: mergeRequirementsDeps(allDeps), source: sources.join(', ') };
+}
+
+/**
+ * Detects and parses the Python dependency file(s) in a given project directory.
+ * Priority order: pyproject.toml → manifest.json → requirements*.txt → setup.cfg → Pipfile.
+ * When both `requirements.txt` and `requirements_all.txt` are present, both are
+ * parsed and merged into a single dependency list.
+ * Returns the parsed dependencies and a label indicating which file(s) were used.
  * @param {string} projectPath - absolute path to the Python project root
  * @param {{ includeTests?: boolean }} [options] - parsing options
  * @param {boolean} [options.includeTests=false] - when true, test/dev dependencies are
@@ -96,45 +177,37 @@ function parseRequirementsTxt(content, filePath, projectRoot, visited = new Set(
  */
 function parseDependencyFile(projectPath, options = {}) {
   const { includeTests = false } = options;
-  const candidates = [
-    {
-      file: 'pyproject.toml',
-      parse: (c) => parsePyprojectToml(c, includeTests),
-    },
-    {
-      file: 'manifest.json',
-      parse: (c) => parseManifestJson(c),
-    },
-    {
-      file: 'requirements.txt',
-      parse: (c, fp) => parseRequirementsTxt(c, fp, projectPath, new Set(), includeTests),
-    },
-    {
-      file: 'setup.cfg',
-      parse: (c) => parseSetupCfg(c),
-    },
-    {
-      file: 'Pipfile',
-      parse: (c) => parsePipfile(c, includeTests),
-    },
-  ];
 
-  for (const { file, parse } of candidates) {
+  /**
+   * Reads and parses a single dependency file if it exists.
+   * @param {string} file - filename relative to projectPath
+   * @param {(content: string, fullPath: string) => Array} parse
+   * @returns {{ deps: Array, source: string }|null} null when the file is absent
+   */
+  const tryFile = (file, parse) => {
     const fullPath = path.join(projectPath, file);
-    if (!fs.existsSync(fullPath)) continue;
     // Guard against a directory entry matching the filename (e.g. case-insensitive fs)
-    if (fs.statSync(fullPath).isDirectory()) continue;
+    if (!fs.existsSync(fullPath) || fs.statSync(fullPath).isDirectory()) return null;
     try {
-      const content = fs.readFileSync(fullPath, 'utf8');
-      const deps = parse(content, fullPath);
-      return { deps, source: file };
+      return { deps: parse(fs.readFileSync(fullPath, 'utf8'), fullPath), source: file };
     } catch (err) {
       throw new Error(`Failed to parse ${file}: ${err.message}`);
     }
-  }
+  };
 
-  const tried = candidates.map(c => c.file).join(', ');
-  throw new Error(`No dependency file found in ${projectPath}. Looked for: ${tried}`);
+  const result =
+    tryFile('pyproject.toml', (c) => parsePyprojectToml(c, includeTests)) ??
+    tryFile('manifest.json',  (c) => parseManifestJson(c)) ??
+    parseRequirementsFiles(projectPath, includeTests) ??
+    tryFile('setup.cfg', (c) => parseSetupCfg(c)) ??
+    tryFile('Pipfile',   (c) => parsePipfile(c, includeTests));
+
+  if (result) return result;
+
+  throw new Error(
+    `No dependency file found in ${projectPath}. ` +
+    `Looked for: pyproject.toml, manifest.json, requirements.txt, requirements_all.txt, setup.cfg, Pipfile`
+  );
 }
 
-export { parseDependencyFile, parseRequiresDist, parseDependencyString, parsePyprojectToml, parseManifestJson, parseSetupCfg, parsePipfile };
+export { parseDependencyFile, parseRequirementsFiles, mergeRequirementsDeps, parseRequiresDist, parseDependencyString, parsePyprojectToml, parseManifestJson, parseSetupCfg, parsePipfile };

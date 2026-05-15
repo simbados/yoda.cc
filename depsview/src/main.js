@@ -28,7 +28,7 @@ const NPM_FILES    = new Set(['package-lock.json', 'pnpm-lock.yaml', 'package.js
 /** Go-specific filenames checked during ecosystem detection. */
 const GO_FILES     = new Set(['go.sum', 'go.mod']);
 /** Python-specific filenames checked during ecosystem detection. */
-const PYTHON_FILES = new Set(['pyproject.toml', 'requirements.txt', 'setup.cfg', 'Pipfile', 'manifest.json']);
+const PYTHON_FILES = new Set(['pyproject.toml', 'requirements.txt', 'requirements_all.txt', 'setup.cfg', 'Pipfile', 'manifest.json']);
 
 /**
  * Parses CLI arguments from process.argv.
@@ -85,7 +85,7 @@ function parseArgs() {
     console.error('       [--download-stats|--ds] [--socket-key=<key>] [--socket-org=<slug>] [--report[=<file>]]');
     console.error('');
     console.error('Ecosystem flags act as filters; with none, every detected ecosystem is included.');
-    console.error('Python files: pyproject.toml, manifest.json, requirements.txt, setup.cfg, Pipfile');
+    console.error('Python files: pyproject.toml, manifest.json, requirements.txt, requirements_all.txt, setup.cfg, Pipfile');
     console.error('npm files:    package-lock.json, pnpm-lock.yaml (preferred), package.json');
     console.error('Go files:     go.sum (preferred), go.mod');
     process.exit(1);

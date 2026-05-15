@@ -355,6 +355,11 @@ describe('detectEcosystem', () => {
     assert.equal(detectEcosystem(listing), 'python');
   });
 
+  it('detects python from requirements_all.txt', () => {
+    const listing = [{ name: 'requirements_all.txt', type: 'file' }];
+    assert.equal(detectEcosystem(listing), 'python');
+  });
+
   it('detects python from manifest.json', () => {
     const listing = [{ name: 'manifest.json', type: 'file' }];
     assert.equal(detectEcosystem(listing), 'python');

@@ -10,7 +10,7 @@ import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { parseDependencyFile, parseRequiresDist, parseDependencyString, parsePyprojectToml, parsePipfile } from '../../src/python/parser.js';
+import { parseDependencyFile, parseRequirementsFiles, mergeRequirementsDeps, parseRequiresDist, parseDependencyString, parsePyprojectToml, parsePipfile } from '../../src/python/parser.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixtures = path.join(__dirname, '../fixtures');
@@ -742,10 +742,102 @@ describe('parseDependencyFile — error handling', () => {
    */
   test('throws when no dependency file is found', () => {
     // __dirname is the test/ directory — it contains only .js files and fixtures/,
-    // none of which match the four filenames parseDependencyFile looks for.
+    // none of which match the filenames parseDependencyFile looks for.
     assert.throws(
       () => parseDependencyFile(__dirname),
       /No dependency file found/
     );
+  });
+
+  test('error message lists requirements_all.txt among the searched files', () => {
+    assert.throws(
+      () => parseDependencyFile(__dirname),
+      /requirements_all\.txt/
+    );
+  });
+});
+
+// ── mergeRequirementsDeps ────────────────────────────────────────────────────
+
+describe('mergeRequirementsDeps', () => {
+  test('deduplicates a package listed in two files by normalised name', () => {
+    const merged = mergeRequirementsDeps([
+      { name: 'requests', versionSpec: '==2.31.0' },
+      { name: 'Requests', versionSpec: null },
+    ]);
+    assert.equal(merged.length, 1);
+    assert.equal(merged[0].name, 'requests', 'first occurrence casing is preserved');
+  });
+
+  test('combines version constraints from both files with a comma', () => {
+    const merged = mergeRequirementsDeps([
+      { name: 'flask', versionSpec: '>=2.0' },
+      { name: 'flask', versionSpec: '<3.0' },
+    ]);
+    assert.equal(merged.length, 1);
+    assert.equal(merged[0].versionSpec, '>=2.0,<3.0');
+  });
+
+  test('keeps a non-null spec when the other occurrence has none', () => {
+    const merged = mergeRequirementsDeps([
+      { name: 'click', versionSpec: null },
+      { name: 'click', versionSpec: '==8.1.3' },
+    ]);
+    assert.equal(merged[0].versionSpec, '==8.1.3');
+  });
+
+  test('returns an empty array for empty input', () => {
+    assert.deepEqual(mergeRequirementsDeps([]), []);
+  });
+});
+
+// ── requirements_all.txt support ─────────────────────────────────────────────
+
+describe('parseDependencyFile — requirements_all.txt', () => {
+  /**
+   * The req-all fixture has both requirements.txt (requests, click) and
+   * requirements_all.txt (flask, requests). Both must be parsed, with the
+   * duplicate `requests` collapsed to a single entry.
+   */
+  test('parses and merges both requirements files', () => {
+    const { deps } = parseDependencyFile(path.join(fixtures, 'req-all'));
+    const names = deps.map(d => d.name).sort();
+    assert.deepEqual(names, ['click', 'flask', 'requests']);
+  });
+
+  test('source label lists both requirements files', () => {
+    const { source } = parseDependencyFile(path.join(fixtures, 'req-all'));
+    assert.equal(source, 'requirements_all.txt, requirements.txt');
+  });
+
+  /**
+   * The req-all-ref fixture's requirements_all.txt pulls requirements.txt in
+   * via `-r`. The shared visited-set must stop requirements.txt being parsed
+   * a second time as a standalone file, so each package appears exactly once.
+   */
+  test('does not double-count a requirements.txt pulled in via -r include', () => {
+    const { deps } = parseDependencyFile(path.join(fixtures, 'req-all-ref'));
+    const names = deps.map(d => d.name).sort();
+    assert.deepEqual(names, ['click', 'flask', 'requests']);
+    assert.equal(deps.filter(d => d.name === 'requests').length, 1);
+  });
+
+  test('source label omits the -r-included requirements.txt', () => {
+    const { source } = parseDependencyFile(path.join(fixtures, 'req-all-ref'));
+    assert.equal(source, 'requirements_all.txt');
+  });
+});
+
+// ── parseRequirementsFiles (direct) ──────────────────────────────────────────
+
+describe('parseRequirementsFiles', () => {
+  test('returns null when no requirements file is present', () => {
+    assert.equal(parseRequirementsFiles(path.join(fixtures, 'pyproject-pep621'), false), null);
+  });
+
+  test('parses a lone requirements.txt with no requirements_all.txt', () => {
+    const result = parseRequirementsFiles(path.join(fixtures, 'req-exact'), false);
+    assert.equal(result.source, 'requirements.txt');
+    assert.equal(result.deps.length, 2);
   });
 });

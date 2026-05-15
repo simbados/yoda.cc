@@ -157,10 +157,13 @@ Pass `--include-tests` to include `devDependencies` alongside `dependencies`.
 | `pyproject.toml` | PEP 621 `[project] dependencies` or Poetry `[tool.poetry.dependencies]` | Optional deps excluded |
 | `manifest.json` | Home Assistant integration manifest | Reads `requirements` array |
 | `requirements.txt` | pip requirements format | Supports `-r` file includes |
+| `requirements_all.txt` | pip requirements format | Same as `requirements.txt`; both are parsed when present |
 | `setup.cfg` | `[options] install_requires` | |
 | `Pipfile` | Pipenv | Reads `[packages]` only |
 
 All matching files are parsed and merged. When the same package appears in multiple files its version constraints are combined.
+
+When a project contains **both** `requirements.txt` and `requirements_all.txt`, both files are parsed and their dependency lists merged. If `requirements_all.txt` already pulls `requirements.txt` in via a `-r` include, the latter is not parsed a second time — each package appears once.
 
 ### Version constraints
 

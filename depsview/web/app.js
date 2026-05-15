@@ -118,8 +118,9 @@ export function detectEcosystems(listing) {
   const found = new Set();
   if (names.has('package-lock.json') || names.has('pnpm-lock.yaml') || names.has('package.json')) found.add('npm');
   if (names.has('go.sum') || names.has('go.mod'))                                                 found.add('go');
-  if (names.has('pyproject.toml') || names.has('requirements.txt') ||
-      names.has('setup.cfg')      || names.has('Pipfile') ||
+  if (names.has('pyproject.toml')   || names.has('requirements.txt') ||
+      names.has('requirements_all.txt') ||
+      names.has('setup.cfg')        || names.has('Pipfile') ||
       names.has('manifest.json'))                                                                 found.add('python');
   return found;
 }
