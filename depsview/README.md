@@ -333,7 +333,14 @@ go run server.go -port 9000   # custom port
 go run server.go -dir ./web   # serve a different directory
 ```
 
-The web UI supports the same GitHub URL formats as the CLI. It auto-detects the ecosystem and links each package to its registry page (PyPI or npmjs.com). Download statistics are not shown in the web UI because pypistats.org does not support cross-origin (CORS) requests from browsers.
+The web UI supports the same GitHub URL formats as the CLI. It links each package to its registry page (PyPI or npmjs.com). Download statistics are not shown in the web UI because pypistats.org does not support cross-origin (CORS) requests from browsers.
+
+### Ecosystem filter
+
+Use the **Ecosystem** segmented control to restrict analysis to a single ecosystem:
+
+- **All** (default) — auto-detects every ecosystem present in the repository, producing one section per ecosystem.
+- **npm / Python / Go** — skips detection and resolves only the chosen ecosystem, even when files from other ecosystems are present.
 
 ### GitHub token in the web UI
 

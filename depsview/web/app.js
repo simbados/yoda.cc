@@ -428,9 +428,10 @@ if (typeof document !== 'undefined') {
     resultsDiv.hidden  = true;
     resultsDiv.innerHTML = '';
 
-    const url          = urlInput.value.trim();
-    const token        = tokenInput.value.trim();
-    const includeTests = includeTestsCb.checked;
+    const url             = urlInput.value.trim();
+    const token           = tokenInput.value.trim();
+    const includeTests    = includeTestsCb.checked;
+    const ecosystemFilter = form.elements['ecosystem'].value;
 
     if (rememberTokenCb.checked && token) {
       localStorage.setItem(TOKEN_STORAGE_KEY, token);
@@ -449,17 +450,22 @@ if (typeof document !== 'undefined') {
     }
 
     submitBtn.disabled = true;
-    appendProgress('Detecting ecosystems…\n');
 
     try {
-      const listing = await listDirectory(githubRef.owner, githubRef.repo, githubRef.subpath, githubRef.ref);
-      let ecosystems = detectEcosystems(listing ?? []);
-      // Fall back to 'python' so the depth-2 traversal still gets a chance
-      // (covers HA-style nested manifest.json layouts).
-      if (ecosystems.size === 0) ecosystems = new Set(['python']);
+      let ecosystems;
+      if (ecosystemFilter === 'all') {
+        appendProgress('Detecting ecosystems…\n');
+        const listing = await listDirectory(githubRef.owner, githubRef.repo, githubRef.subpath, githubRef.ref);
+        ecosystems = detectEcosystems(listing ?? []);
+        // Fall back to 'python' so the depth-2 traversal still gets a chance
+        // (covers HA-style nested manifest.json layouts).
+        if (ecosystems.size === 0) ecosystems = new Set(['python']);
+      } else {
+        ecosystems = new Set([ecosystemFilter]);
+      }
 
       const ordered = ECOSYSTEM_ORDER.filter(eco => ecosystems.has(eco));
-      appendProgress(`Detected: ${ordered.join(', ')}. Resolving…\n`);
+      appendProgress(`${ecosystemFilter === 'all' ? 'Detected' : 'Using'}: ${ordered.join(', ')}. Resolving…\n`);
 
       // Parse + resolve every detected ecosystem in parallel. Each section
       // captures its own error so a failure in one does not abort the others.

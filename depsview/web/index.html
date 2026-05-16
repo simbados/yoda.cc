@@ -20,6 +20,15 @@
     <p class="tagline-sub">All processing happens in your browser. The only external calls are to <code>api.github.com</code>, <code>pypi.org</code>, <code>registry.npmjs.org</code>, and <code>proxy.golang.org</code> — no data is sent to any other server.</p>
 
     <form id="form" autocomplete="off">
+      <div class="option-row ecosystem-row">
+        <span class="option-label">Ecosystem:</span>
+        <div class="ecosystem-picker" role="group" aria-label="Ecosystem filter">
+          <label class="eco-btn"><input type="radio" name="ecosystem" value="all" checked><span>All</span></label>
+          <label class="eco-btn"><input type="radio" name="ecosystem" value="npm"><span>npm</span></label>
+          <label class="eco-btn"><input type="radio" name="ecosystem" value="python"><span>Python</span></label>
+          <label class="eco-btn"><input type="radio" name="ecosystem" value="go"><span>Go</span></label>
+        </div>
+      </div>
       <div class="input-row">
         <input
           id="url-input"
