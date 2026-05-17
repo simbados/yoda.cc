@@ -29,12 +29,19 @@ export function escapeModulePath(name) {
  * Returns null on 404, network error, or unparseable response.
  * The returned object has at minimum `{ Version, Time }` where `Time` is the
  * ISO-8601 timestamp the version was tagged.
+ *
+ * When `version` is the special string `'latest'`, the `/@latest` endpoint is
+ * used instead of `/@v/latest.info` — the latter is not a valid GOPROXY path.
+ *
  * @param {string} name    - module path, e.g. "github.com/gin-gonic/gin"
- * @param {string} version - exact version, e.g. "v1.9.1"
+ * @param {string} version - exact version e.g. "v1.9.1", or the sentinel "latest"
  * @returns {Promise<{ Version: string, Time: string }|null>}
  */
 export async function fetchModuleInfo(name, version) {
-  const url = `${PROXY_BASE}/${escapeModulePath(name)}/@v/${encodeURIComponent(version)}.info`;
+  const encoded = escapeModulePath(name);
+  const url = version === 'latest'
+    ? `${PROXY_BASE}/${encoded}/@latest`
+    : `${PROXY_BASE}/${encoded}/@v/${encodeURIComponent(version)}.info`;
   const text = await fetchWithRetry(url, {
     serviceName:  'proxy.golang.org',
     throwOnError: false,

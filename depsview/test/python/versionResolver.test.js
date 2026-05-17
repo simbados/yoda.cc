@@ -171,12 +171,19 @@ describe('resolveVersion — exact pin (==)', () => {
   });
 
   /**
-   * If the pinned version does not exist in the list, falls back to latest.
+   * If the pinned version does not exist in the list, return null so callers can surface an error.
    */
-  test('falls back to latest when exact version is not in list', () => {
+  test('returns null when exact version is not in list', () => {
     const { version } = resolveVersion('==9.9.9', VERSIONS);
-    // No match found — should fall back to the highest stable version
-    assert.equal(version, '2.31.0.post1');
+    assert.equal(version, null);
+  });
+
+  /**
+   * An unsatisfiable range (e.g. a minimum higher than anything published) also returns null.
+   */
+  test('returns null when no version satisfies the range', () => {
+    const { version } = resolveVersion('>=99.0', VERSIONS);
+    assert.equal(version, null);
   });
 });
 

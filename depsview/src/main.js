@@ -10,6 +10,7 @@
  *   node src/main.js <path-or-github-url> [--npm] [--python] [--go]
  *                    [--json] [--debug] [--include-tests] [--download-stats|--ds]
  *                    [--socket-key=<key>] [--socket-org=<slug>] [--report[=<file>]]
+ *   node src/main.js --package|-p <name> --npm|--python|--go
  */
 
 import fs   from 'node:fs';
@@ -22,6 +23,7 @@ import { fetchSocketScores               } from './socket/client.js';
 import { setDebug                        } from './util/debugging.js';
 import { isGithubUrl, parseGithubUrl     } from './github/url.js';
 import { listDirectory                   } from './github/client.js';
+import { parsePackageInput               } from './packageInput.js';
 
 /** npm-specific filenames checked during ecosystem detection. */
 const NPM_FILES    = new Set(['package-lock.json', 'pnpm-lock.yaml', 'package.json']);
@@ -37,11 +39,15 @@ const PYTHON_FILES = new Set(['pyproject.toml', 'requirements.txt', 'requirement
  * restricts the run to those ecosystems. With no flags, every ecosystem detected
  * at the project root is included.
  *
+ * `--package <name>` / `-p <name>` bypasses file detection entirely and resolves
+ * a single package by name. Requires exactly one ecosystem flag.
+ *
  * Socket.dev credentials can also be supplied via `SOCKET_KEY` / `SOCKET_ORG`
  * env vars; the `--socket-key` / `--socket-org` flags take precedence.
  *
  * @returns {{
- *   projectPath: string,
+ *   projectPath: string|null,
+ *   packageName: string|null,
  *   json: boolean,
  *   debug: boolean,
  *   includeTests: boolean,
@@ -64,7 +70,26 @@ function parseArgs() {
   if (args.includes('--python')) requestedEcosystems.add('python');
   if (args.includes('--go'))     requestedEcosystems.add('go');
 
-  const positional = args.filter(a => !a.startsWith('--'));
+  // --package <name> or -p <name> or --package=<name> or -p=<name>
+  let packageName = null;
+  const pkgEqArg = args.find(a => a.startsWith('--package=') || a.startsWith('-p='));
+  if (pkgEqArg) {
+    packageName = pkgEqArg.startsWith('--package=')
+      ? pkgEqArg.slice('--package='.length)
+      : pkgEqArg.slice('-p='.length);
+  } else {
+    const pkgFlagIdx = args.findIndex(a => a === '--package' || a === '-p');
+    if (pkgFlagIdx !== -1) packageName = args[pkgFlagIdx + 1] ?? null;
+  }
+
+  // Collect positional args, skipping all flags and the value consumed by -p/--package.
+  const positional = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === '-p' || a === '--package') { i++; continue; } // skip flag + value
+    if (a.startsWith('-'))               continue;          // skip all other flags
+    positional.push(a);
+  }
 
   const socketKeyArg = args.find(a => a.startsWith('--socket-key='));
   const socketOrgArg = args.find(a => a.startsWith('--socket-org='));
@@ -80,19 +105,22 @@ function parseArgs() {
       ? 'depsview-report.html'
       : reportArg.slice('--report='.length);
 
-  if (positional.length === 0) {
+  if (!packageName && positional.length === 0) {
     console.error('Usage: depsview <path-to-project|github-url> [--npm] [--python] [--go] [--json] [--debug] [--include-tests]');
     console.error('       [--download-stats|--ds] [--socket-key=<key>] [--socket-org=<slug>] [--report[=<file>]]');
+    console.error('       depsview --package|-p <name> --npm|--python|--go');
     console.error('');
     console.error('Ecosystem flags act as filters; with none, every detected ecosystem is included.');
-    console.error('Python files: pyproject.toml, manifest.json, requirements.txt, requirements_all.txt, setup.cfg, Pipfile');
-    console.error('npm files:    package-lock.json, pnpm-lock.yaml (preferred), package.json');
-    console.error('Go files:     go.sum (preferred), go.mod');
+    console.error('--package / -p: resolve a single package by name (requires exactly one ecosystem flag).');
+    console.error('  npm examples:    eslint   eslint@8   @babel/core@7');
+    console.error('  python examples: requests   requests>=2.0   requests==2.31.0');
+    console.error('  go examples:     github.com/gin-gonic/gin   github.com/gin-gonic/gin@v1.9.1');
     process.exit(1);
   }
 
   return {
-    projectPath: positional[0],
+    projectPath: positional[0] ?? null,
+    packageName,
     json: jsonFlag,
     debug: debugFlag,
     includeTests: includeTestsFlag,
@@ -154,34 +182,53 @@ function resolveEcosystems(requested, detected) {
  */
 async function main() {
   const {
-    projectPath, json, debug, includeTests, downloadStats,
+    projectPath, packageName, json, debug, includeTests, downloadStats,
     requestedEcosystems, socketKey, socketOrg, reportPath,
   } = parseArgs();
   if (debug) setDebug(true);
 
-  const isGithub = isGithubUrl(projectPath);
-  const githubRef = isGithub ? parseGithubUrl(projectPath) : null;
-  const absolutePath = isGithub ? null : path.resolve(projectPath);
+  // ── Package-search mode ───────────────────────────────────────────────────
+  let ctx;
+  let ecosystems;
 
-  // ── Detection ─────────────────────────────────────────────────────────────
-  let detected;
-  if (isGithub) {
-    const listing = await listDirectory(githubRef.owner, githubRef.repo, githubRef.subpath, githubRef.ref);
-    detected = detectGithubEcosystems(listing ?? []);
+  if (packageName) {
+    if (requestedEcosystems.size !== 1) {
+      console.error('Error: --package / -p requires exactly one ecosystem flag (--npm, --python, or --go).');
+      process.exit(1);
+    }
+    const ecosystem  = [...requestedEcosystems][0];
+    const packageDep = parsePackageInput(packageName, ecosystem);
+    ctx        = { isPackage: true, packageDep };
+    ecosystems = requestedEcosystems;
+
+    if (!json) console.log(`Resolving ${ecosystem} package: ${packageDep.name}…\n`);
+
+  // ── Normal path (local dir or GitHub URL) ─────────────────────────────────
   } else {
-    detected = detectLocalEcosystems(absolutePath);
-  }
+    const isGithub    = isGithubUrl(projectPath);
+    const githubRef   = isGithub ? parseGithubUrl(projectPath) : null;
+    const absolutePath = isGithub ? null : path.resolve(projectPath);
 
-  const ecosystems = resolveEcosystems(requestedEcosystems, detected);
+    let detected;
+    if (isGithub) {
+      const listing = await listDirectory(githubRef.owner, githubRef.repo, githubRef.subpath, githubRef.ref);
+      detected = detectGithubEcosystems(listing ?? []);
+    } else {
+      detected = detectLocalEcosystems(absolutePath);
+    }
 
-  if (!json) {
-    const list = [...ecosystems].join(', ') || '(none)';
-    console.log(`Resolving ecosystems: ${list}…\n`);
+    ecosystems = resolveEcosystems(requestedEcosystems, detected);
+    ctx        = { isGithub, githubRef, absolutePath };
+
+    if (!json) {
+      const list = [...ecosystems].join(', ') || '(none)';
+      console.log(`Resolving ecosystems: ${list}…\n`);
+    }
   }
 
   // ── Orchestrate parse + resolve in parallel ───────────────────────────────
   const sections = await orchestrate(
-    { isGithub, githubRef, absolutePath },
+    ctx,
     {
       ecosystems,
       includeTests,
@@ -202,7 +249,6 @@ async function main() {
     }
   }
   if (!anyResults && [...sections.values()].every(s => s.error || !s.results || s.results.size === 0)) {
-    // Every section either errored or returned no packages. Exit cleanly with no output.
     if (!json) console.error('No dependencies resolved in any ecosystem.');
     process.exit(0);
   }

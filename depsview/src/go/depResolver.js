@@ -39,9 +39,6 @@ export async function resolveDependencies(directDeps, opts = {}) {
   const semaphore = new Semaphore(CONCURRENCY);
 
   await Promise.all(directDeps.map(async ({ name, version }) => {
-    const key = `${name.toLowerCase()}@${version}`;
-    const link = `https://pkg.go.dev/${name}@${version}`;
-
     try {
       await semaphore.acquire();
       let info, versions;
@@ -54,11 +51,17 @@ export async function resolveDependencies(directDeps, opts = {}) {
         semaphore.release();
       }
 
+      // When the caller passed 'latest', use the concrete version the proxy resolved it to
+      // so the result shows a real semver tag rather than the string "latest".
+      const resolvedVersion = (version === 'latest' && info?.Version) ? info.Version : version;
+      const key  = `${name.toLowerCase()}@${resolvedVersion}`;
+      const link = `https://pkg.go.dev/${name}@${resolvedVersion}`;
+
       if (!info) {
         onProgress?.(`  [warn] Module not found on proxy.golang.org: ${name}@${version}`);
         results.set(key, {
           name,
-          version,
+          version: resolvedVersion,
           releaseDate:        'unknown',
           firstReleaseDate:   'unknown',
           releaseCount:       0,
@@ -70,11 +73,11 @@ export async function resolveDependencies(directDeps, opts = {}) {
       }
 
       const releaseDate = getReleaseDate(info);
-      onProgress?.(`  ${name} ${version}`);
+      onProgress?.(`  ${name} ${resolvedVersion}`);
 
       results.set(key, {
         name,
-        version,
+        version: resolvedVersion,
         releaseDate,
         firstReleaseDate:   'unknown',
         releaseCount:       versions.length,
@@ -89,7 +92,7 @@ export async function resolveDependencies(directDeps, opts = {}) {
         firstReleaseDate:   'unknown',
         releaseCount:       0,
         downloadsLastMonth: null,
-        link,
+        link: `https://pkg.go.dev/${name}@${version}`,
         error:              err.message,
       });
     }

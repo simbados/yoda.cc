@@ -22,6 +22,7 @@ import { resolveDependencies as resolveNpm } from './src/npm/depResolver.js';
 import { resolveDependencies as resolveGo  } from './src/go/depResolver.js';
 import { setGithubToken               } from './src/github/client.js';
 import { listDirectory                } from './src/github/client.js';
+import { parsePackageInput            } from './src/packageInput.js';
 
 /** Fixed rendering order for ecosystem sections. */
 export const ECOSYSTEM_ORDER = ['npm', 'python', 'go'];
@@ -314,20 +315,31 @@ function renderSectionError(container, ecosystem, message, showHeader) {
 // ── Per-ecosystem parse + resolve (browser side) ──────────────────────────────
 
 /**
- * Runs the parse → resolve pipeline for one ecosystem against a GitHub ref.
+ * Runs the parse → resolve pipeline for one ecosystem.
+ * Supports two modes:
+ *   - GitHub mode (default): parses dependency files from a GitHub ref.
+ *   - Package mode (opts.packageInput set): skips GitHub I/O and resolves a
+ *     single package by name, using { name, version } from parsePackageInput.
+ *
  * Returns the section's data needed to render it: deps, resolved results,
  * direct dep names, source filename, and any note.
  *
  * @param {'npm'|'python'|'go'} ecosystem
- * @param {object} githubRef
- * @param {{ includeTests: boolean, onProgress: (msg: string) => void }} opts
+ * @param {object|null} githubRef
+ * @param {{ includeTests: boolean, onProgress: (msg: string) => void, packageInput?: { name: string, version: string|null } }} opts
  * @returns {Promise<object>}
  */
 async function resolveEcosystem(ecosystem, githubRef, opts) {
-  const { includeTests, onProgress } = opts;
+  const { includeTests, onProgress, packageInput } = opts;
 
   let deps, source, note = null;
-  if (ecosystem === 'npm') {
+  if (packageInput) {
+    source = 'package search';
+    const dep = ecosystem === 'go'
+      ? { name: packageInput.name, version: packageInput.version }
+      : { name: packageInput.name, versionSpec: packageInput.version };
+    deps = [dep];
+  } else if (ecosystem === 'npm') {
     ({ deps, source, note } = await parseGithubNpmDependencies(githubRef, { includeTests }));
   } else if (ecosystem === 'go') {
     ({ deps, source } = await parseGithubGoDependencies(githubRef));
@@ -386,6 +398,20 @@ if (typeof document !== 'undefined') {
 
   const TOKEN_STORAGE_KEY = 'depsview.github_token';
 
+  /** Placeholder text per ecosystem selection. */
+  const PLACEHOLDERS = {
+    all:    'https://github.com/owner/repo',
+    npm:    'https://github.com/owner/repo  or  eslint  or  eslint@8',
+    python: 'https://github.com/owner/repo  or  requests  or  requests>=2.0',
+    go:     'https://github.com/owner/repo  or  github.com/gin-gonic/gin@latest',
+  };
+
+  document.querySelectorAll('[name="ecosystem"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+      urlInput.placeholder = PLACEHOLDERS[radio.value] ?? PLACEHOLDERS.all;
+    });
+  });
+
   function syncStorageNote() {
     storageNote.hidden = !rememberTokenCb.checked;
   }
@@ -433,6 +459,14 @@ if (typeof document !== 'undefined') {
     const includeTests    = includeTestsCb.checked;
     const ecosystemFilter = form.elements['ecosystem'].value;
 
+    // A package-name input doesn't start with a URL scheme. Block this mode
+    // when ecosystem is 'all' because there's nothing to auto-detect from.
+    const isPackageMode = !/^https?:\/\//i.test(url);
+    if (isPackageMode && ecosystemFilter === 'all') {
+      showError('Select a specific ecosystem (npm, Python, or Go) to search by package name.');
+      return;
+    }
+
     if (rememberTokenCb.checked && token) {
       localStorage.setItem(TOKEN_STORAGE_KEY, token);
     } else {
@@ -441,37 +475,48 @@ if (typeof document !== 'undefined') {
 
     setGithubToken(token || null);
 
-    let githubRef;
-    try {
-      githubRef = parseGithubUrl(url);
-    } catch (err) {
-      showError(err.message);
-      return;
-    }
-
     submitBtn.disabled = true;
 
     try {
       let ecosystems;
-      if (ecosystemFilter === 'all') {
-        appendProgress('Detecting ecosystems…\n');
-        const listing = await listDirectory(githubRef.owner, githubRef.repo, githubRef.subpath, githubRef.ref);
-        ecosystems = detectEcosystems(listing ?? []);
-        // Fall back to 'python' so the depth-2 traversal still gets a chance
-        // (covers HA-style nested manifest.json layouts).
-        if (ecosystems.size === 0) ecosystems = new Set(['python']);
+      let githubRef = null;
+      let packageInput = null;
+
+      if (isPackageMode) {
+        ecosystems   = new Set([ecosystemFilter]);
+        packageInput = parsePackageInput(url, ecosystemFilter);
+        appendProgress(`Resolving ${ecosystemFilter} package: ${packageInput.name}…\n`);
       } else {
-        ecosystems = new Set([ecosystemFilter]);
+        try {
+          githubRef = parseGithubUrl(url);
+        } catch (err) {
+          showError(err.message);
+          submitBtn.disabled = false;
+          return;
+        }
+
+        if (ecosystemFilter === 'all') {
+          appendProgress('Detecting ecosystems…\n');
+          const listing = await listDirectory(githubRef.owner, githubRef.repo, githubRef.subpath, githubRef.ref);
+          ecosystems = detectEcosystems(listing ?? []);
+          // Fall back to 'python' so the depth-2 traversal still gets a chance
+          // (covers HA-style nested manifest.json layouts).
+          if (ecosystems.size === 0) ecosystems = new Set(['python']);
+        } else {
+          ecosystems = new Set([ecosystemFilter]);
+        }
+
+        const ordered = ECOSYSTEM_ORDER.filter(eco => ecosystems.has(eco));
+        appendProgress(`${ecosystemFilter === 'all' ? 'Detected' : 'Using'}: ${ordered.join(', ')}. Resolving…\n`);
       }
 
       const ordered = ECOSYSTEM_ORDER.filter(eco => ecosystems.has(eco));
-      appendProgress(`${ecosystemFilter === 'all' ? 'Detected' : 'Using'}: ${ordered.join(', ')}. Resolving…\n`);
 
-      // Parse + resolve every detected ecosystem in parallel. Each section
-      // captures its own error so a failure in one does not abort the others.
+      // Parse + resolve every ecosystem in parallel. Each section captures its
+      // own error so a failure in one does not abort the others.
       const settled = await Promise.all(
         ordered.map(eco =>
-          resolveEcosystem(eco, githubRef, { includeTests, onProgress: appendProgress })
+          resolveEcosystem(eco, githubRef, { includeTests, onProgress: appendProgress, packageInput })
             .then(section => ({ ok: true, section }))
             .catch(err   => ({ ok: false, ecosystem: eco, error: err.message }))
         )

@@ -123,9 +123,14 @@ describe('resolveVersion — tilde', () => {
   });
 });
 
-describe('resolveVersion — fallback', () => {
-  it('returns latest when nothing satisfies the range', () => {
+describe('resolveVersion — no match', () => {
+  it('returns null when nothing satisfies the range', () => {
     const { version } = resolveVersion('^5.0.0', ['1.0.0', '2.0.0']);
-    assert.equal(version, '2.0.0');
+    assert.equal(version, null);
+  });
+
+  it('returns null for an exact pin that does not exist', () => {
+    const { version } = resolveVersion('9.9.9', ['1.0.0', '2.0.0']);
+    assert.equal(version, null);
   });
 });

@@ -81,6 +81,22 @@ async function resolveDependencies(directDeps, opts = {}) {
 
       const allVersions = getVersionList(packageData);
       const { version } = resolveVersion(dep.versionSpec, allVersions);
+
+      if (version === null) {
+        const specLabel = dep.versionSpec ?? '(unknown spec)';
+        onProgress?.(`  [warn] No version matching "${specLabel}" found for ${dep.name}`);
+        results.set(key, {
+          name:             dep.name,
+          version:          'not found',
+          releaseDate:      'unknown',
+          firstReleaseDate: 'unknown',
+          releaseCount:     getReleaseCount(packageData),
+          link:             `https://pypi.org/project/${dep.name}/`,
+          error:            `No version matching "${specLabel}" found on PyPI`,
+        });
+        return;
+      }
+
       onProgress?.(`  ${packageData.info.name} ${version}`);
 
       // Use the specific version's requires_dist if it differs from the latest

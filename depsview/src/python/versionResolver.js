@@ -185,10 +185,11 @@ function parseVersionSpec(spec) {
 /**
  * Resolves the best matching version from a list of all available versions given a version spec.
  * Prefers stable (non-pre-release) versions unless the spec explicitly requires a pre-release.
- * Falls back to the absolute latest if no version satisfies the constraints.
+ * Returns `{ version: null }` when no version satisfies the constraints — callers must treat
+ * this as an error rather than silently substituting the latest.
  * @param {string|null} versionSpec - PEP 440 version specifier string, e.g. ">=2.0,<3.0"
  * @param {string[]} allVersions - all published versions from PyPI (unsorted)
- * @returns {{ version: string, isLatest: boolean }}
+ * @returns {{ version: string|null, isLatest: boolean }}
  */
 function resolveVersion(versionSpec, allVersions) {
   if (!allVersions || allVersions.length === 0) {
@@ -224,8 +225,8 @@ function resolveVersion(versionSpec, allVersions) {
     if (satisfies(v)) return { version: v, isLatest: v === allSorted[0] };
   }
 
-  // No match — return latest as fallback
-  return { version: sorted[0] ?? allVersions[0], isLatest: true };
+  // No version satisfies the constraints — signal failure to the caller.
+  return { version: null, isLatest: false };
 }
 
 export { parseVersion, compareVersions, resolveVersion, parseVersionSpec, isPreRelease };

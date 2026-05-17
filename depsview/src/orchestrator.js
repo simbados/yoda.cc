@@ -66,12 +66,25 @@ async function readDirectGoNamesFromGithub({ owner, repo, ref, subpath }) {
  * Parses the appropriate dependency file(s) for one ecosystem.
  * Returns the same shape regardless of source (`{ deps, source, note? }`).
  *
+ * When `ctx.isPackage` is true, skips all file/network parsing and returns a
+ * single-element dep list built from `ctx.packageDep` ({ name, version }).
+ * The dep object is shaped for each resolver: npm/python receive `versionSpec`,
+ * go receives `version`.
+ *
  * @param {'npm'|'python'|'go'} ecosystem
- * @param {object} ctx              - { isGithub, githubRef, absolutePath }
+ * @param {object} ctx              - { isGithub, githubRef, absolutePath } or { isPackage, packageDep }
  * @param {object} opts             - { includeTests }
  * @returns {Promise<{ deps: Array, source: string, note?: string }>}
  */
 async function parseSection(ecosystem, ctx, opts) {
+  if (ctx.isPackage) {
+    const { name, version } = ctx.packageDep;
+    const dep = ecosystem === 'go'
+      ? { name, version }
+      : { name, versionSpec: version };
+    return { deps: [dep], source: 'package search', note: null };
+  }
+
   const { isGithub, githubRef, absolutePath } = ctx;
   const { includeTests } = opts;
 
@@ -110,14 +123,23 @@ async function resolveSectionDeps(ecosystem, deps, opts) {
  * ecosystem section. Names are normalised with the formatter's `[-_.]+ → -`
  * rule so the footer counts compare correctly later.
  *
+ * In package-search mode (`ctx.isPackage`), only the searched package itself
+ * is direct; all transitively resolved packages are considered indirect.
+ *
  * @param {'npm'|'python'|'go'} ecosystem
  * @param {Array}  deps
  * @param {string} source            - dep file name returned by the parser
- * @param {object} ctx               - { isGithub, githubRef, absolutePath }
+ * @param {object} ctx               - { isGithub, githubRef, absolutePath } or { isPackage, packageDep }
  * @param {{ includeTests: boolean }} opts
  * @returns {Promise<Set<string>>}
  */
 async function directNamesForSection(ecosystem, deps, source, ctx, opts) {
+  if (ctx.isPackage) {
+    if (ecosystem === 'go')     return new Set([formatterNorm(ctx.packageDep.name)]);
+    if (ecosystem === 'npm')    return new Set([normalizeNpm(ctx.packageDep.name)]);
+    return new Set([normalizePython(ctx.packageDep.name)]);
+  }
+
   const { isGithub, githubRef, absolutePath } = ctx;
   const { includeTests } = opts;
 

@@ -144,6 +144,23 @@ async function resolveFromRanges(directDeps, opts) {
 
       const allVersions = getVersionList(packageData);
       const { version } = resolveVersion(dep.versionSpec, allVersions);
+
+      if (version === null) {
+        const specLabel = dep.versionSpec ?? '(unknown spec)';
+        onProgress?.(`  [warn] No version matching "${specLabel}" found for ${dep.name}`);
+        results.set(key, {
+          name:             packageData.name ?? dep.name,
+          version:          'not found',
+          releaseDate:      'unknown',
+          firstReleaseDate: 'unknown',
+          releaseCount:     getReleaseCount(packageData),
+          downloadsLastMonth: null,
+          link:             `https://www.npmjs.com/package/${dep.name}`,
+          error:            `No version matching "${specLabel}" found on npm registry`,
+        });
+        return;
+      }
+
       onProgress?.(`  ${packageData.name ?? dep.name} ${version}`);
       results.set(key, buildResult(packageData, dep.name, version));
 

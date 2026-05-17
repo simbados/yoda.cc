@@ -244,11 +244,12 @@ function satisfiesRange(versionStr, rangeStr) {
  * for a given npm range spec.
  * Prefers stable (non-pre-release) versions unless the spec itself is a
  * pre-release pin or no stable version satisfies the range.
- * Falls back to the absolute latest when nothing satisfies.
+ * Returns `{ version: null }` when no version satisfies the constraints — callers
+ * must treat this as an error rather than silently substituting the latest.
  * Same interface as python/versionResolver.js resolveVersion.
  * @param {string|null} versionSpec - npm range string, e.g. "^1.2.3", ">=1.0.0 <2.0.0"
  * @param {string[]} allVersions - all published versions (unsorted)
- * @returns {{ version: string, isLatest: boolean }}
+ * @returns {{ version: string|null, isLatest: boolean }}
  */
 function resolveVersion(versionSpec, allVersions) {
   if (!allVersions || allVersions.length === 0) return { version: 'unknown', isLatest: true };
@@ -280,9 +281,8 @@ function resolveVersion(versionSpec, allVersions) {
     if (satisfiesRange(v, spec)) return { version: v, isLatest: v === allSorted[0] };
   }
 
-  // No match — return latest stable as fallback
-  const fallback = sortedStable.length > 0 ? sortedStable[0] : allSorted[0];
-  return { version: fallback ?? allVersions[0], isLatest: true };
+  // No version satisfies the constraints — signal failure to the caller.
+  return { version: null, isLatest: false };
 }
 
 export { parseSemver, compareSemver, isPreRelease, satisfiesRange, resolveVersion };

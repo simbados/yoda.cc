@@ -14,6 +14,7 @@ Node.js 18 or later. No third-party dependencies.
 
 ```bash
 node src/main.js <path-to-project|github-url> [options]
+node src/main.js --package|-p <name> --npm|--python|--go
 ```
 
 Every ecosystem detected at the project root is resolved and rendered as its own section, in the fixed order **npm → python → go**. Pass any combination of `--npm`, `--python`, `--go` to *filter* — with no flags all detected ecosystems are included.
@@ -27,6 +28,14 @@ node src/main.js https://github.com/owner/repo
 # Restrict to specific ecosystems
 node src/main.js ./mixed-repo --npm                # only the npm section
 node src/main.js ./mixed-repo --python --go        # python + go sections only
+
+# Search by package name (requires one ecosystem flag)
+node src/main.js -p eslint --npm
+node src/main.js -p eslint@8.57.0 --npm
+node src/main.js -p requests --python
+node src/main.js -p "requests>=2.0" --python
+node src/main.js -p github.com/gin-gonic/gin --go
+node src/main.js -p github.com/gin-gonic/gin@v1.9.1 --go
 ```
 
 **Example output (npm):**
@@ -100,6 +109,7 @@ When `--socket-key` / `--socket-org` are supplied, a **single** batched request 
 | `--npm` | Restrict the run to npm sections |
 | `--python` | Restrict the run to Python sections |
 | `--go` | Restrict the run to Go sections |
+| `--package <name>` / `-p <name>` | Resolve a single package by name instead of reading dep files. Requires exactly one ecosystem flag. Accepts `name`, `name@version`, PEP 440 specifiers for Python, and `module@version` for Go. |
 | `--include-tests` | Include dev/test dependencies (npm / Python only) |
 | `--json` | Machine-readable JSON output |
 | `--download-stats` / `--ds` | Fetch Python download counts from pypistats.org (Python only) |
@@ -341,6 +351,18 @@ Use the **Ecosystem** segmented control to restrict analysis to a single ecosyst
 
 - **All** (default) — auto-detects every ecosystem present in the repository, producing one section per ecosystem.
 - **npm / Python / Go** — skips detection and resolves only the chosen ecosystem, even when files from other ecosystems are present.
+
+### Package name search
+
+When a specific ecosystem is selected, you can type a package name directly instead of a GitHub URL:
+
+| Ecosystem | Example input |
+|---|---|
+| npm | `eslint` · `eslint@8` · `@babel/core@7` |
+| Python | `requests` · `requests>=2.0` · `requests==2.31.0` |
+| Go | `github.com/gin-gonic/gin` · `github.com/gin-gonic/gin@v1.9.1` |
+
+For **All**, only GitHub URLs are accepted.
 
 ### GitHub token in the web UI
 
