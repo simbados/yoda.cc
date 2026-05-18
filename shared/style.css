@@ -453,3 +453,41 @@ th[data-col]       { cursor: pointer; user-select: none; }
 th[data-col]:hover { color: var(--text); }
 th.th-sort-desc::after { content: ' ▼'; font-size: 0.75em; opacity: 0.8; }
 th.th-sort-asc::after  { content: ' ▲'; font-size: 0.75em; opacity: 0.8; }
+
+/* ── Ecosystem picker ─────────────────────────────────────────────────────── */
+.ecosystem-row { flex-wrap: wrap; gap: 0.5rem 0.75rem; margin-bottom: 0.75rem; }
+
+.option-label { font-size: 0.9rem; color: var(--muted); }
+
+.ecosystem-picker {
+  display: flex;
+  gap: 2px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.eco-btn { position: relative; display: flex; cursor: pointer; }
+
+.eco-btn input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.eco-btn span {
+  display: block;
+  padding: 0.2rem 0.65rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: var(--muted);
+  transition: background 0.15s, color 0.15s;
+  user-select: none;
+}
+
+.eco-btn input[type="radio"]:checked + span { background: var(--accent-deep); color: #fff; }
+.eco-btn:hover span { color: var(--text); }
+.eco-btn input[type="radio"]:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 1px; }
