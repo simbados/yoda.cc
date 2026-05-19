@@ -1,33 +1,38 @@
 /**
  * Go module dependency resolver.
  *
- * Unlike Python/npm where versions may be supplied as ranges, Go dependency
- * files always pin exact versions (go.sum entries are hash-locked; go.mod
- * `require` directives use a single semver tag). So this resolver does NOT
- * perform version resolution — it just fetches release metadata in parallel
- * for the already-pinned versions.
+ * Recursively resolves the full dependency tree of a Go module by fetching each
+ * module's go.mod from the proxy and following its `require` directives. Go
+ * always pins exact versions in go.mod, so no semver resolution is needed.
  *
- * For each module we issue two requests:
+ * When a path returns 404, the resolver walks up the path segments to find the
+ * containing module root (e.g. "golang.org/x/lint/golint" → "golang.org/x/lint").
+ * This mirrors what `go install` does and lets users enter tool package paths
+ * directly.
+ *
+ * For each module we issue up to three requests:
  *   1. `/{module}/@v/{version}.info` → release date of the pinned version
  *   2. `/{module}/@v/list`           → total number of tagged releases
+ *   3. `/{module}/@v/{version}.mod`  → go.mod for transitive dep discovery
  *
- * Concurrency is bounded by a semaphore so a project with thousands of
- * transitive deps does not flood the proxy.
+ * Concurrency is bounded by a semaphore so a project with many transitive deps
+ * does not flood the proxy. A pending Map prevents duplicate resolution of the
+ * same module@version (cycle guard).
  */
 
-import { fetchModuleInfo, fetchModuleVersionList, getReleaseDate } from './goClient.js';
+import { fetchModuleInfo, fetchModuleVersionList, fetchModuleMod, getReleaseDate } from './goClient.js';
+import { parseGoMod } from './parserCore.js';
 import { Semaphore } from '../util/semaphore.js';
 
 const CONCURRENCY = 10;
 
 /**
- * Resolves release metadata for a flat list of Go module dependencies.
+ * Recursively resolves release metadata for a list of Go module dependencies,
+ * following transitive requires in each module's go.mod.
  *
  * Each result entry mirrors the shape used by the npm/Python resolvers so the
  * shared formatter and report generator can render it uniformly. The Go proxy
- * does not expose download statistics or a reliable first-release timestamp
- * without an extra round-trip per package, so `firstReleaseDate` is reported
- * as "unknown" and `downloadsLastMonth` is null.
+ * does not expose download statistics, so `downloadsLastMonth` is null.
  *
  * @param {Array<{ name: string, version: string }>} directDeps - parsed module list
  * @param {{ onProgress?: (msg: string) => void }} [opts]
@@ -36,67 +41,114 @@ const CONCURRENCY = 10;
 export async function resolveDependencies(directDeps, opts = {}) {
   const { onProgress } = opts;
   const results   = new Map();
+  const pending   = new Map();
   const semaphore = new Semaphore(CONCURRENCY);
 
-  await Promise.all(directDeps.map(async ({ name, version }) => {
-    try {
-      await semaphore.acquire();
-      let info, versions;
+  /**
+   * Tries the given path first; on 404 walks up path segments to find the
+   * containing module root. Returns { moduleName, info } or null if not found
+   * at any level. Minimum candidate length is 2 segments (e.g. "gopkg.in/pkg").
+   */
+  async function resolveModuleInfo(name, version) {
+    const info = await fetchModuleInfo(name, version);
+    if (info) return { moduleName: name, info };
+    const segments = name.split('/');
+    for (let i = segments.length - 1; i >= 2; i--) {
+      const candidate = segments.slice(0, i).join('/');
+      const parentInfo = await fetchModuleInfo(candidate, version);
+      if (parentInfo) return { moduleName: candidate, info: parentInfo };
+    }
+    return null;
+  }
+
+  function resolveOne(name, version) {
+    const pendingKey = `${name.toLowerCase()}@${version}`;
+    if (pending.has(pendingKey)) return Promise.resolve();
+
+    const promise = (async () => {
       try {
-        [info, versions] = await Promise.all([
-          fetchModuleInfo(name, version),
-          fetchModuleVersionList(name),
-        ]);
-      } finally {
-        semaphore.release();
-      }
+        await semaphore.acquire();
+        let moduleName = name;
+        let info, versions, modText;
+        try {
+          const moduleResolution = await resolveModuleInfo(name, version);
+          if (moduleResolution) {
+            moduleName = moduleResolution.moduleName;
+            info       = moduleResolution.info;
+            const resolvedVersionForMod = (version === 'latest' && info.Version) ? info.Version : version;
+            [versions, modText] = await Promise.all([
+              fetchModuleVersionList(moduleName),
+              fetchModuleMod(moduleName, resolvedVersionForMod),
+            ]);
+          } else {
+            versions = [];
+            modText  = null;
+          }
+        } finally {
+          semaphore.release();
+        }
 
-      // When the caller passed 'latest', use the concrete version the proxy resolved it to
-      // so the result shows a real semver tag rather than the string "latest".
-      const resolvedVersion = (version === 'latest' && info?.Version) ? info.Version : version;
-      const key  = `${name.toLowerCase()}@${resolvedVersion}`;
-      const link = `https://pkg.go.dev/${name}@${resolvedVersion}`;
+        const resolvedVersion = (version === 'latest' && info?.Version) ? info.Version : version;
+        const key  = `${moduleName.toLowerCase()}@${resolvedVersion}`;
+        const link = `https://pkg.go.dev/${moduleName}@${resolvedVersion}`;
 
-      if (!info) {
-        onProgress?.(`  [warn] Module not found on proxy.golang.org: ${name}@${version}`);
+        if (!info) {
+          onProgress?.(`  [warn] Module not found on proxy.golang.org: ${name}@${version}`);
+          results.set(`${name.toLowerCase()}@${version}`, {
+            name,
+            version,
+            releaseDate:        'unknown',
+            firstReleaseDate:   'unknown',
+            releaseCount:       0,
+            downloadsLastMonth: null,
+            link:               `https://pkg.go.dev/${name}@${version}`,
+            error:              'Module not found on proxy.golang.org',
+          });
+          return;
+        }
+
+        if (results.has(key)) return;
+
+        const releaseDate = getReleaseDate(info);
+        onProgress?.(`  ${moduleName} ${resolvedVersion}`);
+
         results.set(key, {
-          name,
-          version: resolvedVersion,
-          releaseDate:        'unknown',
+          name:               moduleName,
+          version:            resolvedVersion,
+          releaseDate,
           firstReleaseDate:   'unknown',
-          releaseCount:       0,
+          releaseCount:       versions.length,
           downloadsLastMonth: null,
           link,
-          error:              'Module not found on proxy.golang.org',
         });
-        return;
+
+        if (modText) {
+          const transitive = parseGoMod(modText);
+          await Promise.all(transitive.map(({ name: depName, version: depVersion }) =>
+            resolveOne(depName, depVersion)
+          ));
+        }
+      } catch (err) {
+        const fallbackKey = `${name.toLowerCase()}@${version}`;
+        if (!results.has(fallbackKey)) {
+          results.set(fallbackKey, {
+            name,
+            version,
+            releaseDate:        'unknown',
+            firstReleaseDate:   'unknown',
+            releaseCount:       0,
+            downloadsLastMonth: null,
+            link: `https://pkg.go.dev/${name}@${version}`,
+            error:              err.message,
+          });
+        }
       }
+    })();
 
-      const releaseDate = getReleaseDate(info);
-      onProgress?.(`  ${name} ${resolvedVersion}`);
+    pending.set(pendingKey, promise);
+    return promise;
+  }
 
-      results.set(key, {
-        name,
-        version: resolvedVersion,
-        releaseDate,
-        firstReleaseDate:   'unknown',
-        releaseCount:       versions.length,
-        downloadsLastMonth: null,
-        link,
-      });
-    } catch (err) {
-      results.set(key, {
-        name,
-        version,
-        releaseDate:        'unknown',
-        firstReleaseDate:   'unknown',
-        releaseCount:       0,
-        downloadsLastMonth: null,
-        link: `https://pkg.go.dev/${name}@${version}`,
-        error:              err.message,
-      });
-    }
-  }));
-
+  await Promise.all(directDeps.map(({ name, version }) => resolveOne(name, version)));
   return results;
 }

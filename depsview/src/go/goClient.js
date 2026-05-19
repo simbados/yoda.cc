@@ -25,8 +25,22 @@ export function escapeModulePath(name) {
 }
 
 /**
+ * Validates and encodes a Go module path for safe interpolation into a GOPROXY URL.
+ * Valid Go module paths contain only alphanumeric characters, dots, hyphens, underscores,
+ * tildes, and slashes. Characters like '?', '#', '%', or whitespace cannot appear in a
+ * legitimate module path and would break URL semantics if interpolated directly.
+ * Returns null if the name fails validation so callers can treat it as "not found".
+ * @param {string} name
+ * @returns {string|null}
+ */
+function encodedModulePath(name) {
+  if (/[?#%\s"]/.test(name)) return null;
+  return escapeModulePath(name);
+}
+
+/**
  * Fetches version metadata for a specific module version from the Go proxy.
- * Returns null on 404, network error, or unparseable response.
+ * Returns null on 404, network error, unparseable response, or invalid module path.
  * The returned object has at minimum `{ Version, Time }` where `Time` is the
  * ISO-8601 timestamp the version was tagged.
  *
@@ -38,7 +52,8 @@ export function escapeModulePath(name) {
  * @returns {Promise<{ Version: string, Time: string }|null>}
  */
 export async function fetchModuleInfo(name, version) {
-  const encoded = escapeModulePath(name);
+  const encoded = encodedModulePath(name);
+  if (!encoded) return null;
   const url = version === 'latest'
     ? `${PROXY_BASE}/${encoded}/@latest`
     : `${PROXY_BASE}/${encoded}/@v/${encodeURIComponent(version)}.info`;
@@ -49,7 +64,9 @@ export async function fetchModuleInfo(name, version) {
   });
   if (!text) return null;
   try {
-    return JSON.parse(text);
+    const raw = JSON.parse(text);
+    if (typeof raw?.Version !== 'string' && typeof raw?.Time !== 'string') return null;
+    return { Version: raw.Version ?? null, Time: raw.Time ?? null };
   } catch {
     return null;
   }
@@ -59,12 +76,14 @@ export async function fetchModuleInfo(name, version) {
  * Fetches the list of known versions for a module from the Go proxy.
  * The endpoint returns a newline-delimited list of valid semver tags;
  * pseudo-versions (untagged commits) are omitted by design.
- * Returns an empty array on error or when the module has no tagged versions.
+ * Returns an empty array on error, invalid module path, or when the module has no tagged versions.
  * @param {string} name - module path, e.g. "github.com/gin-gonic/gin"
  * @returns {Promise<string[]>}
  */
 export async function fetchModuleVersionList(name) {
-  const url = `${PROXY_BASE}/${escapeModulePath(name)}/@v/list`;
+  const encoded = encodedModulePath(name);
+  if (!encoded) return [];
+  const url = `${PROXY_BASE}/${encoded}/@v/list`;
   const text = await fetchWithRetry(url, {
     serviceName:  'proxy.golang.org',
     throwOnError: false,
@@ -72,6 +91,26 @@ export async function fetchModuleVersionList(name) {
   });
   if (!text) return [];
   return text.split('\n').map(v => v.trim()).filter(Boolean);
+}
+
+/**
+ * Fetches the raw go.mod file for a specific module version from the Go proxy.
+ * Returns null on 404, network error, invalid module path, or any non-2xx response.
+ * Used to discover transitive dependencies declared in the module's own go.mod.
+ *
+ * @param {string} name    - module path, e.g. "github.com/gin-gonic/gin"
+ * @param {string} version - exact version tag, e.g. "v1.9.1" (never "latest")
+ * @returns {Promise<string|null>}
+ */
+export async function fetchModuleMod(name, version) {
+  const encoded = encodedModulePath(name);
+  if (!encoded) return null;
+  const url = `${PROXY_BASE}/${encoded}/@v/${encodeURIComponent(version)}.mod`;
+  return fetchWithRetry(url, {
+    serviceName:  'proxy.golang.org',
+    throwOnError: false,
+    responseType: 'text',
+  });
 }
 
 /**

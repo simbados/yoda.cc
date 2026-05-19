@@ -1,7 +1,7 @@
-import { describe, it } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { escapeModulePath, getReleaseDate } from '../../src/go/goClient.js';
+import { escapeModulePath, getReleaseDate, fetchModuleMod } from '../../src/go/goClient.js';
 
 // ── escapeModulePath ──────────────────────────────────────────────────────────
 
@@ -29,6 +29,73 @@ describe('escapeModulePath', () => {
       escapeModulePath('gopkg.in/yaml.v3'),
       'gopkg.in/yaml.v3'
     );
+  });
+});
+
+// ── fetchModuleMod ───────────────────────────────────────────────────────────
+
+describe('fetchModuleMod', () => {
+  let origFetch;
+  beforeEach(() => { origFetch = globalThis.fetch; });
+  afterEach(() => { globalThis.fetch = origFetch; });
+
+  it('returns raw go.mod text on a successful response', async () => {
+    const modContent = 'module example.com/foo\n\ngo 1.21\n\nrequire github.com/bar/baz v1.0.0\n';
+    globalThis.fetch = async () => ({
+      status: 200,
+      ok: true,
+      headers: { get: () => null },
+      text: async () => modContent,
+    });
+    const result = await fetchModuleMod('example.com/foo', 'v1.0.0');
+    assert.equal(result, modContent);
+  });
+
+  it('returns null on a 404 response', async () => {
+    globalThis.fetch = async () => ({
+      status: 404,
+      ok: false,
+      headers: { get: () => null },
+      text: async () => '',
+    });
+    const result = await fetchModuleMod('example.com/missing', 'v1.0.0');
+    assert.equal(result, null);
+  });
+
+  it('applies GOPROXY path escaping to uppercase letters in the module name', async () => {
+    let capturedUrl;
+    globalThis.fetch = async (url) => {
+      capturedUrl = url;
+      return { status: 200, ok: true, headers: { get: () => null }, text: async () => '' };
+    };
+    await fetchModuleMod('github.com/BurntSushi/toml', 'v1.3.2');
+    assert.ok(capturedUrl.includes('!burnt!sushi'), `expected escaped path, got: ${capturedUrl}`);
+  });
+
+  it('appends .mod to the version in the URL', async () => {
+    let capturedUrl;
+    globalThis.fetch = async (url) => {
+      capturedUrl = url;
+      return { status: 200, ok: true, headers: { get: () => null }, text: async () => '' };
+    };
+    await fetchModuleMod('example.com/pkg', 'v2.3.4');
+    assert.ok(capturedUrl.endsWith('v2.3.4.mod'), `expected URL to end with v2.3.4.mod, got: ${capturedUrl}`);
+  });
+
+  it('returns null without fetching when the module name contains a query character', async () => {
+    let fetched = false;
+    globalThis.fetch = async () => { fetched = true; return { status: 200, ok: true, headers: { get: () => null }, text: async () => '' }; };
+    const result = await fetchModuleMod('example.com/pkg?evil=1', 'v1.0.0');
+    assert.equal(result, null);
+    assert.equal(fetched, false);
+  });
+
+  it('returns null without fetching when the module name contains a fragment character', async () => {
+    let fetched = false;
+    globalThis.fetch = async () => { fetched = true; return { status: 200, ok: true, headers: { get: () => null }, text: async () => '' }; };
+    const result = await fetchModuleMod('example.com/pkg#anchor', 'v1.0.0');
+    assert.equal(result, null);
+    assert.equal(fetched, false);
   });
 });
 

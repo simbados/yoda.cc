@@ -63,6 +63,10 @@ export function parseGoSum(content) {
  * @param {string} content
  * @returns {Array<{ name: string, version: string, indirect: boolean }>}
  */
+function unquote(s) {
+  return s.startsWith('"') && s.endsWith('"') ? s.slice(1, -1) : s;
+}
+
 export function parseGoMod(content) {
   const deps = [];
   let inRequireBlock = false;
@@ -81,7 +85,7 @@ export function parseGoMod(content) {
       }
       const parts = line.split(/\s+/);
       if (parts.length >= 2) {
-        deps.push({ name: parts[0], version: parts[1], indirect: isIndirect });
+        deps.push({ name: unquote(parts[0]), version: unquote(parts[1]), indirect: isIndirect });
       }
       continue;
     }
@@ -95,7 +99,7 @@ export function parseGoMod(content) {
       const rest = line.replace(/^require\s+/, '');
       const parts = rest.split(/\s+/);
       if (parts.length >= 2) {
-        deps.push({ name: parts[0], version: parts[1], indirect: isIndirect });
+        deps.push({ name: unquote(parts[0]), version: unquote(parts[1]), indirect: isIndirect });
       }
     }
   }

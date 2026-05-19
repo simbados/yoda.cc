@@ -125,7 +125,7 @@ When `--socket-key` / `--socket-org` are supplied, a **single** batched request 
 | `--npm` | Restrict the run to npm sections |
 | `--python` | Restrict the run to Python sections |
 | `--go` | Restrict the run to Go sections |
-| `--package <name>` / `-p <name>` | Resolve a single package by name instead of reading dep files. Requires exactly one ecosystem flag. Accepts `name`, `name@version`, PEP 440 specifiers for Python, and `module@version` for Go. |
+| `--package <name>` / `-p <name>` | Resolve a single package by name instead of reading dep files. Requires exactly one ecosystem flag. Accepts `name`, `name@version`, PEP 440 specifiers for Python, and `module@version` for Go. Transitive dependencies are followed for all three ecosystems. |
 | `--include-tests` | Include dev/test dependencies (npm / Python only) |
 | `--json` | Machine-readable JSON output |
 | `--download-stats` / `--ds` | Fetch Python download counts from pypistats.org (Python only) |
@@ -224,6 +224,7 @@ For each module, depsview queries the [Go module proxy](https://proxy.golang.org
 
 - `/{module}/@v/{version}.info` for the release date of the pinned version
 - `/{module}/@v/list` for the total number of tagged releases
+- `/{module}/@v/{version}.mod` for transitive dependency discovery (package-search mode only)
 
 Module paths with uppercase letters are encoded per the GOPROXY protocol (e.g. `github.com/BurntSushi/toml` → `github.com/!burnt!sushi/toml`). The "First Release" column is reported as **unknown** for Go modules to avoid one extra request per package; the "Downloads/mo" column does not apply because the proxy does not expose install counts. The `--include-tests` flag has no effect on Go projects — `go.sum` and `go.mod` do not distinguish test-only dependencies.
 
@@ -376,7 +377,9 @@ When a specific ecosystem is selected, you can type a package name directly inst
 |---|---|
 | npm | `eslint` · `eslint@8` · `@babel/core@7` |
 | Python | `requests` · `requests>=2.0` · `requests==2.31.0` |
-| Go | `github.com/gin-gonic/gin` · `github.com/gin-gonic/gin@v1.9.1` |
+| Go | `github.com/gin-gonic/gin` · `github.com/gin-gonic/gin@v1.9.1` · `golang.org/x/lint/golint@latest` |
+
+For Go, tool package paths (e.g. `golang.org/x/lint/golint`) are automatically resolved to their containing module root (`golang.org/x/lint`), mirroring what `go install` does.
 
 For **All**, only GitHub URLs are accepted.
 

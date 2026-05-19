@@ -39,7 +39,9 @@ export function splitPackageTokens(rawText) {
   const spacedSep = /\s+[^\w@.\-\/=><~!+\s]+\s+/g;
   const tokens = lines.flatMap(line => line.split(spacedSep));
 
-  return tokens.map(t => t.trim()).filter(Boolean);
+  return tokens
+    .map(t => t.trim().replace(/^[^\w@.\-\/=><~!+]+|[^\w@.\-\/=><~!+]+$/g, ''))
+    .filter(Boolean);
 }
 
 /**

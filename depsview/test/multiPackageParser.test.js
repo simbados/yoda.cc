@@ -132,6 +132,32 @@ describe('splitPackageTokens — edge cases', () => {
   });
 });
 
+describe('splitPackageTokens — trailing non-package characters stripped', () => {
+  it('strips trailing backslash from shell line-continuation syntax', () => {
+    const input = 'golang.org/x/tools/gopls@latest \\\nhonnef.co/go/tools/cmd/staticcheck@latest';
+    assert.deepEqual(splitPackageTokens(input), [
+      'golang.org/x/tools/gopls@latest',
+      'honnef.co/go/tools/cmd/staticcheck@latest',
+    ]);
+  });
+
+  it('strips trailing pipe character from a token', () => {
+    assert.deepEqual(splitPackageTokens('eslint|\neslint@9'), ['eslint', 'eslint@9']);
+  });
+
+  it('strips leading pipe character from a token', () => {
+    assert.deepEqual(splitPackageTokens('eslint\n|eslint@9'), ['eslint', 'eslint@9']);
+  });
+
+  it('strips trailing semicolon from a token', () => {
+    assert.deepEqual(splitPackageTokens('eslint;\neslint@9'), ['eslint', 'eslint@9']);
+  });
+
+  it('does not strip backslash from the middle of a token', () => {
+    assert.deepEqual(splitPackageTokens('eslint\\eslint@9'), ['eslint\\eslint@9']);
+  });
+});
+
 // ── parseMultiPackageInput ────────────────────────────────────────────────────
 
 describe('parseMultiPackageInput — npm', () => {

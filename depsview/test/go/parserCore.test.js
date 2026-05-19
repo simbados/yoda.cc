@@ -112,4 +112,20 @@ describe('parseGoMod', () => {
     const deps = parseGoMod(content);
     assert.equal(deps[0].version, 'v0.0.0-20210921155107-089bfa567519');
   });
+
+  it('strips double quotes from module paths in a require block', () => {
+    const content =
+      'module example.com/x\n\nrequire (\n\t"gopkg.in/check.v1" v0.0.0-20161208181325-20d25e280405\n)\n';
+    const deps = parseGoMod(content);
+    assert.equal(deps.length, 1);
+    assert.deepEqual(deps[0], { name: 'gopkg.in/check.v1', version: 'v0.0.0-20161208181325-20d25e280405', indirect: false });
+  });
+
+  it('strips double quotes from a single-line require', () => {
+    const content = 'module example.com/x\n\nrequire "gopkg.in/check.v1" v0.0.0-20161208181325-20d25e280405\n';
+    const deps = parseGoMod(content);
+    assert.equal(deps.length, 1);
+    assert.equal(deps[0].name, 'gopkg.in/check.v1');
+    assert.equal(deps[0].version, 'v0.0.0-20161208181325-20d25e280405');
+  });
 });
