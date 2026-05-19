@@ -29,15 +29,22 @@
           <label class="eco-btn"><input type="radio" name="ecosystem" value="go"><span>Go</span></label>
         </div>
       </div>
-      <div class="input-row">
+      <div class="input-row" id="url-row">
         <input
           id="url-input"
           type="text"
           placeholder="https://github.com/owner/repo"
           spellcheck="false"
-          required
         >
         <button id="submit-btn" type="submit">Analyse</button>
+      </div>
+      <div class="pkg-input-row" id="pkg-row" hidden>
+        <textarea
+          id="pkg-input"
+          spellcheck="false"
+          placeholder="eslint, eslint@9, @babel/core  or  https://github.com/owner/repo"
+        ></textarea>
+        <button id="pkg-submit-btn" type="submit">Analyse</button>
       </div>
       <div class="input-row token-row">
         <input

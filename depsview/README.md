@@ -87,6 +87,22 @@ github.com/gin-gonic/gin     v1.9.1   2023-06-01   28        https://pkg.go.dev/
 
 Each section is sorted independently by release date (newest first). In the web UI and HTML report, click any column header to re-sort — each table has its own sort state.
 
+## Web UI — package search
+
+When a specific ecosystem is selected (npm, Python, or Go), the URL field is replaced with a multi-line textarea. Enter one or more package identifiers and click **Analyse**.
+
+**Supported separator formats** — all of these are equivalent:
+
+| Style | Example |
+|---|---|
+| One per line | `eslint` ↵ `eslint@9` |
+| Comma-separated | `eslint, eslint@9` or `eslint,eslint@9` |
+| Any character flanked by spaces | `eslint \| eslint@9` · `eslint ; eslint@9` |
+
+Characters that are part of package identifiers (`@`, `.`, `-`, `/`, `=`, `>`, `<`, `~`, `!`, `+`) are never treated as separators, so Go module paths (`github.com/gin-gonic/gin`) and Python specifiers (`requests>=2.0`) are always kept intact.
+
+Selecting **All** restores the GitHub URL input for full-repository analysis.
+
 ## Multi-ecosystem projects
 
 Polyglot repos (e.g. a project with both `package.json` and `go.mod`, or a Python monorepo that also bundles a JS frontend) are resolved **per ecosystem**. Every detected ecosystem produces its own section with its own table, summary, and sort state. Sections always appear in the order **npm → python → go**.

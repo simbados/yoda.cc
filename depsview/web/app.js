@@ -22,7 +22,7 @@ import { resolveDependencies as resolveNpm } from './src/npm/depResolver.js';
 import { resolveDependencies as resolveGo  } from './src/go/depResolver.js';
 import { setGithubToken               } from './src/github/client.js';
 import { listDirectory                } from './src/github/client.js';
-import { parsePackageInput            } from './src/packageInput.js';
+import { parseMultiPackageInput        } from './src/multiPackageParser.js';
 
 /** Fixed rendering order for ecosystem sections. */
 export const ECOSYSTEM_ORDER = ['npm', 'python', 'go'];
@@ -318,27 +318,27 @@ function renderSectionError(container, ecosystem, message, showHeader) {
  * Runs the parse → resolve pipeline for one ecosystem.
  * Supports two modes:
  *   - GitHub mode (default): parses dependency files from a GitHub ref.
- *   - Package mode (opts.packageInput set): skips GitHub I/O and resolves a
- *     single package by name, using { name, version } from parsePackageInput.
+ *   - Package mode (opts.packageInputs set): skips GitHub I/O and resolves one
+ *     or more packages by name using entries from parseMultiPackageInput.
  *
  * Returns the section's data needed to render it: deps, resolved results,
  * direct dep names, source filename, and any note.
  *
  * @param {'npm'|'python'|'go'} ecosystem
  * @param {object|null} githubRef
- * @param {{ includeTests: boolean, onProgress: (msg: string) => void, packageInput?: { name: string, version: string|null } }} opts
+ * @param {{ includeTests: boolean, onProgress: (msg: string) => void, packageInputs?: Array<{ name: string, version: string|null }> }} opts
  * @returns {Promise<object>}
  */
 async function resolveEcosystem(ecosystem, githubRef, opts) {
-  const { includeTests, onProgress, packageInput } = opts;
+  const { includeTests, onProgress, packageInputs } = opts;
 
   let deps, source, note = null;
-  if (packageInput) {
+  if (packageInputs && packageInputs.length > 0) {
     source = 'package search';
-    const dep = ecosystem === 'go'
-      ? { name: packageInput.name, version: packageInput.version }
-      : { name: packageInput.name, versionSpec: packageInput.version };
-    deps = [dep];
+    deps = packageInputs.map(p => ecosystem === 'go'
+      ? { name: p.name, version: p.version }
+      : { name: p.name, versionSpec: p.version }
+    );
   } else if (ecosystem === 'npm') {
     ({ deps, source, note } = await parseGithubNpmDependencies(githubRef, { includeTests }));
   } else if (ecosystem === 'go') {
@@ -373,6 +373,9 @@ async function resolveEcosystem(ecosystem, githubRef, opts) {
     if (source === 'go.mod') {
       const directNames = new Set(deps.filter(d => !d.indirect).map(d => d.name.toLowerCase()));
       directCount = [...results.values()].filter(r => directNames.has(r.name.toLowerCase())).length;
+    } else if (source === 'package search') {
+      const directNames = new Set(deps.map(d => d.name.toLowerCase()));
+      directCount = [...results.values()].filter(r => directNames.has(r.name.toLowerCase())).length;
     }
   } else {
     const directNames = new Set(deps.map(d => d.name.toLowerCase()));
@@ -387,6 +390,10 @@ async function resolveEcosystem(ecosystem, githubRef, opts) {
 if (typeof document !== 'undefined') {
   const form            = document.getElementById('form');
   const urlInput        = document.getElementById('url-input');
+  const urlRow          = document.getElementById('url-row');
+  const pkgInput        = document.getElementById('pkg-input');
+  const pkgRow          = document.getElementById('pkg-row');
+  const pkgSubmitBtn    = document.getElementById('pkg-submit-btn');
   const tokenInput      = document.getElementById('token-input');
   const rememberTokenCb = document.getElementById('remember-token');
   const storageNote     = document.getElementById('storage-note');
@@ -398,19 +405,37 @@ if (typeof document !== 'undefined') {
 
   const TOKEN_STORAGE_KEY = 'depsview.github_token';
 
-  /** Placeholder text per ecosystem selection. */
-  const PLACEHOLDERS = {
-    all:    'https://github.com/owner/repo',
-    npm:    'https://github.com/owner/repo  or  eslint  or  eslint@8',
-    python: 'https://github.com/owner/repo  or  requests  or  requests>=2.0',
-    go:     'https://github.com/owner/repo  or  github.com/gin-gonic/gin@latest',
+  /** Textarea placeholder text per ecosystem. */
+  const PKG_PLACEHOLDERS = {
+    npm:    'eslint, eslint@9, @babel/core  or  https://github.com/owner/repo',
+    python: 'requests, flask>=2.0, django==4.2  or  https://github.com/owner/repo',
+    go:     'github.com/gin-gonic/gin, github.com/go-chi/chi  or  https://github.com/owner/repo',
   };
 
+  /**
+   * Shows the URL input row for 'all' ecosystem and the package textarea for
+   * specific ecosystems, updating the textarea placeholder accordingly.
+   * @param {string} eco - selected ecosystem value
+   */
+  function applyEcosystem(eco) {
+    const isSpecific = eco !== 'all';
+    urlRow.hidden = isSpecific;
+    pkgRow.hidden = !isSpecific;
+    if (isSpecific) pkgInput.placeholder = PKG_PLACEHOLDERS[eco] ?? '';
+  }
+
   document.querySelectorAll('[name="ecosystem"]').forEach(radio => {
-    radio.addEventListener('change', () => {
-      urlInput.placeholder = PLACEHOLDERS[radio.value] ?? PLACEHOLDERS.all;
-    });
+    radio.addEventListener('change', () => applyEcosystem(radio.value));
   });
+
+  // Apply the initial state (page load with 'all' pre-selected).
+  applyEcosystem(form.elements['ecosystem'].value);
+
+  /** Enables or disables both submit buttons together. */
+  function setSubmitting(disabled) {
+    submitBtn.disabled    = disabled;
+    pkgSubmitBtn.disabled = disabled;
+  }
 
   function syncStorageNote() {
     storageNote.hidden = !rememberTokenCb.checked;
@@ -418,7 +443,7 @@ if (typeof document !== 'undefined') {
 
   const savedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
   if (savedToken) {
-    tokenInput.value      = savedToken;
+    tokenInput.value        = savedToken;
     rememberTokenCb.checked = true;
     syncStorageNote();
   }
@@ -447,25 +472,16 @@ if (typeof document !== 'undefined') {
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
 
-    errorDiv.hidden    = true;
-    errorDiv.textContent = '';
-    progressDiv.hidden = true;
+    errorDiv.hidden         = true;
+    errorDiv.textContent    = '';
+    progressDiv.hidden      = true;
     progressDiv.textContent = '';
-    resultsDiv.hidden  = true;
-    resultsDiv.innerHTML = '';
+    resultsDiv.hidden       = true;
+    resultsDiv.innerHTML    = '';
 
-    const url             = urlInput.value.trim();
     const token           = tokenInput.value.trim();
     const includeTests    = includeTestsCb.checked;
     const ecosystemFilter = form.elements['ecosystem'].value;
-
-    // A package-name input doesn't start with a URL scheme. Block this mode
-    // when ecosystem is 'all' because there's nothing to auto-detect from.
-    const isPackageMode = !/^https?:\/\//i.test(url);
-    if (isPackageMode && ecosystemFilter === 'all') {
-      showError('Select a specific ecosystem (npm, Python, or Go) to search by package name.');
-      return;
-    }
 
     if (rememberTokenCb.checked && token) {
       localStorage.setItem(TOKEN_STORAGE_KEY, token);
@@ -474,40 +490,70 @@ if (typeof document !== 'undefined') {
     }
 
     setGithubToken(token || null);
-
-    submitBtn.disabled = true;
+    setSubmitting(true);
 
     try {
       let ecosystems;
-      let githubRef = null;
-      let packageInput = null;
+      let githubRef     = null;
+      let packageInputs = null;
 
-      if (isPackageMode) {
-        ecosystems   = new Set([ecosystemFilter]);
-        packageInput = parsePackageInput(url, ecosystemFilter);
-        appendProgress(`Resolving ${ecosystemFilter} package: ${packageInput.name}…\n`);
-      } else {
+      if (ecosystemFilter === 'all') {
+        // GitHub repo mode: analyse all ecosystems detected in the repository.
+        const url = urlInput.value.trim();
+        if (!url) {
+          showError('Enter a GitHub repository URL.');
+          setSubmitting(false);
+          return;
+        }
+
         try {
           githubRef = parseGithubUrl(url);
         } catch (err) {
           showError(err.message);
-          submitBtn.disabled = false;
+          setSubmitting(false);
           return;
         }
 
-        if (ecosystemFilter === 'all') {
-          appendProgress('Detecting ecosystems…\n');
-          const listing = await listDirectory(githubRef.owner, githubRef.repo, githubRef.subpath, githubRef.ref);
-          ecosystems = detectEcosystems(listing ?? []);
-          // Fall back to 'python' so the depth-2 traversal still gets a chance
-          // (covers HA-style nested manifest.json layouts).
-          if (ecosystems.size === 0) ecosystems = new Set(['python']);
-        } else {
-          ecosystems = new Set([ecosystemFilter]);
+        appendProgress('Detecting ecosystems…\n');
+        const listing = await listDirectory(githubRef.owner, githubRef.repo, githubRef.subpath, githubRef.ref);
+        ecosystems = detectEcosystems(listing ?? []);
+        // Fall back to 'python' so the depth-2 traversal still gets a chance
+        // (covers HA-style nested manifest.json layouts).
+        if (ecosystems.size === 0) ecosystems = new Set(['python']);
+        const detectedOrdered = ECOSYSTEM_ORDER.filter(eco => ecosystems.has(eco));
+        appendProgress(`Detected: ${detectedOrdered.join(', ')}. Resolving…\n`);
+
+      } else {
+        const rawText = pkgInput.value.trim();
+        if (!rawText) {
+          showError('Enter at least one package name or a GitHub URL.');
+          setSubmitting(false);
+          return;
         }
 
-        const ordered = ECOSYSTEM_ORDER.filter(eco => ecosystems.has(eco));
-        appendProgress(`${ecosystemFilter === 'all' ? 'Detected' : 'Using'}: ${ordered.join(', ')}. Resolving…\n`);
+        if (/^https?:\/\//i.test(rawText)) {
+          // GitHub repo mode with a specific ecosystem filter.
+          try {
+            githubRef = parseGithubUrl(rawText);
+          } catch (err) {
+            showError(err.message);
+            setSubmitting(false);
+            return;
+          }
+          ecosystems = new Set([ecosystemFilter]);
+          appendProgress(`Using: ${ecosystemFilter}. Resolving…\n`);
+        } else {
+          // Package search mode: one or more package names.
+          packageInputs = parseMultiPackageInput(rawText, ecosystemFilter);
+          if (packageInputs.length === 0) {
+            showError('Enter at least one package name.');
+            setSubmitting(false);
+            return;
+          }
+          ecosystems = new Set([ecosystemFilter]);
+          const names = packageInputs.map(p => p.name).join(', ');
+          appendProgress(`Resolving ${packageInputs.length} ${ecosystemFilter} package${packageInputs.length === 1 ? '' : 's'}: ${names}…\n`);
+        }
       }
 
       const ordered = ECOSYSTEM_ORDER.filter(eco => ecosystems.has(eco));
@@ -516,7 +562,7 @@ if (typeof document !== 'undefined') {
       // own error so a failure in one does not abort the others.
       const settled = await Promise.all(
         ordered.map(eco =>
-          resolveEcosystem(eco, githubRef, { includeTests, onProgress: appendProgress, packageInput })
+          resolveEcosystem(eco, githubRef, { includeTests, onProgress: appendProgress, packageInputs })
             .then(section => ({ ok: true, section }))
             .catch(err   => ({ ok: false, ecosystem: eco, error: err.message }))
         )
@@ -575,7 +621,7 @@ if (typeof document !== 'undefined') {
     } catch (err) {
       showError(err.message);
     } finally {
-      submitBtn.disabled = false;
+      setSubmitting(false);
     }
   });
 }

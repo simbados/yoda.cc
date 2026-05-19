@@ -255,6 +255,7 @@ h1 {
   gap: 0.5rem;
   flex-wrap: wrap;
   align-items: stretch;
+  margin-bottom: 0.5rem;
 }
 
 #url-input,
@@ -453,6 +454,64 @@ th[data-col]       { cursor: pointer; user-select: none; }
 th[data-col]:hover { color: var(--text); }
 th.th-sort-desc::after { content: ' ▼'; font-size: 0.75em; opacity: 0.8; }
 th.th-sort-asc::after  { content: ' ▲'; font-size: 0.75em; opacity: 0.8; }
+
+/* ── Package textarea (multi-package mode) ────────────────────────────────── */
+
+/* display: flex on .pkg-input-row would override the UA's [hidden]=display:none,
+   so we restore the expected behaviour explicitly. */
+[hidden] { display: none !important; }
+
+.pkg-input-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+#pkg-input {
+  padding: 0.6rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-family: ui-monospace, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+  color: var(--text);
+  background: var(--surface);
+  line-height: 1.65;
+  resize: vertical;
+  min-height: 7rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+#pkg-input::placeholder { color: var(--muted); }
+
+#pkg-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--glow);
+}
+
+#pkg-submit-btn {
+  padding: 0.6rem 1.5rem;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-deep) 100%);
+  box-shadow: 0 2px 12px rgba(99, 102, 241, 0.35);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  align-self: flex-start;
+  transition: box-shadow 0.2s, opacity 0.2s;
+}
+
+#pkg-submit-btn:hover:not(:disabled) {
+  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.55);
+  opacity: 0.92;
+}
+
+#pkg-submit-btn:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
 
 /* ── Ecosystem picker ─────────────────────────────────────────────────────── */
 .ecosystem-row { flex-wrap: wrap; gap: 0.5rem 0.75rem; margin-bottom: 0.75rem; }

@@ -12,6 +12,6 @@
   "scripts": {
     "test": "npm run prepare && node --test",
     "build": "rm -rf web/src && cp -r src web/src && rm web/style.css && cp ../shared/style.css web/style.css",
-    "prepare": "rm -rf web/src && ln -s ../src web/src"
+    "prepare": "rm -rf web/src && ln -s ../src web/src && rm -f web/style.css && ln -s ../../shared/style.css web/style.css"
   }
 }
