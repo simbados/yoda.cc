@@ -16,16 +16,28 @@
 
 const UPSTREAM_BASE = 'https://api.socket.dev/v0/orgs';
 
+const ALLOWED_ORIGINS = new Set([
+  'https://deps.yoda.cc',
+  'http://localhost',
+  'http://localhost:8080',
+]);
+
 /**
- * CORS response headers added to every response so browsers can read the reply.
- * Restricted to deps.yoda.cc — only that origin may use this proxy.
+ * Returns CORS headers for an allowed origin, or null if the origin is not
+ * permitted. Access-Control-Allow-Origin must be a single value, so the
+ * incoming Origin is echoed back only when it is in the allowlist.
+ * @param {string|null} origin
+ * @returns {Record<string, string>}
  */
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin':  'https://deps.yoda.cc',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Authorization, Content-Type, Accept',
-  'Access-Control-Max-Age':       '86400',
-};
+function corsHeaders(origin) {
+  const allowed = origin && ALLOWED_ORIGINS.has(origin) ? origin : 'https://deps.yoda.cc';
+  return {
+    'Access-Control-Allow-Origin':  allowed,
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Authorization, Content-Type, Accept',
+    'Access-Control-Max-Age':       '86400',
+  };
+}
 
 export default {
   /**
@@ -37,12 +49,15 @@ export default {
    * @returns {Promise<Response>}
    */
   async fetch(request) {
+    const origin = request.headers.get('Origin');
+    const cors   = corsHeaders(origin);
+
     if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: CORS_HEADERS });
+      return new Response(null, { status: 204, headers: cors });
     }
 
     if (request.method !== 'POST') {
-      return new Response('Method Not Allowed', { status: 405, headers: CORS_HEADERS });
+      return new Response('Method Not Allowed', { status: 405, headers: cors });
     }
 
     const url = new URL(request.url);
@@ -52,7 +67,7 @@ export default {
     // URL-normalisation assumption ever breaks: `..` in a fetch() target URL would
     // be normalised to an unintended path on api.socket.dev (proven via new URL()).
     if (!/^\/[a-zA-Z0-9][a-zA-Z0-9_.-]*\/purl$/.test(url.pathname)) {
-      return new Response('Not Found', { status: 404, headers: CORS_HEADERS });
+      return new Response('Not Found', { status: 404, headers: cors });
     }
 
     // Hard-code the query string instead of forwarding url.search to prevent
@@ -76,17 +91,14 @@ export default {
         body: request.body,
       });
     } catch {
-      return new Response('Bad Gateway', { status: 502, headers: CORS_HEADERS });
+      return new Response('Bad Gateway', { status: 502, headers: cors });
     }
 
     // Stream the response body through without buffering — avoids loading the
     // full NDJSON payload (potentially megabytes for large batches) into memory.
     return new Response(upstream.body, {
       status:  upstream.status,
-      headers: {
-        'Content-Type': upstream.headers.get('Content-Type') ?? 'application/x-ndjson',
-        ...CORS_HEADERS,
-      },
+      headers: { 'Content-Type': upstream.headers.get('Content-Type') ?? 'application/x-ndjson', ...cors },
     });
   },
 };
