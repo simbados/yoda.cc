@@ -1,6 +1,7 @@
 name = "socket-proxy"
 main = "socket-proxy.js"
 compatibility_date = "2025-05-20"
+workers_dev = false
 
 [observability.logs]
 enabled = true
