@@ -95,6 +95,13 @@ export default {
       return new Response('Bad Gateway', { status: 502, headers: cors });
     }
 
+    // Reject redirects — prevents SSRF if the upstream ever returns a 3xx.
+    // redirect: 'manual' is used because CF Workers does not support 'error'.
+    if (upstream.status >= 300 && upstream.status < 400) {
+      console.error('upstream returned unexpected redirect:', upstream.status);
+      return new Response('Bad Gateway', { status: 502, headers: cors });
+    }
+
     // Stream the response body through without buffering — avoids loading the
     // full NDJSON payload (potentially megabytes for large batches) into memory.
     return new Response(upstream.body, {
