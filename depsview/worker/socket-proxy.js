@@ -82,7 +82,7 @@ export default {
     try {
       upstream = await fetch(target, {
         method:   'POST',
-        redirect: 'error',  // never follow redirects — prevents SSRF via 3xx from upstream
+        redirect: 'manual',
         headers: {
           'Authorization': request.headers.get('Authorization') ?? '',
           'Content-Type':  request.headers.get('Content-Type')  ?? 'application/json',
