@@ -387,9 +387,34 @@ For **All**, only GitHub URLs are accepted.
 
 Enter a personal access token in the **GitHub token** field. It is used only for `api.github.com` and never sent elsewhere. Check **Remember token** to persist it in `localStorage`.
 
-### Socket.dev credentials in the web UI
+### Socket.dev Supply Chain scores in the web UI
 
-Enter your Socket.dev API key and organisation slug in the **Socket.dev API key** and **Socket.dev org slug** fields. When both are provided, a Supply Chain column is added to the results table with scores colour-coded green (≥ 80 %), amber (50–79 %), or red (< 50 %). Check **Remember Socket.dev credentials** to persist them in `localStorage`.
+The socket.dev API does not emit CORS headers, so browser requests must go through a Cloudflare Worker proxy. A minimal proxy lives in the `worker/` directory.
+
+**Deploy the proxy (once):**
+
+```bash
+cd worker
+pnpm install          # installs wrangler
+npx wrangler login    # first-time only
+npx wrangler deploy   # prints your Worker URL, e.g. https://socket-proxy.yourname.workers.dev
+```
+
+**Wire up the URL:**
+
+Set `SOCKET_PROXY_BASE` in `web/app.js` to your deployed Worker URL (no trailing slash):
+
+```js
+const SOCKET_PROXY_BASE = 'https://socket-proxy.yourname.workers.dev';
+```
+
+After that, all visitors can use the supply chain feature — they only need their own API key and org slug.
+
+**Using the feature:**
+
+Enter your Socket.dev API key and organisation slug in the corresponding fields. When both are provided and `SOCKET_PROXY_BASE` is set, a Supply Chain column is added to the results table. Check **Remember Socket key and org slug** to persist them in `localStorage`.
+
+Requests flow: **browser → Cloudflare Worker → api.socket.dev**. The API key is forwarded by the Worker and is never stored in it.
 
 ## Debug mode
 

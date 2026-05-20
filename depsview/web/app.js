@@ -23,9 +23,23 @@ import { resolveDependencies as resolveGo  } from './src/go/depResolver.js';
 import { setGithubToken               } from './src/github/client.js';
 import { listDirectory                } from './src/github/client.js';
 import { parseMultiPackageInput        } from './src/multiPackageParser.js';
+import { fetchSocketScores, scoreKey  } from './src/socket/client.js';
 
 /** Fixed rendering order for ecosystem sections. */
 export const ECOSYSTEM_ORDER = ['npm', 'python', 'go'];
+
+/**
+ * Base URL of the Cloudflare Worker CORS proxy for socket.dev.
+ * Set this to your deployed Worker URL (without a trailing slash).
+ * Leave empty to disable Supply Chain scores in the browser.
+ */
+const SOCKET_PROXY_BASE = '';
+
+/**
+ * Maps the internal ecosystem identifier to the PURL type expected by socket.dev.
+ * Go modules use 'golang', Python packages use 'pypi'.
+ */
+const ECOSYSTEM_PURL_TYPE = { npm: 'npm', python: 'pypi', go: 'golang' };
 
 // ── Pure utility functions (exported for testing) ─────────────────────────────
 
@@ -38,6 +52,17 @@ export const ECOSYSTEM_ORDER = ['npm', 'python', 'go'];
 export function formatNumber(n) {
   if (n == null) return '–';
   return n.toLocaleString();
+}
+
+/**
+ * Formats a supply chain score (0–1) as a whole-number percentage string.
+ * Returns "–" when the value is null or undefined.
+ * @param {number|null|undefined} n - score in the range 0–1
+ * @returns {string} e.g. "87%" or "–"
+ */
+export function formatScore(n) {
+  if (n == null) return '–';
+  return `${Math.round(n * 100)}%`;
 }
 
 /**
@@ -175,6 +200,7 @@ function addCell(row, text) {
  * @param {string|null} cfg.note              - informational note (e.g. pnpm-lock v9)
  * @param {string|null} cfg.sortCol           - current sort column for sort indicators
  * @param {string|null} cfg.sortDir           - 'asc' or 'desc'
+ * @param {boolean}     [cfg.showSupplyChain] - when true, render a Supply Chain % column
  * @returns {HTMLElement} the section element
  */
 function renderSection(container, cfg) {
@@ -234,6 +260,7 @@ function renderSection(container, cfg) {
   ];
   if (showFirst) COL_DEFS.push(['First Release', 'firstReleaseDate']);
   COL_DEFS.push(['Releases', 'releaseCount']);
+  if (cfg.showSupplyChain) COL_DEFS.push(['Supply Chain', 'supplyChain']);
 
   for (const [label, col] of COL_DEFS) {
     const th = document.createElement('th');
@@ -281,6 +308,7 @@ function renderSection(container, cfg) {
     }
 
     addCell(tr, formatNumber(pkg.releaseCount ?? 0));
+    if (cfg.showSupplyChain) addCell(tr, formatScore(pkg.supplyChain));
   }
 
   sectionEl.appendChild(table);
@@ -388,22 +416,28 @@ async function resolveEcosystem(ecosystem, githubRef, opts) {
 // ── Browser initialisation ────────────────────────────────────────────────────
 
 if (typeof document !== 'undefined') {
-  const form            = document.getElementById('form');
-  const urlInput        = document.getElementById('url-input');
-  const urlRow          = document.getElementById('url-row');
-  const pkgInput        = document.getElementById('pkg-input');
-  const pkgRow          = document.getElementById('pkg-row');
-  const pkgSubmitBtn    = document.getElementById('pkg-submit-btn');
-  const tokenInput      = document.getElementById('token-input');
-  const rememberTokenCb = document.getElementById('remember-token');
-  const storageNote     = document.getElementById('storage-note');
-  const includeTestsCb  = document.getElementById('include-tests');
-  const submitBtn       = document.getElementById('submit-btn');
-  const errorDiv        = document.getElementById('error');
-  const progressDiv     = document.getElementById('progress');
-  const resultsDiv      = document.getElementById('results');
+  const form              = document.getElementById('form');
+  const urlInput          = document.getElementById('url-input');
+  const urlRow            = document.getElementById('url-row');
+  const pkgInput          = document.getElementById('pkg-input');
+  const pkgRow            = document.getElementById('pkg-row');
+  const pkgSubmitBtn      = document.getElementById('pkg-submit-btn');
+  const tokenInput        = document.getElementById('token-input');
+  const rememberTokenCb   = document.getElementById('remember-token');
+  const storageNote       = document.getElementById('storage-note');
+  const socketKeyInput    = document.getElementById('socket-key-input');
+  const socketOrgInput    = document.getElementById('socket-org-input');
+  const rememberSocketCb  = document.getElementById('remember-socket');
+  const socketStorageNote = document.getElementById('socket-storage-note');
+  const includeTestsCb    = document.getElementById('include-tests');
+  const submitBtn         = document.getElementById('submit-btn');
+  const errorDiv          = document.getElementById('error');
+  const progressDiv       = document.getElementById('progress');
+  const resultsDiv        = document.getElementById('results');
 
-  const TOKEN_STORAGE_KEY = 'depsview.github_token';
+  const TOKEN_STORAGE_KEY        = 'depsview.github_token';
+  const SOCKET_KEY_STORAGE_KEY   = 'depsview.socket_key';
+  const SOCKET_ORG_STORAGE_KEY   = 'depsview.socket_org';
 
   /** Textarea placeholder text per ecosystem. */
   const PKG_PLACEHOLDERS = {
@@ -458,6 +492,32 @@ if (typeof document !== 'undefined') {
     }
   });
 
+  function syncSocketStorageNote() {
+    socketStorageNote.hidden = !rememberSocketCb.checked;
+  }
+
+  const savedSocketKey = localStorage.getItem(SOCKET_KEY_STORAGE_KEY);
+  const savedSocketOrg = localStorage.getItem(SOCKET_ORG_STORAGE_KEY);
+  if (savedSocketKey || savedSocketOrg) {
+    if (savedSocketKey) socketKeyInput.value = savedSocketKey;
+    if (savedSocketOrg) socketOrgInput.value = savedSocketOrg;
+    rememberSocketCb.checked = true;
+    syncSocketStorageNote();
+  }
+
+  rememberSocketCb.addEventListener('change', () => {
+    syncSocketStorageNote();
+    if (rememberSocketCb.checked) {
+      const key = socketKeyInput.value.trim();
+      const org = socketOrgInput.value.trim();
+      if (key) localStorage.setItem(SOCKET_KEY_STORAGE_KEY, key);
+      if (org) localStorage.setItem(SOCKET_ORG_STORAGE_KEY, org);
+    } else {
+      localStorage.removeItem(SOCKET_KEY_STORAGE_KEY);
+      localStorage.removeItem(SOCKET_ORG_STORAGE_KEY);
+    }
+  });
+
   function appendProgress(text) {
     progressDiv.hidden = false;
     progressDiv.textContent += text;
@@ -487,6 +547,16 @@ if (typeof document !== 'undefined') {
       localStorage.setItem(TOKEN_STORAGE_KEY, token);
     } else {
       localStorage.removeItem(TOKEN_STORAGE_KEY);
+    }
+
+    const socketKey = socketKeyInput.value.trim();
+    const socketOrg = socketOrgInput.value.trim();
+    if (rememberSocketCb.checked) {
+      if (socketKey) localStorage.setItem(SOCKET_KEY_STORAGE_KEY, socketKey);
+      if (socketOrg) localStorage.setItem(SOCKET_ORG_STORAGE_KEY, socketOrg);
+    } else {
+      localStorage.removeItem(SOCKET_KEY_STORAGE_KEY);
+      localStorage.removeItem(SOCKET_ORG_STORAGE_KEY);
     }
 
     setGithubToken(token || null);
@@ -570,6 +640,42 @@ if (typeof document !== 'undefined') {
 
       progressDiv.hidden = true;
 
+      // Enrich resolved packages with supply chain scores when the user has
+      // provided a socket.dev API key, org slug, and a proxy URL is configured.
+      let showSupplyChain = false;
+      if (socketKey && socketOrg && SOCKET_PROXY_BASE) {
+        const allPkgs = [];
+        for (const entry of settled) {
+          if (!entry.ok) continue;
+          const purlType = ECOSYSTEM_PURL_TYPE[entry.section.ecosystem];
+          if (!purlType) continue;
+          for (const pkg of entry.section.results.values()) {
+            if (!pkg.error) allPkgs.push({ name: pkg.name, version: pkg.version, ecosystem: purlType });
+          }
+        }
+
+        if (allPkgs.length > 0) {
+          appendProgress('Fetching supply chain scores…\n');
+          progressDiv.hidden = false;
+          const socketScores = await fetchSocketScores(allPkgs, socketKey, socketOrg, { proxyBase: SOCKET_PROXY_BASE });
+          progressDiv.hidden = true;
+
+          if (socketScores.size > 0) {
+            showSupplyChain = true;
+            for (const entry of settled) {
+              if (!entry.ok) continue;
+              const purlType = ECOSYSTEM_PURL_TYPE[entry.section.ecosystem];
+              if (!purlType) continue;
+              for (const pkg of entry.section.results.values()) {
+                const key = scoreKey(purlType, pkg.name, pkg.version);
+                const score = socketScores.get(key);
+                if (score != null) pkg.supplyChain = score;
+              }
+            }
+          }
+        }
+      }
+
       const showHeader = ordered.length >= 2;
 
       // Each section keeps its own sort state in its own closure.
@@ -590,14 +696,15 @@ if (typeof document !== 'undefined') {
 
           const sortedRows = sortResultsBy(section.results, sortCol, sortDir);
           const sectionEl = renderSection(resultsDiv, {
-            ecosystem:   section.ecosystem,
+            ecosystem:       section.ecosystem,
             showHeader,
-            sorted:      sortedRows,
-            directCount: section.directCount,
-            source:      section.source,
-            note:        section.note,
+            sorted:          sortedRows,
+            directCount:     section.directCount,
+            source:          section.source,
+            note:            section.note,
             sortCol,
             sortDir,
+            showSupplyChain,
           });
 
           sectionEl.querySelectorAll('th[data-col]').forEach(th => {

@@ -6,7 +6,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { formatNumber, daysSince, sortResults, sortResultsBy, detectEcosystem, detectEcosystems, ECOSYSTEM_ORDER } from '../web/app.js';
+import { formatNumber, formatScore, daysSince, sortResults, sortResultsBy, detectEcosystem, detectEcosystems, ECOSYSTEM_ORDER } from '../web/app.js';
 
 // ── formatNumber ───────────────────────────────────────────────────────────────
 
@@ -36,6 +36,34 @@ describe('formatNumber', () => {
   it('formats a large number with separators', () => {
     const result = formatNumber(1_234_567);
     assert.match(result, /1.234.567/);
+  });
+});
+
+// ── formatScore ────────────────────────────────────────────────────────────────
+
+describe('formatScore', () => {
+  it('returns "–" for null', () => {
+    assert.equal(formatScore(null), '–');
+  });
+
+  it('returns "–" for undefined', () => {
+    assert.equal(formatScore(undefined), '–');
+  });
+
+  it('returns "87%" for 0.87', () => {
+    assert.equal(formatScore(0.87), '87%');
+  });
+
+  it('returns "100%" for 1', () => {
+    assert.equal(formatScore(1), '100%');
+  });
+
+  it('returns "0%" for 0', () => {
+    assert.equal(formatScore(0), '0%');
+  });
+
+  it('rounds to nearest integer (0.876 → "88%")', () => {
+    assert.equal(formatScore(0.876), '88%');
   });
 });
 

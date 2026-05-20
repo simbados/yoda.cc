@@ -17,7 +17,7 @@
       </a>
     </header>
     <p class="tagline">Analyse Python, npm, and Go dependencies from any public GitHub repository.</p>
-    <p class="tagline-sub">All processing happens in your browser. The only external calls are to <code>api.github.com</code>, <code>pypi.org</code>, <code>registry.npmjs.org</code>, and <code>proxy.golang.org</code> — no data is sent to any other server.</p>
+    <p class="tagline-sub">All processing happens in your browser. The only external calls are to <code>api.github.com</code>, <code>pypi.org</code>, <code>registry.npmjs.org</code>, and <code>proxy.golang.org</code>. When Socket.dev credentials are provided, requests are also sent to the configured proxy Worker and <code>api.socket.dev</code>.</p>
 
     <form id="form" autocomplete="off">
       <div class="option-row ecosystem-row">
@@ -64,6 +64,32 @@
         Saved in your browser's <strong>local storage</strong> — persists between page visits and is readable by any JavaScript running on this page.
         Uncheck and submit to remove it.
       </p>
+      <div class="input-row token-row">
+        <input
+          id="socket-key-input"
+          type="password"
+          placeholder="Socket.dev API key (optional — enables Supply Chain scores)"
+          spellcheck="false"
+          autocomplete="off"
+        >
+      </div>
+      <div class="input-row token-row">
+        <input
+          id="socket-org-input"
+          type="text"
+          placeholder="Socket.dev org slug"
+          spellcheck="false"
+          autocomplete="off"
+        >
+      </div>
+      <div class="option-row">
+        <input id="remember-socket" type="checkbox">
+        <label for="remember-socket">Remember Socket key and org slug</label>
+      </div>
+      <p class="storage-note" id="socket-storage-note" hidden>
+        Saved in your browser's <strong>local storage</strong>. Your API key is sent only to the configured proxy Worker, which forwards it to <code>api.socket.dev</code>.
+        Uncheck and submit to remove it.
+      </p>
       <div class="option-row">
         <input id="include-tests" type="checkbox">
         <label for="include-tests">Include test &amp; dev dependencies</label>
@@ -77,7 +103,8 @@
     </p>
 
     <p class="note">
-      Supply chain scores (socket.dev) and Python download statistics (pypistats.org) are only available in the CLI — their APIs do not support cross-origin browser requests.
+      Supply chain scores (socket.dev) require a Socket.dev API key and org slug — enter them above to add a Supply Chain column to the results.
+      Python download statistics (pypistats.org) are only available in the CLI.
     </p>
 
     <p class="legend">

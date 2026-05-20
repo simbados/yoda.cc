@@ -248,3 +248,106 @@ describe('fetchSocketScores — name lowercasing', () => {
     assert.ok(result.has('npm:vite@5.1.0'));
   });
 });
+
+// ── fetchSocketScores — opts.proxyBase ─────────────────────────────────────────
+
+describe('fetchSocketScores — opts.proxyBase', () => {
+  it('uses proxyBase instead of the default socket.dev API base when provided', async () => {
+    let capturedUrl;
+    globalThis.fetch = async (url, _opts) => {
+      capturedUrl = url;
+      return {
+        ok: true, status: 200,
+        headers: { get: () => null },
+        text: async () => JSON.stringify({ purl: 'pkg:npm/express@4.19.2', score: { supplyChain: 0.9 } }),
+      };
+    };
+
+    await fetchSocketScores(
+      [{ name: 'express', version: '4.19.2', ecosystem: 'npm' }],
+      'key',
+      'my-org',
+      { proxyBase: 'https://socket-proxy.example.workers.dev' }
+    );
+
+    assert.ok(
+      capturedUrl.startsWith('https://socket-proxy.example.workers.dev/my-org/purl'),
+      `Expected URL to start with proxy base + org slug, got: ${capturedUrl}`
+    );
+    assert.ok(
+      !capturedUrl.includes('api.socket.dev'),
+      'Default socket.dev base must not appear when proxyBase is set'
+    );
+  });
+
+  it('still appends the orgSlug after proxyBase', async () => {
+    let capturedUrl;
+    globalThis.fetch = async (url, _opts) => {
+      capturedUrl = url;
+      return {
+        ok: true, status: 200,
+        headers: { get: () => null },
+        text: async () => '',
+      };
+    };
+
+    await fetchSocketScores(
+      [{ name: 'lodash', version: '4.17.21', ecosystem: 'npm' }],
+      'key',
+      'acme-corp',
+      { proxyBase: 'https://proxy.example.com' }
+    );
+
+    assert.ok(
+      capturedUrl.startsWith('https://proxy.example.com/acme-corp/purl'),
+      `Expected URL to contain org slug after proxy base, got: ${capturedUrl}`
+    );
+  });
+
+  it('uses the default socket.dev URL when opts is omitted', async () => {
+    let capturedUrl;
+    globalThis.fetch = async (url, _opts) => {
+      capturedUrl = url;
+      return {
+        ok: true, status: 200,
+        headers: { get: () => null },
+        text: async () => '',
+      };
+    };
+
+    await fetchSocketScores(
+      [{ name: 'express', version: '4.19.2', ecosystem: 'npm' }],
+      'key',
+      'my-org'
+    );
+
+    assert.ok(
+      capturedUrl.startsWith('https://api.socket.dev/v0/orgs/my-org/purl'),
+      `Expected default socket.dev URL, got: ${capturedUrl}`
+    );
+  });
+
+  it('uses the default socket.dev URL when proxyBase is absent from opts', async () => {
+    let capturedUrl;
+    globalThis.fetch = async (url, _opts) => {
+      capturedUrl = url;
+      return {
+        ok: true, status: 200,
+        headers: { get: () => null },
+        text: async () => '',
+      };
+    };
+
+    await fetchSocketScores(
+      [{ name: 'express', version: '4.19.2', ecosystem: 'npm' }],
+      'key',
+      'my-org',
+      {}
+    );
+
+    assert.ok(
+      capturedUrl.startsWith('https://api.socket.dev/v0/orgs/my-org/purl'),
+      `Expected default socket.dev URL when opts has no proxyBase, got: ${capturedUrl}`
+    );
+  });
+});

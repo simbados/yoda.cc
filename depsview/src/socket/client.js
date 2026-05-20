@@ -90,9 +90,15 @@ function scoreKey(ecosystem, name, version) {
  * @param {Array<{ name: string, version: string, ecosystem: 'npm'|'pypi'|'golang' }>} packages
  * @param {string} apiKey  - Socket.dev API key (Bearer token)
  * @param {string} orgSlug - Socket.dev organisation slug
+ * @param {{ proxyBase?: string }} [opts]
+ *   opts.proxyBase - when provided, replaces `https://api.socket.dev/v0/orgs` as the
+ *                    API base URL. Use this to route browser requests through a
+ *                    self-hosted Cloudflare Worker CORS proxy, e.g.
+ *                    `https://socket-proxy.example.workers.dev`. The org slug is
+ *                    still appended automatically.
  * @returns {Promise<Map<string, number>>} Map keyed by `${ecosystem}:${name.toLowerCase()}@${version}` → supplyChain score (0–1)
  */
-async function fetchSocketScores(packages, apiKey, orgSlug) {
+async function fetchSocketScores(packages, apiKey, orgSlug, opts = {}) {
   if (packages.length === 0) return new Map();
 
   try {
@@ -103,8 +109,9 @@ async function fetchSocketScores(packages, apiKey, orgSlug) {
     // compact=false is required — compact mode strips the score field from responses.
     // The API emits one line per release artifact (tar-gz, wheel, …) for the same
     // package version, so we skip any key already written to avoid redundant writes.
+    const apiBase = opts.proxyBase ?? SOCKET_API;
     const url =
-      `${SOCKET_API}/${encodeURIComponent(orgSlug)}/purl` +
+      `${apiBase}/${encodeURIComponent(orgSlug)}/purl` +
       '?alerts=false&compact=false&fixable=false&licenseattrib=false' +
       '&licensedetails=false&purlErrors=false&poll=false' +
       '&cachedResultsOnly=false&summary=false';
