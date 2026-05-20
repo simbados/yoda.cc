@@ -432,9 +432,10 @@ if (typeof document !== 'undefined') {
   const tokenInput        = document.getElementById('token-input');
   const rememberTokenCb   = document.getElementById('remember-token');
   const storageNote       = document.getElementById('storage-note');
-  const socketKeyInput    = document.getElementById('socket-key-input');
-  const socketOrgInput    = document.getElementById('socket-org-input');
-  const rememberSocketCb  = document.getElementById('remember-socket');
+  const socketKeyInput      = document.getElementById('socket-key-input');
+  const socketOrgInput      = document.getElementById('socket-org-input');
+  const socketConsentCb     = document.getElementById('socket-proxy-consent');
+  const rememberSocketCb    = document.getElementById('remember-socket');
   const socketStorageNote = document.getElementById('socket-storage-note');
   const includeTestsCb    = document.getElementById('include-tests');
   const submitBtn         = document.getElementById('submit-btn');
@@ -525,6 +526,12 @@ if (typeof document !== 'undefined') {
     }
   });
 
+  socketConsentCb.addEventListener('change', () => {
+    if (socketConsentCb.checked) {
+      socketConsentCb.closest('.option-row').classList.remove('consent-required');
+    }
+  });
+
   function appendProgress(text) {
     progressDiv.hidden = false;
     progressDiv.textContent += text;
@@ -564,6 +571,13 @@ if (typeof document !== 'undefined') {
     } else {
       localStorage.removeItem(SOCKET_KEY_STORAGE_KEY);
       localStorage.removeItem(SOCKET_ORG_STORAGE_KEY);
+    }
+
+    if (socketKey && socketOrg && !socketConsentCb.checked) {
+      const row = socketConsentCb.closest('.option-row');
+      row.classList.add('consent-required');
+      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
     }
 
     setGithubToken(token || null);
@@ -650,7 +664,7 @@ if (typeof document !== 'undefined') {
       // Enrich resolved packages with supply chain scores when the user has
       // provided a socket.dev API key, org slug, and a proxy URL is configured.
       let showSupplyChain = false;
-      if (socketKey && socketOrg && SOCKET_PROXY_BASE) {
+      if (socketKey && socketOrg && SOCKET_PROXY_BASE && socketConsentCb.checked) {
         const allPkgs = [];
         for (const entry of settled) {
           if (!entry.ok) continue;
