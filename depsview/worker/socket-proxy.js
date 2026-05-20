@@ -90,7 +90,8 @@ export default {
         },
         body: request.body,
       });
-    } catch {
+    } catch (err) {
+      console.error('upstream fetch failed:', err.message, '| target:', target);
       return new Response('Bad Gateway', { status: 502, headers: cors });
     }
 
