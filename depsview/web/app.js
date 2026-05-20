@@ -33,7 +33,7 @@ export const ECOSYSTEM_ORDER = ['npm', 'python', 'go'];
  * Set this to your deployed Worker URL (without a trailing slash).
  * Leave empty to disable Supply Chain scores in the browser.
  */
-const SOCKET_PROXY_BASE = '';
+const SOCKET_PROXY_BASE = 'https://socket-proxy.yoda.cc';
 
 /**
  * Maps the internal ecosystem identifier to the PURL type expected by socket.dev.
@@ -308,7 +308,14 @@ function renderSection(container, cfg) {
     }
 
     addCell(tr, formatNumber(pkg.releaseCount ?? 0));
-    if (cfg.showSupplyChain) addCell(tr, formatScore(pkg.supplyChain));
+    if (cfg.showSupplyChain) {
+      const scoreCell = addCell(tr, formatScore(pkg.supplyChain));
+      if (pkg.supplyChain != null) {
+        scoreCell.className = pkg.supplyChain >= 0.8 ? 'score-good'
+                            : pkg.supplyChain >= 0.5 ? 'score-warn'
+                            : 'score-bad';
+      }
+    }
   }
 
   sectionEl.appendChild(table);
