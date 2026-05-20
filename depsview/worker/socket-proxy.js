@@ -16,28 +16,6 @@
 
 const UPSTREAM_BASE = 'https://api.socket.dev/v0/orgs';
 
-/**
- * Strips all occurrences of the Authorization header value from `text` before
- * it is passed to console.error. Two passes are made: one for the full header
- * value (e.g. "Bearer sk-xxx") and one for the credential portion after the
- * first space (e.g. "sk-xxx"), so the token is redacted regardless of whether
- * the error message echoes the full header or only the bare key.
- * No assumptions are made about the token format.
- * @param {string} text
- * @param {string} authHeader - raw Authorization header value
- * @returns {string}
- */
-function sanitize(text, authHeader) {
-  let result = String(text ?? '');
-  const secrets = [authHeader, authHeader.includes(' ') ? authHeader.split(' ')[1] : null];
-  for (const secret of secrets) {
-    if (!secret) continue;
-    const escaped = secret.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    result = result.replace(new RegExp(escaped, 'g'), '[REDACTED]');
-  }
-  return result;
-}
-
 const ALLOWED_ORIGINS = new Set([
   'https://deps.yoda.cc',
   'http://localhost',
@@ -115,7 +93,6 @@ export default {
         body: request.body,
       });
     } catch (err) {
-      console.error('upstream fetch failed:', sanitize(err.message, authHeader), '| target:', target);
       return new Response('Bad Gateway', { status: 502, headers: cors });
     }
 
