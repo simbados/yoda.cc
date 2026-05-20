@@ -16,16 +16,20 @@ https://pypi.org/ for package metadata and https://pypistats.org/ for download s
 - **No mutating input parameters:** Functions must not mutate objects or arrays passed in as arguments (e.g. no accumulator/out parameters). Always return new values instead.
 - **Prefer async/await over Promise chains:** Use `async`/`await` syntax instead of `.then()`/`.catch()` for all asynchronous code. Reserve `.catch()` only when attaching a handler to a Promise you are not awaiting inline.
 
+# Agents
+Two project agents live in `.claude/agents/`:
+
+- **`test-writer`** — invoke when a new source file is created or new exported functions are added without test coverage. Pass the source file path. It reads the file, matches existing test style, writes the test file, and runs `npm test`.
+- **`security-reviewer`** — invoke after every implementation that adds or changes code. Pass the changed file paths or let it diff against HEAD. It checks the project-specific attack surfaces (XSS via registry data, URL injection, prototype pollution, path traversal, ReDoS) and produces a structured PASS/FAIL report.
+
 # Testing
-- **Every new function must be tested:** Write tests for every new function or module you add.
-- **All tests must pass:** Run `npm test` after every implementation and ensure all tests pass before considering the task done.
+- **Every new function must be tested:** Use the `test-writer` agent for new source files. It is responsible for writing tests and verifying they pass.
 
 # Security
-- **Security review after every implementation:** After writing new code, review it against the OWASP Top Ten and common Node.js security pitfalls (command injection, path traversal, prototype pollution, insecure deserialization, unvalidated redirects, etc.).
-- **Fix findings immediately:** If a security issue is found it must be corrected before the task is considered done. Document the fix briefly in the chat.
+- **Security review after every implementation:** Use the `security-reviewer` agent after writing new code. Fix any findings before the task is considered done and document the fix briefly in the chat.
 
 # Definition of Done
 A task is only complete when ALL of the following have been done in the same response:
-1. All tests pass (`npm test`)
+1. `test-writer` agent invoked for any new or changed source files — all tests must pass
 2. README updated to reflect the change
-3. Security review performed and result reported in chat
+3. `security-reviewer` agent invoked and result reported — fix any findings before closing
