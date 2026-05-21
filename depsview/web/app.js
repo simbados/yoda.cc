@@ -318,7 +318,10 @@ function renderSection(container, cfg) {
     }
   }
 
-  sectionEl.appendChild(table);
+  const tableWrapper = document.createElement('div');
+  tableWrapper.className = 'table-scroll';
+  tableWrapper.appendChild(table);
+  sectionEl.appendChild(tableWrapper);
   container.appendChild(sectionEl);
   return sectionEl;
 }

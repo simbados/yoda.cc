@@ -150,14 +150,16 @@ h2.section-title {
   margin: 0 0 0.85rem;
   font-size: 0.85rem;
 }
+.table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
 table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.88rem;
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  overflow: hidden;
 }
 thead tr { border-bottom: 2px solid var(--border); }
 th {
@@ -326,10 +328,12 @@ function renderSection(ecosystem, section, showHeader, socketScores, downloadSta
   ${headerHtml}
   <p class="summary">${escapeHtml(summaryText)}</p>
   ${noteHtml}
-  <table data-section="${escapeHtml(sectionId)}">
-    <thead><tr>${headerCellsHtml}</tr></thead>
-    <tbody>${bodyHtml}</tbody>
-  </table>
+  <div class="table-scroll">
+    <table data-section="${escapeHtml(sectionId)}">
+      <thead><tr>${headerCellsHtml}</tr></thead>
+      <tbody>${bodyHtml}</tbody>
+    </table>
+  </div>
 </section>`;
 
   return { html, scriptCfg: { id: sectionId, rows, ...cfg } };

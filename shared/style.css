@@ -419,14 +419,17 @@ h1 {
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
 }
 
+.table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.88rem;
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  overflow: hidden;
 }
 
 thead tr { border-bottom: 2px solid var(--border); }
