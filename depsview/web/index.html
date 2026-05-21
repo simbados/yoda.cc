@@ -16,14 +16,16 @@
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="pg-tool">
   <main>
     <header class="site-header">
-      <a href="/"><img src="logo.svg" alt="Dependency Viewer" class="header-logo"></a>
+      <div class="header-top">
+        <a class="logo" href="https://yoda.cc">~/yoda</a>
+        <a href="https://github.com/simbados/yoda.cc/tree/main/depsview" target="_blank" rel="noopener noreferrer">
+          <img src="github-mark.png" alt="GitHub" class="header-github">
+        </a>
+      </div>
       <h1>Dependency Viewer</h1>
-      <a href="https://github.com/simbados/yoda.cc/tree/main/depsview" target="_blank" rel="noopener noreferrer">
-        <img src="github-mark.png" alt="GitHub" class="header-github">
-      </a>
     </header>
     <p class="tagline">Analyse Python, npm, and Go dependencies from any public GitHub repository.</p>
     <p class="tagline-sub">All processing happens in your browser. The only external calls are to <code>api.github.com</code>, <code>pypi.org</code>, <code>registry.npmjs.org</code>, and <code>proxy.golang.org</code>. When Socket.dev credentials are provided, requests are also sent to the configured proxy Worker and <code>api.socket.dev</code>.</p>
@@ -64,11 +66,16 @@
           autocomplete="off"
         >
       </div>
-      <p class="token-note"><strong>Your token is sent only to <code>api.github.com</code> and never transmitted to any other server.</strong></p>
       <div class="option-row">
         <input id="remember-token" type="checkbox">
         <label for="remember-token">Remember GitHub token</label>
       </div>
+      <p class="note">
+        The GitHub API allows 60 unauthenticated requests per hour.
+        Provide a personal access token above to raise this to 5 000 req/hr and to access private repositories.
+        Only the target directory and up to two levels of subdirectories are scanned for dependency files.
+      </p>
+      <p class="token-note"><strong>Your token is sent only to <code>api.github.com</code> and never transmitted to any other server.</strong></p>
       <p class="storage-note" id="storage-note" hidden>
         Saved in your browser's <strong>local storage</strong> — persists between page visits and is readable by any JavaScript running on this page.
         Uncheck and submit to remove it.
@@ -108,12 +115,6 @@
         <label for="include-tests">Include test &amp; dev dependencies</label>
       </div>
     </form>
-
-    <p class="note">
-      The GitHub API allows 60 unauthenticated requests per hour.
-      Provide a personal access token above to raise this to 5 000 req/hr and to access private repositories.
-      Only the target directory and up to two levels of subdirectories are scanned for dependency files.
-    </p>
 
     <p class="note">
       Supply chain scores (socket.dev) require a Socket.dev API key and org slug — enter them above to add a Supply Chain column to the results.

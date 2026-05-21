@@ -16,13 +16,16 @@
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="pg-tool">
   <main>
     <header class="site-header">
-      <a href="/"><h1>Brewview</h1></a>
-      <a href="https://github.com/simbados/yoda.cc/tree/main/brewview" target="_blank" rel="noopener noreferrer">
-        <img src="github-mark.png" alt="GitHub" class="header-github">
-      </a>
+      <div class="header-top">
+        <a class="logo" href="https://yoda.cc">~/yoda</a>
+        <a href="https://github.com/simbados/yoda.cc/tree/main/brewview" target="_blank" rel="noopener noreferrer">
+          <img src="github-mark.png" alt="GitHub" class="header-github">
+        </a>
+      </div>
+      <h1>Brewview</h1>
     </header>
     <p class="tagline">Analyse Homebrew formula dependencies.</p>
     <p class="tagline-sub">All processing happens in your browser. Data is fetched directly from <code>formulae.brew.sh</code> — no data is sent to any other server.</p>
