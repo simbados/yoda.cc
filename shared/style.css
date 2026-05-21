@@ -447,8 +447,9 @@ td { padding: 0.55rem 0.9rem; border-bottom: 1px solid var(--border); }
 tbody tr:last-child td { border-bottom: none; }
 tbody tr:hover td { background: #273548; }
 
-.age-new   { color: var(--red);    font-weight: 500; }
-.age-fresh { color: #fcd34d;       font-weight: 500; }
+.age-new    { color: var(--red);    font-weight: 500; }
+.age-orange { color: #fb923c;      font-weight: 500; }
+.age-fresh  { color: #fcd34d;      font-weight: 500; }
 
 .score-good { color: var(--green); font-weight: 500; }
 .score-warn { color: #fcd34d;      font-weight: 500; }

@@ -267,8 +267,9 @@ Date cells use the same scheme in both the `Released` and `First Release` column
 
 | Color | Cell | Meaning |
 |---|---|---|
-| Red    | Released / First Release | Less than 7 days ago  |
-| Yellow | Released / First Release | Less than 30 days ago |
+| Red    | Released / First Release | 3 days ago or less    |
+| Orange | Released / First Release | 7 days ago or less    |
+| Yellow | Released / First Release | 30 days ago or less   |
 | Green  | Supply Chain | Score ≥ 80 % |
 | Yellow | Supply Chain | Score 50–79 % |
 | Red    | Supply Chain | Score < 50 % |

@@ -4,11 +4,9 @@
  *
  * The table applies ANSI color coding to date cells when stdout is a TTY.
  * Both the "Released" and "First Release" columns follow the same scheme:
- *   red    — less than 7 days ago  (very recent)
- *   yellow — less than 30 days ago (recent)
- * Strict `<` (rather than `<=`) so a date that's literally a week / month old
- * is no longer highlighted — Math.floor inside daysSince can otherwise round
- * a 30.5-day diff down to 30 and flag a month-old package as "new".
+ *   red    — 3 days ago or less  (very recent)
+ *   orange — 7 days ago or less  (recent)
+ *   yellow — 30 days ago or less (somewhat recent)
  * Supply chain scores use a separate tri-colour scale: green ≥ 80 %, yellow 50–79 %, red < 50 %.
  *
  * Multi-ecosystem output is rendered as one section per ecosystem in the fixed
@@ -18,6 +16,7 @@
  */
 
 const ANSI_RED    = '\x1b[31m';
+const ANSI_ORANGE = '\x1b[38;5;208m';
 const ANSI_YELLOW = '\x1b[33m';
 const ANSI_GREEN  = '\x1b[32m';
 const ANSI_RESET  = '\x1b[0m';
@@ -220,15 +219,14 @@ function formatTable(results, directNames, opts = {}) {
 
   const now = new Date();
   for (const row of rows) {
-    // Red < 7 days, yellow < 30 days — applied uniformly to both date columns.
     const relAge   = daysSince(row.released, now);
-    const relColor = relAge < 7 ? ANSI_RED : relAge < 30 ? ANSI_YELLOW : null;
+    const relColor = relAge <= 3 ? ANSI_RED : relAge <= 7 ? ANSI_ORANGE : relAge <= 30 ? ANSI_YELLOW : null;
     const releasedCell = applyColor(pad(row.released, colRel), relColor);
 
     let firstRelCell = '';
     if (showFirst) {
       const firstAge   = daysSince(row.firstReleased, now);
-      const firstColor = firstAge < 7 ? ANSI_RED : firstAge < 30 ? ANSI_YELLOW : null;
+      const firstColor = firstAge <= 3 ? ANSI_RED : firstAge <= 7 ? ANSI_ORANGE : firstAge <= 30 ? ANSI_YELLOW : null;
       firstRelCell = applyColor(pad(row.firstReleased, colFirst), firstColor);
     }
 
@@ -339,5 +337,5 @@ export {
   daysSince,
   purlEcosystem,
   ECOSYSTEM_ORDER,
-  ANSI_RED, ANSI_YELLOW, ANSI_GREEN, ANSI_RESET,
+  ANSI_RED, ANSI_ORANGE, ANSI_YELLOW, ANSI_GREEN, ANSI_RESET,
 };

@@ -6,7 +6,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { formatTable, formatMulti, formatJson, daysSince, ECOSYSTEM_ORDER, ANSI_RED, ANSI_YELLOW, ANSI_GREEN } from '../../src/output/formatter.js';
+import { formatTable, formatMulti, formatJson, daysSince, ECOSYSTEM_ORDER, ANSI_RED, ANSI_ORANGE, ANSI_YELLOW, ANSI_GREEN } from '../../src/output/formatter.js';
 
 /**
  * Temporarily replaces console.log, runs fn(), then restores it.
@@ -572,65 +572,62 @@ describe('daysSince', () => {
 describe('color thresholds via daysSince', () => {
   const now = new Date('2026-04-27');
 
-  /**
-   * firstReleased 10 days ago is within 30 days → should be flagged red.
-   */
-  test('firstReleased 10 days ago qualifies for red', () => {
-    assert.ok(daysSince('2026-04-17', now) <= 30);
+  // Red tier: <= 3 days
+  test('released 3 days ago qualifies for red', () => {
+    assert.ok(daysSince('2026-04-24', now) <= 3);
   });
 
-  /**
-   * firstReleased exactly 30 days ago still qualifies for red (inclusive boundary).
-   */
-  test('firstReleased exactly 30 days ago qualifies for red (inclusive)', () => {
-    assert.ok(daysSince('2026-03-28', now) <= 30);
+  test('released exactly 3 days ago qualifies for red (inclusive)', () => {
+    assert.ok(daysSince('2026-04-24', now) <= 3);
   });
 
-  /**
-   * firstReleased 31 days ago does not qualify for red.
-   */
-  test('firstReleased 31 days ago does not qualify for red', () => {
-    assert.ok(daysSince('2026-03-27', now) > 30);
+  test('released 4 days ago does not qualify for red', () => {
+    assert.ok(daysSince('2026-04-23', now) > 3);
   });
 
-  /**
-   * released 3 days ago is within 7 days → should be flagged yellow.
-   */
-  test('released 3 days ago qualifies for yellow', () => {
-    assert.ok(daysSince('2026-04-24', now) <= 7);
+  // Orange tier: 4–7 days
+  test('released 5 days ago qualifies for orange', () => {
+    const age = daysSince('2026-04-22', now);
+    assert.ok(age > 3 && age <= 7);
   });
 
-  /**
-   * released exactly 7 days ago still qualifies for yellow (inclusive boundary).
-   */
-  test('released exactly 7 days ago qualifies for yellow (inclusive)', () => {
+  test('released exactly 7 days ago qualifies for orange (inclusive)', () => {
     assert.ok(daysSince('2026-04-20', now) <= 7);
   });
 
-  /**
-   * released 8 days ago does not qualify for yellow.
-   */
-  test('released 8 days ago does not qualify for yellow', () => {
+  test('released 8 days ago does not qualify for orange', () => {
     assert.ok(daysSince('2026-04-19', now) > 7);
   });
 
-  /**
-   * A package can satisfy both thresholds independently:
-   * firstReleased within 30 days → red cell, and released within 7 days → yellow cell.
-   */
-  test('both conditions can be true simultaneously', () => {
-    const firstReleased = '2026-04-10'; // 17 days ago → red
-    const released      = '2026-04-25'; // 2 days ago  → yellow
-    assert.ok(daysSince(firstReleased, now) <= 30);
-    assert.ok(daysSince(released, now) <= 7);
+  // Yellow tier: 8–30 days
+  test('released 10 days ago qualifies for yellow', () => {
+    const age = daysSince('2026-04-17', now);
+    assert.ok(age > 7 && age <= 30);
   });
 
-  /**
-   * Verifies the exported ANSI constants have the expected escape sequence values
-   * so any future refactor that changes them is caught immediately.
-   */
+  test('released exactly 30 days ago qualifies for yellow (inclusive)', () => {
+    assert.ok(daysSince('2026-03-28', now) <= 30);
+  });
+
+  test('released 31 days ago does not qualify for any color tier', () => {
+    assert.ok(daysSince('2026-03-27', now) > 30);
+  });
+
+  // Both thresholds can apply to different columns simultaneously
+  test('both columns can independently hit different tiers', () => {
+    const firstReleased = '2026-04-20'; // 7 days ago  → orange
+    const released      = '2026-04-25'; // 2 days ago  → red
+    assert.ok(daysSince(firstReleased, now) <= 7);
+    assert.ok(daysSince(released, now) <= 3);
+  });
+
+  // ANSI constant sanity checks
   test('ANSI_RED is the standard red escape sequence', () => {
     assert.equal(ANSI_RED, '\x1b[31m');
+  });
+
+  test('ANSI_ORANGE is the 256-colour orange escape sequence', () => {
+    assert.equal(ANSI_ORANGE, '\x1b[38;5;208m');
   });
 
   test('ANSI_YELLOW is the standard yellow escape sequence', () => {

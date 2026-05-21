@@ -292,19 +292,18 @@ function renderSection(container, cfg) {
 
     addCell(tr, pkg.version);
 
-    // Red (.age-new) when < 7 days, yellow (.age-fresh) when < 30 days.
-    // Same logic for both date columns. Strict `<` so dates that are literally
-    // a week / month old aren't flagged.
     const relCell = addCell(tr, pkg.releaseDate ?? 'unknown');
     const relAge = daysSince(pkg.releaseDate);
-    if (relAge < 7)       relCell.className = 'age-new';
-    else if (relAge < 30) relCell.className = 'age-fresh';
+    if (relAge <= 3)       relCell.className = 'age-new';
+    else if (relAge <= 7)  relCell.className = 'age-orange';
+    else if (relAge <= 30) relCell.className = 'age-fresh';
 
     if (showFirst) {
       const firstCell = addCell(tr, pkg.firstReleaseDate ?? 'unknown');
       const firstAge = daysSince(pkg.firstReleaseDate);
-      if (firstAge < 7)       firstCell.className = 'age-new';
-      else if (firstAge < 30) firstCell.className = 'age-fresh';
+      if (firstAge <= 3)       firstCell.className = 'age-new';
+      else if (firstAge <= 7)  firstCell.className = 'age-orange';
+      else if (firstAge <= 30) firstCell.className = 'age-fresh';
     }
 
     addCell(tr, formatNumber(pkg.releaseCount ?? 0));

@@ -237,8 +237,8 @@ describe('generateReport — package data', () => {
 // ── Age classes ───────────────────────────────────────────────────────────────
 
 describe('generateReport — age CSS classes', () => {
-  it('applies age-new (red) when a date is less than 7 days old', () => {
-    const fresh = new Date(Date.now() - 3 * 86_400_000).toISOString().slice(0, 10);
+  it('applies age-new (red) when a date is 3 days old or less', () => {
+    const fresh = new Date(Date.now() - 2 * 86_400_000).toISOString().slice(0, 10);
     const results = makeResults([
       { name: 'new-release', version: '1.0.0', releaseDate: fresh },
     ]);
@@ -246,7 +246,16 @@ describe('generateReport — age CSS classes', () => {
     assert.ok(html.includes('class="age-new"'), `Expected class="age-new" for date ${fresh}`);
   });
 
-  it('applies age-fresh (yellow) when a date is between 7 and 30 days old', () => {
+  it('applies age-orange when a date is between 4 and 7 days old', () => {
+    const recent = new Date(Date.now() - 5 * 86_400_000).toISOString().slice(0, 10);
+    const results = makeResults([
+      { name: 'orange-release', version: '1.0.0', releaseDate: recent },
+    ]);
+    const html = generateReport(results, new Set());
+    assert.ok(html.includes('class="age-orange"'), `Expected class="age-orange" for date ${recent}`);
+  });
+
+  it('applies age-fresh (yellow) when a date is between 8 and 30 days old', () => {
     const recent = new Date(Date.now() - 14 * 86_400_000).toISOString().slice(0, 10);
     const results = makeResults([
       { name: 'recent-release', version: '1.0.0', releaseDate: recent },
@@ -255,8 +264,8 @@ describe('generateReport — age CSS classes', () => {
     assert.ok(html.includes('class="age-fresh"'), `Expected class="age-fresh" for date ${recent}`);
   });
 
-  it('applies age-new (red) to a recent firstReleaseDate', () => {
-    const recent = new Date(Date.now() - 3 * 86_400_000).toISOString().slice(0, 10);
+  it('applies age-new (red) to a firstReleaseDate 3 days old or less', () => {
+    const recent = new Date(Date.now() - 2 * 86_400_000).toISOString().slice(0, 10);
     const results = makeResults([
       { name: 'brand-new', version: '0.1.0', releaseDate: '2020-01-01', firstReleaseDate: recent },
     ]);
@@ -272,8 +281,9 @@ describe('generateReport — age CSS classes', () => {
     // Check only the <tbody> — the embedded sort script legitimately contains
     // the age-class literals as JS strings, so we must not scan the whole doc.
     const tbody = html.slice(html.indexOf('<tbody>'), html.indexOf('</tbody>') + 8);
-    assert.ok(!tbody.includes('class="age-fresh"'), 'no age-fresh on a 5-year-old release');
-    assert.ok(!tbody.includes('class="age-new"'),   'no age-new on a 5-year-old release');
+    assert.ok(!tbody.includes('class="age-fresh"'),  'no age-fresh on a 5-year-old release');
+    assert.ok(!tbody.includes('class="age-orange"'), 'no age-orange on a 5-year-old release');
+    assert.ok(!tbody.includes('class="age-new"'),    'no age-new on a 5-year-old release');
   });
 });
 

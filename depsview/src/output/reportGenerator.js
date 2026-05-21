@@ -176,8 +176,9 @@ th.th-sort-asc::after  { content: ' ▲'; font-size: 0.75em; opacity: 0.8; }
 td { padding: 0.55rem 0.9rem; border-bottom: 1px solid var(--border); }
 tbody tr:last-child td { border-bottom: none; }
 tbody tr:hover td { background: #273548; }
-.age-fresh { color: #fcd34d; font-weight: 500; }
-.age-new   { color: var(--red); font-weight: 500; }
+.age-new    { color: var(--red);  font-weight: 500; }
+.age-orange { color: #fb923c;    font-weight: 500; }
+.age-fresh  { color: #fcd34d;    font-weight: 500; }
 .row-error td { color: var(--muted); font-style: italic; }
 table a { color: var(--accent); text-decoration: none; }
 table a:hover { text-decoration: underline; }
@@ -223,15 +224,11 @@ function renderRow(row, cfg) {
     return `<tr class="row-error">${nameCell}${errCell}</tr>`;
   }
 
-  // Red (.age-new) when < 7 days, yellow (.age-fresh) when < 30 days.
-  // Same logic for both date columns. Strict `<` so a date that's literally
-  // a week / month old isn't flagged — Math.floor inside daysSince can
-  // otherwise round a 30.5-day diff down to 30.
   const relAge     = daysSince(row.released);
-  const relClass   = relAge < 7 ? 'age-new' : relAge < 30 ? 'age-fresh' : null;
+  const relClass   = relAge <= 3 ? 'age-new' : relAge <= 7 ? 'age-orange' : relAge <= 30 ? 'age-fresh' : null;
   const firstAge   = daysSince(row.firstReleased);
   const firstClass = cfg.showFirst
-    ? (firstAge < 7 ? 'age-new' : firstAge < 30 ? 'age-fresh' : null)
+    ? (firstAge <= 3 ? 'age-new' : firstAge <= 7 ? 'age-orange' : firstAge <= 30 ? 'age-fresh' : null)
     : null;
   const { text: scoreText, className: scoreClass } = scoreDisplay(row.supplyChain);
 
@@ -363,8 +360,8 @@ function buildRow(r,cfg){
     return '<tr class="row-error"><td><a href="'+safeUrl(r.link)+'" target="_blank" rel="noopener noreferrer">'+esc(r.name)+'</a></td><td colspan="'+dataCols+'" title="'+esc(r.error)+'">'+esc(r.version||'error')+'</td></tr>';
   }
   var ra=daysSince(r.released),fa=daysSince(r.firstReleased);
-  var rcls=ra<7?'age-new':ra<30?'age-fresh':'';
-  var fcls=cfg.showFirst?(fa<7?'age-new':fa<30?'age-fresh':''):'';
+  var rcls=ra<=3?'age-new':ra<=7?'age-orange':ra<=30?'age-fresh':'';
+  var fcls=cfg.showFirst?(fa<=3?'age-new':fa<=7?'age-orange':fa<=30?'age-fresh':''):'';
   var rc=rcls?' class="'+rcls+'"':'';
   var fc=fcls?' class="'+fcls+'"':'';
   var first=cfg.showFirst?'<td'+fc+'>'+esc(r.firstReleased)+'</td>':'';
