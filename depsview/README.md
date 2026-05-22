@@ -409,8 +409,8 @@ The socket.dev API does not emit CORS headers, so browser requests must go throu
 ```bash
 cd worker
 pnpm install          # installs wrangler
-npx wrangler login    # first-time only
-npx wrangler deploy   # prints your Worker URL, e.g. https://socket-proxy.yourname.workers.dev
+pnpx wrangler login    # first-time only
+pnpx wrangler deploy   # prints your Worker URL, e.g. https://socket-proxy.yourname.workers.dev
 ```
 
 **Wire up the URL:**
