@@ -174,6 +174,10 @@ Scoped package names (e.g. `@babel/core`, `@types/node`) are fully supported thr
 
 Pass `--include-tests` to include `devDependencies` alongside `dependencies`.
 
+### Private registries
+
+Packages from private or custom registries are **automatically skipped**. When a `package-lock.json` or `pnpm-lock.yaml` contains a package whose `resolved` URL does not start with `https://registry.npmjs.org/`, that package is excluded and not looked up. The count of skipped packages is printed to stderr (CLI) or shown in the results when any are found (web).
+
 ## Python support
 
 ### Supported dependency file formats
@@ -198,6 +202,10 @@ All standard [PEP 440](https://peps.python.org/pep-0440/) specifiers are support
 ### Download statistics
 
 Pass `--download-stats` (or `--ds`) to also fetch monthly download counts from [pypistats.org](https://pypistats.org/). Disabled by default to avoid rate-limit errors on large projects.
+
+### URL-pinned packages
+
+[PEP 508](https://peps.python.org/pep-0508/) URL requirements (`package @ https://...`) are **silently skipped** — they are pinned to a specific URL rather than a registry and cannot be resolved via PyPI. This includes wheel URLs, VCS references (`@ git+https://...`), and local file paths (`@ file://...`). Plain package names and version constraints are unaffected.
 
 ## Go support
 
@@ -229,6 +237,10 @@ For each module, depsview queries the [Go module proxy](https://proxy.golang.org
 Module paths with uppercase letters are encoded per the GOPROXY protocol (e.g. `github.com/BurntSushi/toml` → `github.com/!burnt!sushi/toml`). The "First Release" column is reported as **unknown** for Go modules to avoid one extra request per package; the "Downloads/mo" column does not apply because the proxy does not expose install counts. The `--include-tests` flag has no effect on Go projects — `go.sum` and `go.mod` do not distinguish test-only dependencies.
 
 The supply chain score (with `--socket-key` / `--socket-org`) works for Go modules and is fetched using the `pkg:golang/...` PURL type.
+
+### Private modules
+
+Modules whose path hostname is not a known public host are **automatically skipped** — they cannot be resolved via `proxy.golang.org`. Public hosts include `github.com`, `golang.org`, `google.golang.org`, `go.uber.org`, and many others. Internal or corporate module paths (e.g. `corp.internal/pkg`) are excluded and the count of skipped modules is printed to stderr (CLI) or shown in the results header (web).
 
 ## GitHub URL support
 

@@ -24,6 +24,8 @@ import {
 import { normalizePackageName } from '../python/pypiClient.js';
 import { isTestDirectory, isTestRequirementsFile } from '../python/testFilter.js';
 import { parseGoSum, parseGoMod } from '../go/parserCore.js';
+import { partitionNpmPackages } from '../npm/registryFilter.js';
+import { partitionGoModules    } from '../go/moduleFilter.js';
 
 /** Recognised dependency filenames, checked case-sensitively against the repo listing. */
 const DEP_FILENAMES = new Set(['pyproject.toml', 'manifest.json', 'requirements.txt', 'requirements_all.txt', 'setup.cfg', 'Pipfile']);
@@ -291,15 +293,20 @@ async function parseGithubNpmDependencies({ owner, repo, ref, subpath }, options
     throw new Error(`Failed to fetch ${filePath} from ${owner}/${repo}`);
   }
 
-  const deps = preferred === 'package-lock.json' ? parsePackageLock(content, includeTests)
-    : preferred === 'pnpm-lock.yaml'             ? parsePnpmLock(content, includeTests)
+  const isLockFile = preferred === 'package-lock.json' || preferred === 'pnpm-lock.yaml';
+  const rawDeps = preferred === 'package-lock.json' ? parsePackageLock(content, includeTests)
+    : preferred === 'pnpm-lock.yaml'               ? parsePnpmLock(content, includeTests)
     : parsePackageJson(content, includeTests);
 
   const note = preferred === 'pnpm-lock.yaml' && getPnpmMajorVersion(content) >= 9
     ? 'pnpm-lock.yaml v9 does not flag packages as dev-only — all installed packages are listed, including test and dev dependencies.'
     : null;
 
-  return { deps, source: preferred, note };
+  if (isLockFile) {
+    const { publicPkgs, privateCount } = partitionNpmPackages(rawDeps);
+    return { deps: publicPkgs, source: preferred, note, privateCount };
+  }
+  return { deps: rawDeps, source: preferred, note, privateCount: 0 };
 }
 
 /**
@@ -337,8 +344,9 @@ async function parseGithubGoDependencies({ owner, repo, ref, subpath }) {
     throw new Error(`Failed to fetch ${filePath} from ${owner}/${repo}`);
   }
 
-  const deps = preferred === 'go.sum' ? parseGoSum(content) : parseGoMod(content);
-  return { deps, source: preferred };
+  const rawDeps = preferred === 'go.sum' ? parseGoSum(content) : parseGoMod(content);
+  const { publicMods, privateCount } = partitionGoModules(rawDeps);
+  return { deps: publicMods, source: preferred, privateCount };
 }
 
 export { parseGithubDependencies, parseGithubNpmDependencies, parseGithubGoDependencies, resolvePath, mergeDeps };

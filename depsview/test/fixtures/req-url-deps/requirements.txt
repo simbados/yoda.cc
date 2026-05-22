@@ -1,0 +1,9 @@
+requests>=2.28.0
+click>=8.0.0
+# PEP 508 URL requirement — private wheel, should be skipped
+internal-auth @ https://artifacts.corp.internal/internal-auth-1.0.0.whl
+# VCS URL requirement — should also be skipped
+mylib @ git+https://github.com/corp/mylib.git@v1.2.3
+# bare URL (already handled) — skipped
+https://example.com/legacy.tar.gz
+flask>=2.0.0

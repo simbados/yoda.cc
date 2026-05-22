@@ -11,6 +11,7 @@ import { parsePackageJson } from './parserCore.js';
 import { parsePackageLock } from './lockParser.js';
 import { parsePnpmLock, getPnpmMajorVersion } from './pnpmLockParser.js';
 import { normalizePackageName } from './depResolver.js';
+import { partitionNpmPackages } from './registryFilter.js';
 
 /**
  * Reads and parses npm dependency files from a project directory.
@@ -28,7 +29,8 @@ function parseDependencyFile(projectPath, options = {}) {
   const lockPath = path.join(projectPath, 'package-lock.json');
   if (fs.existsSync(lockPath) && !fs.statSync(lockPath).isDirectory()) {
     try {
-      return { deps: parsePackageLock(fs.readFileSync(lockPath, 'utf8'), includeTests), source: 'package-lock.json', note: null };
+      const { publicPkgs, privateCount } = partitionNpmPackages(parsePackageLock(fs.readFileSync(lockPath, 'utf8'), includeTests));
+      return { deps: publicPkgs, source: 'package-lock.json', note: null, privateCount };
     } catch (err) {
       throw new Error(`Failed to parse package-lock.json: ${err.message}`);
     }
@@ -41,7 +43,8 @@ function parseDependencyFile(projectPath, options = {}) {
       const note = getPnpmMajorVersion(content) >= 9
         ? 'pnpm-lock.yaml v9 does not flag packages as dev-only — all installed packages are listed, including test and dev dependencies.'
         : null;
-      return { deps: parsePnpmLock(content, includeTests), source: 'pnpm-lock.yaml', note };
+      const { publicPkgs, privateCount } = partitionNpmPackages(parsePnpmLock(content, includeTests));
+      return { deps: publicPkgs, source: 'pnpm-lock.yaml', note, privateCount };
     } catch (err) {
       throw new Error(`Failed to parse pnpm-lock.yaml: ${err.message}`);
     }
@@ -50,7 +53,7 @@ function parseDependencyFile(projectPath, options = {}) {
   const pkgPath = path.join(projectPath, 'package.json');
   if (fs.existsSync(pkgPath) && !fs.statSync(pkgPath).isDirectory()) {
     try {
-      return { deps: parsePackageJson(fs.readFileSync(pkgPath, 'utf8'), includeTests), source: 'package.json', note: null };
+      return { deps: parsePackageJson(fs.readFileSync(pkgPath, 'utf8'), includeTests), source: 'package.json', note: null, privateCount: 0 };
     } catch (err) {
       throw new Error(`Failed to parse package.json: ${err.message}`);
     }

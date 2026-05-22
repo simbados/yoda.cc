@@ -39,6 +39,18 @@ describe('parseDependencyString', () => {
     assert.equal(parseDependencyString('https://example.com/pkg.tar.gz'), null);
   });
 
+  it('returns null for a PEP 508 URL requirement (package @ https://...)', () => {
+    assert.equal(parseDependencyString('requests @ https://internal.server/requests.whl'), null);
+  });
+
+  it('returns null for a PEP 508 URL requirement with a git VCS URL', () => {
+    assert.equal(parseDependencyString('mylib @ git+https://github.com/corp/mylib.git@main'), null);
+  });
+
+  it('returns null for a PEP 508 URL requirement with a file URL', () => {
+    assert.equal(parseDependencyString('mylib @ file:///opt/packages/mylib.whl'), null);
+  });
+
   it('returns null for empty string', () => {
     assert.equal(parseDependencyString(''), null);
   });

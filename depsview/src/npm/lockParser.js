@@ -44,7 +44,7 @@ function parseV2(data, includeTests) {
     const dedupeKey = `${name.toLowerCase()}@${pkg.version}`;
     if (!seen.has(dedupeKey)) {
       seen.add(dedupeKey);
-      results.push({ name, version: pkg.version });
+      results.push({ name, version: pkg.version, resolved: pkg.resolved ?? null });
     }
   }
 
@@ -67,7 +67,7 @@ function collectV1(deps, includeTests, seen, results) {
       const dedupeKey = `${name.toLowerCase()}@${pkg.version}`;
       if (!seen.has(dedupeKey)) {
         seen.add(dedupeKey);
-        results.push({ name, version: pkg.version });
+        results.push({ name, version: pkg.version, resolved: pkg.resolved ?? null });
       }
     }
     if (pkg.dependencies) collectV1(pkg.dependencies, includeTests, seen, results);

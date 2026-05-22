@@ -47,6 +47,32 @@ describe('go parseDependencyFile', () => {
   });
 });
 
+// ── private module filtering ──────────────────────────────────────────────────
+
+describe('go parseDependencyFile — private filtering', () => {
+  it('returns privateCount 0 for an all-public go.sum', () => {
+    const dir = tmpProject({ 'go.sum': path.join(FIXTURES, 'go-sum', 'go.sum') });
+    const { privateCount } = parseDependencyFile(dir);
+    assert.equal(privateCount, 0);
+  });
+
+  it('excludes modules with private hostnames', () => {
+    const dir = tmpProject({ 'go.sum': path.join(FIXTURES, 'go-private', 'go.sum') });
+    const { deps, privateCount } = parseDependencyFile(dir);
+    const names = deps.map(d => d.name);
+    assert.equal(privateCount, 1, 'one private module should be skipped');
+    assert.ok(names.includes('github.com/gin-gonic/gin'),  'public module should be included');
+    assert.ok(names.includes('golang.org/x/crypto'),       'public module should be included');
+    assert.ok(!names.includes('corp.internal/secret-pkg'), 'private module should be excluded');
+  });
+
+  it('returns privateCount 0 for all-public go.mod', () => {
+    const dir = tmpProject({ 'go.mod': path.join(FIXTURES, 'go-mod', 'go.mod') });
+    const { privateCount } = parseDependencyFile(dir);
+    assert.equal(privateCount, 0);
+  });
+});
+
 // ── readDirectNamesFromGoMod ──────────────────────────────────────────────────
 
 describe('readDirectNamesFromGoMod', () => {

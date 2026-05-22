@@ -302,6 +302,30 @@ describe('requirements.txt — comments and blank lines', () => {
   });
 });
 
+// ── requirements.txt — PEP 508 URL requirements ───────────────────────────────
+
+describe('requirements.txt — PEP 508 URL requirements', () => {
+  test('skips "package @ https://..." URL requirements', () => {
+    const { deps } = parseDependencyFile(path.join(fixtures, 'req-url-deps'));
+    const names = deps.map(d => d.name);
+    assert.ok(!names.includes('internal-auth'), 'private wheel URL dep should be skipped');
+    assert.ok(!names.includes('mylib'),         'VCS URL dep should be skipped');
+  });
+
+  test('keeps plain package deps alongside URL-pinned ones', () => {
+    const { deps } = parseDependencyFile(path.join(fixtures, 'req-url-deps'));
+    const names = deps.map(d => d.name);
+    assert.ok(names.includes('requests'), 'requests should be kept');
+    assert.ok(names.includes('click'),    'click should be kept');
+    assert.ok(names.includes('flask'),    'flask should be kept');
+  });
+
+  test('yields exactly 3 deps from a file with 2 URL-pinned and 1 bare-URL entries', () => {
+    const { deps } = parseDependencyFile(path.join(fixtures, 'req-url-deps'));
+    assert.equal(deps.length, 3);
+  });
+});
+
 // ── parseDependencyFile: pyproject.toml PEP 621 ───────────────────────────────
 
 describe('pyproject.toml — PEP 621 [project] dependencies', () => {

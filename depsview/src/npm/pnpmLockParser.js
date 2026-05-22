@@ -31,7 +31,11 @@ function parsePackageKey(key, majorVersion) {
   let s = key.startsWith('/') ? key.slice(1) : key;
 
   // Strip peer-dep parenthetical suffix: name@1.0.0(peer@2.0.0) → name@1.0.0
-  s = s.replace(/\([^)]*\)$/, '');
+  // Use lastIndexOf instead of regex to avoid O(n²) backtracking on crafted input.
+  if (s.endsWith(')')) {
+    const open = s.lastIndexOf('(');
+    if (open !== -1) s = s.slice(0, open);
+  }
 
   if (majorVersion <= 5) {
     // v5: /name/version  or  /@scope/name/version
@@ -135,10 +139,15 @@ function parsePnpmLock(content, includeTests = false) {
         flushEntry();
         const key    = trimmed.slice(0, -1).replace(/^['"]|['"]$/g, '');
         const parsed = parsePackageKey(key, majorVersion);
-        currentEntry = parsed ? { ...parsed, dev: false } : null;
+        currentEntry = parsed ? { ...parsed, dev: false, resolved: null } : null;
       } else if (indent === 4 && currentEntry) {
         if      (trimmed === 'dev: true')  currentEntry.dev = true;
         else if (trimmed === 'dev: false') currentEntry.dev = false;
+        else {
+          // resolution: {tarball: URL} or resolution: {tarball: URL, integrity: ...}
+          const tarballMatch = trimmed.match(/^resolution:\s*\{[^}]*tarball:\s*([^,}\s]+)/);
+          if (tarballMatch) currentEntry.resolved = tarballMatch[1].replace(/^['"]|['"]$/g, '');
+        }
       }
       continue;
     }
@@ -166,7 +175,7 @@ function parsePnpmLock(content, includeTests = false) {
   for (const entry of pkgMap.values()) {
     const isDev = majorVersion >= 9 ? devNames.has(entry.name) : entry.dev;
     if (!includeTests && isDev) continue;
-    results.push({ name: entry.name, version: entry.version });
+    results.push({ name: entry.name, version: entry.version, resolved: entry.resolved ?? null });
   }
   return results;
 }

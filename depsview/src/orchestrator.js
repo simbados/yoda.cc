@@ -174,10 +174,10 @@ async function directNamesForSection(ecosystem, deps, source, ctx, opts) {
  */
 async function buildSection(ecosystem, ctx, opts) {
   try {
-    const { deps, source, note = null } = await parseSection(ecosystem, ctx, opts);
+    const { deps, source, note = null, privateCount = 0 } = await parseSection(ecosystem, ctx, opts);
     const results       = await resolveSectionDeps(ecosystem, deps, opts);
     const directNames   = await directNamesForSection(ecosystem, deps, source, ctx, opts);
-    return { ecosystem, source, deps, results, directNames, note };
+    return { ecosystem, source, deps, results, directNames, note, privateCount };
   } catch (err) {
     return { ecosystem, error: err.message };
   }

@@ -133,6 +133,15 @@
       ecosystem and rendered as separate sections, sorted independently.
     </p>
 
+    <p class="note">
+      Packages from private or non-public sources are automatically skipped and not looked up.
+      npm packages whose lock-file <code>resolved</code> URL does not point to <code>registry.npmjs.org</code>
+      and Go modules whose hostname is not a known public proxy host are excluded — the count of
+      skipped entries is shown in the results when any are found.
+      Python packages declared as PEP 508 URL requirements (<code>pkg @ https://…</code>) are
+      also skipped silently.
+    </p>
+
     <div id="error" hidden></div>
     <div id="progress" hidden></div>
     <div id="results" hidden></div>

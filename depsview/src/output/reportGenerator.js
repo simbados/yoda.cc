@@ -317,9 +317,14 @@ function renderSection(ecosystem, section, showHeader, socketScores, downloadSta
     ? `<tr><td colspan="${colDefs.length}">No dependencies found.</td></tr>`
     : rows.map(r => renderRow(r, cfg)).join('\n');
 
-  const noteHtml = section.note
-    ? `<p class="note-warning">${escapeHtml(section.note)}</p>`
-    : '';
+  const privateCount = section.privateCount ?? 0;
+  const privateNote = privateCount > 0
+    ? `${privateCount} private package${privateCount === 1 ? '' : 's'} skipped (not on public registry).`
+    : null;
+  const noteHtml = [section.note, privateNote]
+    .filter(Boolean)
+    .map(n => `<p class="note-warning">${escapeHtml(n)}</p>`)
+    .join('\n');
 
   const html = `<section class="section" data-section="${escapeHtml(sectionId)}">
   ${headerHtml}

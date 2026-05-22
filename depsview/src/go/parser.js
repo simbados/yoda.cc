@@ -8,6 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseGoSum, parseGoMod } from './parserCore.js';
+import { partitionGoModules } from './moduleFilter.js';
 
 /**
  * Detects and parses the Go dependency file in a given project directory.
@@ -33,8 +34,8 @@ export function parseDependencyFile(projectPath) {
     if (fs.statSync(fullPath).isDirectory()) continue;
     try {
       const content = fs.readFileSync(fullPath, 'utf8');
-      const deps = parse(content);
-      return { deps, source: file };
+      const { publicMods, privateCount } = partitionGoModules(parse(content));
+      return { deps: publicMods, source: file, privateCount };
     } catch (err) {
       throw new Error(`Failed to parse ${file}: ${err.message}`);
     }

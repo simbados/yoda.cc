@@ -168,6 +168,7 @@ function formatTable(results, directNames, opts = {}) {
     socketScores   = null,
     source         = null,
     note           = null,
+    privateCount   = 0,
     firstRelease   = true,
     printHeader    = false,
   } = opts;
@@ -176,6 +177,7 @@ function formatTable(results, directNames, opts = {}) {
     console.log(`=== ${ecosystem} ===`);
   }
   if (note) console.log(`[note] ${note}`);
+  if (privateCount > 0) console.log(`[note] ${privateCount} private package${privateCount === 1 ? '' : 's'} skipped (not on public registry).`);
 
   const rows = sortedResults(results, socketScores ?? new Map(), { ecosystem });
   if (rows.length === 0) {
@@ -276,7 +278,7 @@ function formatMulti(sections, opts = {}) {
   const printHeader = present.length >= 2;
 
   for (const ecosystem of present) {
-    const { results, directNames, source, note } = sections.get(ecosystem);
+    const { results, directNames, source, note, privateCount = 0 } = sections.get(ecosystem);
     formatTable(results, directNames, {
       ecosystem,
       // Per-ecosystem column rules:
@@ -284,6 +286,7 @@ function formatMulti(sections, opts = {}) {
       socketScores,
       source,
       note,
+      privateCount,
       firstRelease: ecosystem !== 'go',
       printHeader,
     });

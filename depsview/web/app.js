@@ -233,10 +233,10 @@ function renderSection(container, cfg) {
     sectionEl.appendChild(sourceEl);
   }
 
-  if (cfg.note) {
+  for (const noteText of [cfg.note, cfg.privateCount > 0 ? `${cfg.privateCount} private package${cfg.privateCount === 1 ? '' : 's'} skipped (not on public registry).` : null].filter(Boolean)) {
     const noteEl = document.createElement('p');
     noteEl.className = 'note note-warning';
-    noteEl.textContent = `ⓘ ${cfg.note}`;
+    noteEl.textContent = `ⓘ ${noteText}`;
     sectionEl.appendChild(noteEl);
   }
 
@@ -369,7 +369,7 @@ function renderSectionError(container, ecosystem, message, showHeader) {
 async function resolveEcosystem(ecosystem, githubRef, opts) {
   const { includeTests, onProgress, packageInputs } = opts;
 
-  let deps, source, note = null;
+  let deps, source, note = null, privateCount = 0;
   if (packageInputs && packageInputs.length > 0) {
     source = 'package search';
     deps = packageInputs.map(p => ecosystem === 'go'
@@ -377,9 +377,11 @@ async function resolveEcosystem(ecosystem, githubRef, opts) {
       : { name: p.name, versionSpec: p.version }
     );
   } else if (ecosystem === 'npm') {
-    ({ deps, source, note } = await parseGithubNpmDependencies(githubRef, { includeTests }));
+    ({ deps, source, note, privateCount } = await parseGithubNpmDependencies(githubRef, { includeTests }));
+    if (privateCount > 0) onProgress(`[npm] Skipped ${privateCount} private package${privateCount === 1 ? '' : 's'} (not on public registry).\n`);
   } else if (ecosystem === 'go') {
-    ({ deps, source } = await parseGithubGoDependencies(githubRef));
+    ({ deps, source, privateCount } = await parseGithubGoDependencies(githubRef));
+    if (privateCount > 0) onProgress(`[go] Skipped ${privateCount} private module${privateCount === 1 ? '' : 's'} (not on public module proxy).\n`);
   } else {
     ({ deps, source } = await parseGithubDependencies(githubRef, { includeTests }));
   }
@@ -419,7 +421,7 @@ async function resolveEcosystem(ecosystem, githubRef, opts) {
     directCount = [...results.values()].filter(r => directNames.has(r.name.toLowerCase())).length;
   }
 
-  return { ecosystem, deps, results, directCount, source, note };
+  return { ecosystem, deps, results, directCount, source, note, privateCount };
 }
 
 // ── Browser initialisation ────────────────────────────────────────────────────
@@ -725,6 +727,7 @@ if (typeof document !== 'undefined') {
             directCount:     section.directCount,
             source:          section.source,
             note:            section.note,
+            privateCount:    section.privateCount ?? 0,
             sortCol,
             sortDir,
             showSupplyChain,

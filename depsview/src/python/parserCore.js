@@ -62,6 +62,9 @@ function parseDependencyString(depStr) {
   const name = nameMatch[1];
   let rest = noExtras.slice(nameMatch[0].length).trim();
 
+  // Skip PEP 508 URL requirements: "requests @ https://..."
+  if (rest.startsWith('@')) return null;
+
   // Strip wrapping parentheses: "requests (>=2.0)" → ">=2.0"
   if (rest.startsWith('(') && rest.endsWith(')')) {
     rest = rest.slice(1, -1).trim();
