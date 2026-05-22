@@ -27,10 +27,13 @@
       </div>
       <h1>Dependency Viewer</h1>
     </header>
+
     <p class="tagline">Analyse Python, npm, and Go dependencies from any public GitHub repository.</p>
-    <p class="tagline-sub">All processing happens in your browser. The only external calls are to <code>api.github.com</code>, <code>pypi.org</code>, <code>registry.npmjs.org</code>, and <code>proxy.golang.org</code>. When Socket.dev credentials are provided, requests are also sent to the configured proxy Worker and <code>api.socket.dev</code>.</p>
+    <p class="tagline-sub">External calls go only to <code>api.github.com</code>, <code>pypi.org</code>, <code>registry.npmjs.org</code>, and <code>proxy.golang.org</code>. With Socket.dev credentials, also to the configured proxy Worker and <code>api.socket.dev</code>.</p>
 
     <form id="form" autocomplete="off">
+
+      <!-- ── Main action ─────────────────────────────────────────────────── -->
       <div class="option-row ecosystem-row">
         <span class="option-label">Ecosystem:</span>
         <div class="ecosystem-picker" role="group" aria-label="Ecosystem filter">
@@ -40,6 +43,7 @@
           <label class="eco-btn"><input type="radio" name="ecosystem" value="go"><span>Go</span></label>
         </div>
       </div>
+
       <div class="input-row" id="url-row">
         <input
           id="url-input"
@@ -49,6 +53,7 @@
         >
         <button id="submit-btn" type="submit">Analyse</button>
       </div>
+
       <div class="pkg-input-row" id="pkg-row" hidden>
         <textarea
           id="pkg-input"
@@ -57,90 +62,95 @@
         ></textarea>
         <button id="pkg-submit-btn" type="submit">Analyse</button>
       </div>
-      <div class="input-row token-row">
-        <input
-          id="token-input"
-          type="password"
-          placeholder="GitHub token (optional — raises rate limit to 5 000 req/hr)"
-          spellcheck="false"
-          autocomplete="off"
-        >
-      </div>
-      <div class="option-row">
-        <input id="remember-token" type="checkbox">
-        <label for="remember-token">Remember GitHub token</label>
-      </div>
-      <p class="note">
-        The GitHub API allows 60 unauthenticated requests per hour.
-        Provide a personal access token above to raise this to 5 000 req/hr and to access private repositories.
-        Only the target directory and up to two levels of subdirectories are scanned for dependency files.
-      </p>
-      <p class="token-note"><strong>Your token is sent only to <code>api.github.com</code> and never transmitted to any other server.</strong></p>
-      <p class="storage-note" id="storage-note" hidden>
-        Saved in your browser's <strong>local storage</strong> — persists between page visits and is readable by any JavaScript running on this page.
-        Uncheck and submit to remove it.
-      </p>
-      <div class="input-row token-row">
-        <input
-          id="socket-key-input"
-          type="password"
-          placeholder="Socket.dev API key (optional — enables Supply Chain scores)"
-          spellcheck="false"
-          autocomplete="off"
-        >
-      </div>
-      <div class="input-row token-row">
-        <input
-          id="socket-org-input"
-          type="text"
-          placeholder="Socket.dev org slug"
-          spellcheck="false"
-          autocomplete="off"
-        >
-      </div>
-      <div class="option-row align-top">
-        <input id="socket-proxy-consent" type="checkbox">
-        <label for="socket-proxy-consent">I understand my API key is forwarded through the Cloudflare Worker at <code>socket-proxy.yoda.cc</code> to <code>api.socket.dev</code></label>
-      </div>
-      <div class="option-row">
-        <input id="remember-socket" type="checkbox">
-        <label for="remember-socket">Remember Socket key and org slug</label>
-      </div>
-      <p class="storage-note" id="socket-storage-note" hidden>
-        Saved in your browser's <strong>local storage</strong>. Your API key is sent only to the configured proxy Worker, which forwards it to <code>api.socket.dev</code>.
-        Uncheck and submit to remove it.
-      </p>
+
       <div class="option-row">
         <input id="include-tests" type="checkbox">
         <label for="include-tests">Include test &amp; dev dependencies</label>
       </div>
+
+      <!-- ── GitHub authentication ───────────────────────────────────────── -->
+      <div class="form-card">
+        <p class="form-card-label">GitHub authentication <span class="form-card-optional">optional</span></p>
+        <div class="input-row token-row">
+          <input
+            id="token-input"
+            type="password"
+            placeholder="Personal access token"
+            spellcheck="false"
+            autocomplete="off"
+          >
+        </div>
+        <div class="option-row">
+          <input id="remember-token" type="checkbox">
+          <label for="remember-token">Remember token</label>
+        </div>
+        <p class="storage-note" id="storage-note" hidden>
+          Saved in your browser's <strong>local storage</strong> — readable by any JavaScript on this page. Uncheck and submit to remove.
+        </p>
+        <p class="form-card-note">
+          60 req/hr without a token · 5 000 req/hr with one · required for private repos ·
+          token sent only to <code>api.github.com</code>
+        </p>
+      </div>
+
+      <!-- ── Socket.dev supply chain ─────────────────────────────────────── -->
+      <div class="form-card">
+        <p class="form-card-label">Socket.dev supply chain <span class="form-card-optional">optional</span></p>
+        <div class="input-row token-row">
+          <input
+            id="socket-key-input"
+            type="password"
+            placeholder="API key"
+            spellcheck="false"
+            autocomplete="off"
+          >
+        </div>
+        <div class="input-row token-row">
+          <input
+            id="socket-org-input"
+            type="text"
+            placeholder="Org slug"
+            spellcheck="false"
+            autocomplete="off"
+          >
+        </div>
+        <div class="option-row align-top">
+          <input id="socket-proxy-consent" type="checkbox">
+          <label for="socket-proxy-consent">I understand my API key is forwarded through the Cloudflare Worker at <code>socket-proxy.yoda.cc</code> to <code>api.socket.dev</code></label>
+        </div>
+        <div class="option-row">
+          <input id="remember-socket" type="checkbox">
+          <label for="remember-socket">Remember key and org</label>
+        </div>
+        <p class="storage-note" id="socket-storage-note" hidden>
+          Saved in your browser's <strong>local storage</strong>. Your API key is sent only to the configured proxy Worker, which forwards it to <code>api.socket.dev</code>. Uncheck and submit to remove.
+        </p>
+      </div>
+
     </form>
 
-    <p class="note">
-      Supply chain scores (socket.dev) require a Socket.dev API key and org slug — enter them above to add a Supply Chain column to the results.
-      Python download statistics (pypistats.org) are only available in the CLI.
-    </p>
-
-    <p class="legend">
-      <span class="legend-swatch age-new">■</span> Released or first appeared 3 days ago or less &nbsp;&nbsp;
-      <span class="legend-swatch age-orange">■</span> Released or first appeared 7 days ago or less &nbsp;&nbsp;
-      <span class="legend-swatch age-fresh">■</span> Released or first appeared 30 days ago or less
-    </p>
-
-    <p class="note">
-      Projects with files from more than one ecosystem (e.g. a repo with both
-      <code>package.json</code> and <code>go.mod</code>) are resolved per
-      ecosystem and rendered as separate sections, sorted independently.
-    </p>
-
-    <p class="note">
-      Packages from private or non-public sources are automatically skipped and not looked up.
-      npm packages whose lock-file <code>resolved</code> URL does not point to <code>registry.npmjs.org</code>
-      and Go modules whose hostname is not a known public proxy host are excluded — the count of
-      skipped entries is shown in the results when any are found.
-      Python packages declared as PEP 508 URL requirements (<code>pkg @ https://…</code>) are
-      also skipped silently.
-    </p>
+    <!-- ── How it works ───────────────────────────────────────────────────── -->
+    <details class="info-details">
+      <summary>How it works</summary>
+      <div class="info-details-body">
+        <p class="legend">
+          <span class="legend-swatch age-new">■</span> Released or first appeared 3 days ago or less &nbsp;&nbsp;
+          <span class="legend-swatch age-orange">■</span> 7 days or less &nbsp;&nbsp;
+          <span class="legend-swatch age-fresh">■</span> 30 days or less
+        </p>
+        <p class="note">
+          Polyglot repos (e.g. both <code>package.json</code> and <code>go.mod</code>) are resolved per ecosystem and rendered as separate sections, sorted independently.
+        </p>
+        <p class="note">
+          npm and Go packages from private registries are automatically skipped — the count of excluded entries is shown in the results.
+          Python PEP 508 URL requirements (<code>pkg @ https://…</code>) are silently skipped.
+        </p>
+        <p class="note">
+          Supply chain scores require a Socket.dev API key and org slug (enter above to add a Supply Chain column).
+          Python download statistics are only available in the CLI.
+        </p>
+      </div>
+    </details>
 
     <div id="error" hidden></div>
     <div id="progress" hidden></div>

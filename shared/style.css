@@ -538,6 +538,78 @@ th.th-sort-asc::after  { content: ' ▲'; font-size: 0.75em; opacity: 0.8; }
 
 #pkg-submit-btn:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
 
+/* ── Form cards (optional sections) ──────────────────────────────────────── */
+.form-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.1rem 1.25rem 1.25rem;
+  margin-top: 1.25rem;
+}
+
+.form-card-label {
+  font-family: ui-monospace, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 0.85rem;
+}
+
+.form-card-optional {
+  color: var(--muted);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.78rem;
+}
+
+.form-card .token-row { margin-top: 0; }
+.form-card .token-row + .token-row { margin-top: 0.5rem; }
+.form-card .option-row { margin-top: 0.65rem; }
+.form-card .storage-note { margin-top: 0.35rem; }
+
+.form-card-note {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-top: 0.85rem;
+  line-height: 1.55;
+  opacity: 0.8;
+}
+
+/* ── How it works disclosure ──────────────────────────────────────────────── */
+.info-details {
+  margin-top: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.info-details summary {
+  padding: 0.6rem 1rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: var(--muted);
+  user-select: none;
+  list-style: none;
+}
+
+.info-details summary::-webkit-details-marker { display: none; }
+.info-details summary::before { content: '▸'; font-size: 1.4em; margin-right: 0.45rem; vertical-align: -0.05em; }
+.info-details[open] > summary::before { content: '▾'; }
+.info-details summary:hover { color: var(--text); }
+
+.info-details-body {
+  padding: 0.25rem 1rem 1rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.info-details-body .note,
+.info-details-body .legend { margin: 0; }
+
 /* ── Ecosystem picker ─────────────────────────────────────────────────────── */
 .ecosystem-row { flex-wrap: wrap; gap: 0.5rem 0.75rem; margin-bottom: 0.75rem; }
 
