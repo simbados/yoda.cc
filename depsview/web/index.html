@@ -82,7 +82,7 @@
         </div>
         <div class="option-row">
           <input id="remember-token" type="checkbox">
-          <label for="remember-token">Remember token</label>
+          <label for="remember-token">Remember token <span class="option-hint">· local storage only</span></label>
         </div>
         <p class="storage-note" id="storage-note" hidden>
           Saved in your browser's <strong>local storage</strong> — readable by any JavaScript on this page. Uncheck and submit to remove.
@@ -133,11 +133,6 @@
     <details class="info-details">
       <summary>How it works</summary>
       <div class="info-details-body">
-        <p class="legend">
-          <span class="legend-swatch age-new">■</span> Released or first appeared 3 days ago or less &nbsp;&nbsp;
-          <span class="legend-swatch age-orange">■</span> 7 days or less &nbsp;&nbsp;
-          <span class="legend-swatch age-fresh">■</span> 30 days or less
-        </p>
         <p class="note">
           Polyglot repos (e.g. both <code>package.json</code> and <code>go.mod</code>) are resolved per ecosystem and rendered as separate sections, sorted independently.
         </p>
@@ -151,6 +146,12 @@
         </p>
       </div>
     </details>
+
+    <p class="legend">
+      <span class="legend-swatch age-new">■</span> Released or first appeared 3 days ago or less &nbsp;&nbsp;
+      <span class="legend-swatch age-orange">■</span> 7 days or less &nbsp;&nbsp;
+      <span class="legend-swatch age-fresh">■</span> 30 days or less
+    </p>
 
     <div id="error" hidden></div>
     <div id="progress" hidden></div>

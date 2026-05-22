@@ -263,6 +263,16 @@ h1 {
 .tagline     { color: var(--muted); margin: 0 0 0.35rem; font-size: 1rem; }
 .tagline-sub { font-size: 0.875rem; color: var(--muted); margin: 0 0 2.5rem; opacity: 0.75; }
 
+/* Inline code */
+code {
+  font-family: ui-monospace, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.875em;
+  color: #a5b4fc;
+  background: rgba(129, 140, 248, 0.1);
+  border-radius: 4px;
+  padding: 0.1em 0.4em;
+}
+
 /* ── Form ─────────────────────────────────────────────────────────────────── */
 .input-row {
   display: flex;
@@ -347,6 +357,7 @@ h1 {
 }
 
 .option-row input[type="checkbox"] { cursor: pointer; width: 1em; height: 1em; accent-color: var(--accent); }
+.option-hint { font-size: 0.8em; opacity: 0.6; }
 .option-row label { cursor: pointer; }
 .option-row.align-top { align-items: flex-start; }
 .option-row.align-top input[type="checkbox"] { margin-top: 0.4rem; }
@@ -374,7 +385,7 @@ h1 {
   margin: 0 0 0.85rem;
 }
 
-.legend      { font-size: 0.8rem; color: var(--muted); margin: 0.5rem 0 0; }
+.legend      { font-size: 0.8rem; color: var(--muted); margin: 1.25rem 0 0; }
 .legend-swatch { font-style: normal; }
 
 /* ── Error banner ─────────────────────────────────────────────────────────── */
