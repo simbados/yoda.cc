@@ -36,6 +36,13 @@ export const ECOSYSTEM_ORDER = ['npm', 'python', 'go'];
 const SOCKET_PROXY_BASE = 'https://socket-proxy.yoda.cc';
 
 /**
+ * Base URL of the Cloudflare Worker CORS proxy for pypistats.org.
+ * pypistats.org does not emit CORS headers, so the browser cannot call it directly.
+ * The Worker adds CORS headers and forwards the response unchanged.
+ */
+const PYPISTATS_PROXY_BASE = 'https://socket-proxy.yoda.cc/pypistats/packages';
+
+/**
  * Maps the internal ecosystem identifier to the PURL type expected by socket.dev.
  * Go modules use 'golang', Python packages use 'pypi'.
  */
@@ -200,7 +207,8 @@ function addCell(row, text) {
  * @param {string|null} cfg.note              - informational note (e.g. pnpm-lock v9)
  * @param {string|null} cfg.sortCol           - current sort column for sort indicators
  * @param {string|null} cfg.sortDir           - 'asc' or 'desc'
- * @param {boolean}     [cfg.showSupplyChain] - when true, render a Supply Chain % column
+ * @param {boolean}     [cfg.showSupplyChain]  - when true, render a Supply Chain % column
+ * @param {boolean}     [cfg.showDownloads]    - when true, render a Downloads/mo column
  * @returns {HTMLElement} the section element
  */
 function renderSection(container, cfg) {
@@ -260,6 +268,7 @@ function renderSection(container, cfg) {
   ];
   if (showFirst) COL_DEFS.push(['First Release', 'firstReleaseDate']);
   COL_DEFS.push(['Releases', 'releaseCount']);
+  if (cfg.showDownloads)   COL_DEFS.push(['Downloads/mo', 'downloadsLastMonth']);
   if (cfg.showSupplyChain) COL_DEFS.push(['Supply Chain', 'supplyChain']);
 
   for (const [label, col] of COL_DEFS) {
@@ -276,7 +285,8 @@ function renderSection(container, cfg) {
 
     const nameTd = tr.insertCell();
     const a = document.createElement('a');
-    a.href   = pkg.link ?? `https://pypi.org/project/${pkg.name}/`;
+    const rawLink = pkg.link ?? `https://pypi.org/project/${pkg.name}/`;
+    a.href   = rawLink.startsWith('https://') ? rawLink : `https://pypi.org/project/${pkg.name}/`;
     a.target = '_blank';
     a.rel    = 'noopener noreferrer';
     a.textContent = pkg.name;
@@ -307,6 +317,7 @@ function renderSection(container, cfg) {
     }
 
     addCell(tr, formatNumber(pkg.releaseCount ?? 0));
+    if (cfg.showDownloads)   addCell(tr, formatNumber(pkg.downloadsLastMonth));
     if (cfg.showSupplyChain) {
       const scoreCell = addCell(tr, formatScore(pkg.supplyChain));
       if (pkg.supplyChain != null) {
@@ -363,11 +374,11 @@ function renderSectionError(container, ecosystem, message, showHeader) {
  *
  * @param {'npm'|'python'|'go'} ecosystem
  * @param {object|null} githubRef
- * @param {{ includeTests: boolean, onProgress: (msg: string) => void, packageInputs?: Array<{ name: string, version: string|null }> }} opts
+ * @param {{ includeTests: boolean, onProgress: (msg: string) => void, packageInputs?: Array<{ name: string, version: string|null }>, downloadStats?: boolean }} opts
  * @returns {Promise<object>}
  */
 async function resolveEcosystem(ecosystem, githubRef, opts) {
-  const { includeTests, onProgress, packageInputs } = opts;
+  const { includeTests, onProgress, packageInputs, downloadStats = false } = opts;
 
   let deps, source, note = null, privateCount = 0;
   if (packageInputs && packageInputs.length > 0) {
@@ -395,7 +406,11 @@ async function resolveEcosystem(ecosystem, githubRef, opts) {
   } else if (ecosystem === 'go') {
     results = await resolveGo(deps, { onProgress: (msg) => onProgress(`[go] ${msg}\n`) });
   } else {
-    results = await resolveDependencies(deps, { onProgress: (msg) => onProgress(`[python] ${msg}\n`) });
+    results = await resolveDependencies(deps, {
+      onProgress: (msg) => onProgress(`[python] ${msg}\n`),
+      downloadStats,
+      pypiStatsBaseUrl: downloadStats ? PYPISTATS_PROXY_BASE : undefined,
+    });
   }
 
   // Direct-count computation (post-resolution so the names line up):
@@ -421,7 +436,7 @@ async function resolveEcosystem(ecosystem, githubRef, opts) {
     directCount = [...results.values()].filter(r => directNames.has(r.name.toLowerCase())).length;
   }
 
-  return { ecosystem, deps, results, directCount, source, note, privateCount };
+  return { ecosystem, deps, results, directCount, source, note, privateCount, downloadStats };
 }
 
 // ── Browser initialisation ────────────────────────────────────────────────────
@@ -442,6 +457,7 @@ if (typeof document !== 'undefined') {
   const rememberSocketCb    = document.getElementById('remember-socket');
   const socketStorageNote = document.getElementById('socket-storage-note');
   const includeTestsCb    = document.getElementById('include-tests');
+  const downloadStatsCb   = document.getElementById('download-stats');
   const submitBtn         = document.getElementById('submit-btn');
   const errorDiv          = document.getElementById('error');
   const progressDiv       = document.getElementById('progress');
@@ -559,6 +575,7 @@ if (typeof document !== 'undefined') {
 
     const token           = tokenInput.value.trim();
     const includeTests    = includeTestsCb.checked;
+    const downloadStats   = downloadStatsCb.checked;
     const ecosystemFilter = form.elements['ecosystem'].value;
 
     if (rememberTokenCb.checked && token) {
@@ -657,7 +674,7 @@ if (typeof document !== 'undefined') {
       // own error so a failure in one does not abort the others.
       const settled = await Promise.all(
         ordered.map(eco =>
-          resolveEcosystem(eco, githubRef, { includeTests, onProgress: appendProgress, packageInputs })
+          resolveEcosystem(eco, githubRef, { includeTests, onProgress: appendProgress, packageInputs, downloadStats })
             .then(section => ({ ok: true, section }))
             .catch(err   => ({ ok: false, ecosystem: eco, error: err.message }))
         )
@@ -730,6 +747,7 @@ if (typeof document !== 'undefined') {
             privateCount:    section.privateCount ?? 0,
             sortCol,
             sortDir,
+            showDownloads:   section.downloadStats && section.ecosystem === 'python',
             showSupplyChain,
           });
 

@@ -28,14 +28,16 @@ const CONCURRENCY = 5;
  *     case-insensitive and hyphen/underscore/dot-tolerant.
  *
  * @param {Array<{ name: string, versionSpec: string|null }>} directDeps - parsed direct deps
- * @param {{ onProgress?: (msg: string) => void, downloadStats?: boolean }} [opts]
+ * @param {{ onProgress?: (msg: string) => void, downloadStats?: boolean, pypiStatsBaseUrl?: string }} [opts]
  * @param {boolean} [opts.downloadStats=false] - when true, fetches monthly download counts
  *   from pypistats.org after the main resolution pass. Defaults to false to avoid
  *   rate-limit errors when many packages are resolved.
+ * @param {string} [opts.pypiStatsBaseUrl] - override the pypistats base URL; used in the
+ *   browser to route requests through a CORS proxy instead of calling pypistats.org directly.
  * @returns {Promise<Map<string, { name: string, version: string, releaseDate: string, releaseCount: number, downloadsLastMonth: number|null, error?: string }>>}
  */
 async function resolveDependencies(directDeps, opts = {}) {
-  const { onProgress, downloadStats = false } = opts;
+  const { onProgress, downloadStats = false, pypiStatsBaseUrl } = opts;
 
   /** @type {Map<string, object>} normalized name → resolved result */
   const results = new Map();
@@ -164,7 +166,7 @@ async function resolveDependencies(directDeps, opts = {}) {
       await statsSemaphore.acquire();
       let stats;
       try {
-        stats = await fetchDownloadStats(result.name);
+        stats = await fetchDownloadStats(result.name, pypiStatsBaseUrl ? { baseUrl: pypiStatsBaseUrl } : undefined);
       } finally {
         statsSemaphore.release();
       }

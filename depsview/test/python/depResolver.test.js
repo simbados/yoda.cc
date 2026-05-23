@@ -137,3 +137,74 @@ describe('resolveDependencies — downloadStats: true', () => {
     );
   });
 });
+
+// ── pypiStatsBaseUrl forwarding ───────────────────────────────────────────────
+
+describe('resolveDependencies — pypiStatsBaseUrl forwarding', () => {
+  afterEach(() => { delete globalThis.fetch; });
+
+  it('forwards pypiStatsBaseUrl to fetchDownloadStats as baseUrl when downloadStats is true', async () => {
+    const capturedUrls = [];
+    globalThis.fetch = async (url) => {
+      capturedUrls.push(url);
+      if (url.includes('proxy.example.com')) return mockResponse(200, { data: { last_month: 77777 } });
+      if (url.includes('pypi.org'))          return mockResponse(200, makePypiPackage('dep-baseurl-a', '3.0.0'));
+      return mockResponse(404, {});
+    };
+
+    const results = await resolveDependencies(
+      [{ name: 'dep-baseurl-a', versionSpec: null }],
+      { downloadStats: true, pypiStatsBaseUrl: 'https://proxy.example.com/stats' }
+    );
+
+    const statsUrls = capturedUrls.filter(u => u.includes('proxy.example.com'));
+    assert.ok(statsUrls.length > 0, 'Expected at least one request to the custom proxy base URL');
+    assert.ok(
+      statsUrls.every(u => u.startsWith('https://proxy.example.com/stats/')),
+      `All stats requests should use the custom baseUrl, got: ${JSON.stringify(statsUrls)}`
+    );
+    assert.ok(
+      statsUrls.every(u => u.endsWith('/recent')),
+      `All stats URLs should end with /recent, got: ${JSON.stringify(statsUrls)}`
+    );
+
+    const result = results.get('dep-baseurl-a');
+    assert.ok(result, 'result for dep-baseurl-a should exist');
+    assert.equal(result.downloadsLastMonth, 77777);
+  });
+
+  it('does not use custom baseUrl when pypiStatsBaseUrl is not set', async () => {
+    const capturedUrls = [];
+    globalThis.fetch = async (url) => {
+      capturedUrls.push(url);
+      if (url.includes('pypistats.org')) return mockResponse(200, { data: { last_month: 123 } });
+      if (url.includes('pypi.org'))      return mockResponse(200, makePypiPackage('dep-baseurl-b', '1.0.0'));
+      return mockResponse(404, {});
+    };
+
+    await resolveDependencies(
+      [{ name: 'dep-baseurl-b', versionSpec: null }],
+      { downloadStats: true }
+    );
+
+    const statsUrls = capturedUrls.filter(u => u.includes('pypistats.org'));
+    assert.ok(statsUrls.length > 0, 'Expected requests to default pypistats.org when no custom baseUrl is set');
+  });
+
+  it('does not contact pypiStatsBaseUrl when downloadStats is false', async () => {
+    const capturedUrls = [];
+    globalThis.fetch = async (url) => {
+      capturedUrls.push(url);
+      if (url.includes('pypi.org')) return mockResponse(200, makePypiPackage('dep-baseurl-c', '1.0.0'));
+      return mockResponse(404, {});
+    };
+
+    await resolveDependencies(
+      [{ name: 'dep-baseurl-c', versionSpec: null }],
+      { downloadStats: false, pypiStatsBaseUrl: 'https://proxy.example.com/stats' }
+    );
+
+    const proxyUrls = capturedUrls.filter(u => u.includes('proxy.example.com'));
+    assert.equal(proxyUrls.length, 0, 'Custom proxy should not be contacted when downloadStats is false');
+  });
+});

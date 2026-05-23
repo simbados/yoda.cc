@@ -17,10 +17,10 @@ https://pypi.org/ for package metadata and https://pypistats.org/ for download s
 - **Prefer async/await over Promise chains:** Use `async`/`await` syntax instead of `.then()`/`.catch()` for all asynchronous code. Reserve `.catch()` only when attaching a handler to a Promise you are not awaiting inline.
 
 # Agents
-Two project agents live in `.claude/agents/`:
+Two project agents live in `.claude/agents/`. **Always run them sequentially — never in parallel:**
 
-- **`test-writer`** — invoke when a new source file is created or new exported functions are added without test coverage. Pass the source file path. It reads the file, matches existing test style, writes the test file, and runs `npm test`.
-- **`security-reviewer`** — invoke after every implementation that adds or changes code. Pass the changed file paths or let it diff against HEAD. It checks the project-specific attack surfaces (XSS via registry data, URL injection, prototype pollution, path traversal, ReDoS) and produces a structured PASS/FAIL report.
+1. **`test-writer`** — invoke first. When a new source file is created or new exported functions are added without test coverage. Pass the source file path. It reads the file, matches existing test style, writes the test file, and runs `npm test`. Wait for it to complete and confirm all tests pass before continuing.
+2. **`security-reviewer`** — invoke second, only after `test-writer` has completed successfully. Pass the changed file paths or let it diff against HEAD. It checks the project-specific attack surfaces (XSS via registry data, URL injection, prototype pollution, path traversal, ReDoS) and produces a structured PASS/FAIL report.
 
 # Testing
 - **Every new function must be tested:** Use the `test-writer` agent for new source files. It is responsible for writing tests and verifying they pass.
@@ -29,7 +29,7 @@ Two project agents live in `.claude/agents/`:
 - **Security review after every implementation:** Use the `security-reviewer` agent after writing new code. Fix any findings before the task is considered done and document the fix briefly in the chat.
 
 # Definition of Done
-A task is only complete when ALL of the following have been done in the same response:
-1. `test-writer` agent invoked for any new or changed source files — all tests must pass
-2. README updated to reflect the change
-3. `security-reviewer` agent invoked and result reported — fix any findings before closing
+A task is only complete when ALL of the following have been done **in this exact order**:
+1. `test-writer` agent invoked for any new or changed source files — wait for completion, all tests must pass
+2. `security-reviewer` agent invoked — wait for completion, fix any findings before closing
+3. README updated to reflect the change

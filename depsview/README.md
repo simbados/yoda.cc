@@ -373,7 +373,9 @@ go run server.go -port 9000   # custom port
 go run server.go -dir ./web   # serve a different directory
 ```
 
-The web UI supports the same GitHub URL formats as the CLI. It links each package to its registry page (PyPI or npmjs.com). Download statistics are not shown in the web UI because pypistats.org does not support cross-origin (CORS) requests from browsers.
+The web UI supports the same GitHub URL formats as the CLI. It links each package to its registry page (PyPI or npmjs.com).
+
+**Python download statistics** — pypistats.org does not emit CORS headers, so the browser cannot call it directly. Tick **Show Python download statistics** before analysing; requests are routed through the same Cloudflare Worker proxy (`socket-proxy.yoda.cc`) used for socket.dev, which adds CORS headers and forwards the response unchanged. The Downloads/mo column appears in the Python section only when this option is enabled.
 
 ### Ecosystem filter
 

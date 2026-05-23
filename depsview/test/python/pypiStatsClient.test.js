@@ -165,6 +165,89 @@ describe('fetchDownloadStats — HTTP errors', () => {
   });
 });
 
+// ── Custom baseUrl ────────────────────────────────────────────────────────────
+
+describe('fetchDownloadStats — custom baseUrl option', () => {
+  /**
+   * When a custom baseUrl is provided, the request URL should use that base
+   * instead of the default pypistats.org endpoint.
+   */
+  test('uses the provided baseUrl instead of the default pypistats.org base', async () => {
+    const capturedUrls = [];
+    globalThis.fetch = async (url) => {
+      capturedUrls.push(url);
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        json: async () => ({ data: { last_day: 10, last_week: 70, last_month: 42000 } }),
+      };
+    };
+
+    const result = await fetchDownloadStats('requests', { baseUrl: 'https://proxy.example.com/pypi-stats' });
+
+    assert.equal(capturedUrls.length, 1);
+    assert.ok(
+      capturedUrls[0].startsWith('https://proxy.example.com/pypi-stats/'),
+      `Expected URL to start with custom base, got: ${capturedUrls[0]}`
+    );
+    assert.ok(
+      capturedUrls[0].endsWith('/recent'),
+      `Expected URL to end with /recent, got: ${capturedUrls[0]}`
+    );
+    assert.deepEqual(result, { lastMonth: 42000 });
+  });
+
+  /**
+   * The package name is still normalized even when a custom baseUrl is used,
+   * so the correct normalized name appears in the constructed URL.
+   */
+  test('normalizes package name in URL when baseUrl is provided', async () => {
+    const capturedUrls = [];
+    globalThis.fetch = async (url) => {
+      capturedUrls.push(url);
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        json: async () => ({ data: { last_day: 1, last_week: 7, last_month: 999 } }),
+      };
+    };
+
+    await fetchDownloadStats('My_Pkg', { baseUrl: 'https://proxy.example.com/stats' });
+
+    assert.equal(capturedUrls.length, 1);
+    assert.ok(
+      capturedUrls[0].includes('/my-pkg/recent'),
+      `Expected normalized name in URL, got: ${capturedUrls[0]}`
+    );
+  });
+
+  /**
+   * When no baseUrl option is supplied, the default pypistats.org endpoint is used.
+   */
+  test('falls back to default pypistats.org base when baseUrl is not provided', async () => {
+    const capturedUrls = [];
+    globalThis.fetch = async (url) => {
+      capturedUrls.push(url);
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        json: async () => ({ data: { last_day: 1, last_week: 7, last_month: 100 } }),
+      };
+    };
+
+    await fetchDownloadStats('boto3');
+
+    assert.equal(capturedUrls.length, 1);
+    assert.ok(
+      capturedUrls[0].startsWith('https://pypistats.org/api/packages/'),
+      `Expected default pypistats.org base URL, got: ${capturedUrls[0]}`
+    );
+  });
+});
+
 // ── Caching ───────────────────────────────────────────────────────────────────
 
 describe('fetchDownloadStats — caching', () => {
