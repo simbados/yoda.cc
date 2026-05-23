@@ -46,7 +46,10 @@ const PYPISTATS_PROXY_BASE = 'https://socket-proxy.yoda.cc/pypistats/packages';
  * Maps the internal ecosystem identifier to the PURL type expected by socket.dev.
  * Go modules use 'golang', Python packages use 'pypi'.
  */
-const ECOSYSTEM_PURL_TYPE = { npm: 'npm', python: 'pypi', go: 'golang' };
+const ECOSYSTEM_PURL_TYPE   = { npm: 'npm', python: 'pypi', go: 'golang' };
+
+/** Maps ecosystem to the socket.dev URL slug used in package detail links. */
+const SOCKET_URL_SLUG = { npm: 'npm', python: 'pypi', go: 'go' };
 
 // ── Pure utility functions (exported for testing) ─────────────────────────────
 
@@ -208,6 +211,7 @@ function addCell(row, text) {
  * @param {string|null} cfg.sortCol           - current sort column for sort indicators
  * @param {string|null} cfg.sortDir           - 'asc' or 'desc'
  * @param {boolean}     [cfg.showSupplyChain]  - when true, render a Supply Chain % column
+ * @param {string|null} [cfg.socketSlug]       - socket.dev URL slug ('npm'|'pypi'|'go'); adds (link) anchors in score cells
  * @param {boolean}     [cfg.showDownloads]    - when true, render a Downloads/mo column
  * @returns {HTMLElement} the section element
  */
@@ -319,12 +323,23 @@ function renderSection(container, cfg) {
     addCell(tr, formatNumber(pkg.releaseCount ?? 0));
     if (cfg.showDownloads)   addCell(tr, formatNumber(pkg.downloadsLastMonth));
     if (cfg.showSupplyChain) {
-      const scoreCell = addCell(tr, formatScore(pkg.supplyChain));
+      const scoreCell = document.createElement('td');
+      scoreCell.textContent = formatScore(pkg.supplyChain);
       if (pkg.supplyChain != null) {
         scoreCell.className = pkg.supplyChain >= 0.8 ? 'score-good'
                             : pkg.supplyChain >= 0.5 ? 'score-warn'
                             : 'score-bad';
+        if (cfg.socketSlug) {
+          const encoded = encodeURIComponent(pkg.name).replace(/%40/g, '@').replace(/%2F/gi, '/');
+          const socketLink = document.createElement('a');
+          socketLink.href   = `https://socket.dev/${cfg.socketSlug}/package/${encoded}`;
+          socketLink.target = '_blank';
+          socketLink.rel    = 'noopener noreferrer';
+          socketLink.textContent = ' (link)';
+          scoreCell.appendChild(socketLink);
+        }
       }
+      tr.appendChild(scoreCell);
     }
   }
 
@@ -749,6 +764,7 @@ if (typeof document !== 'undefined') {
             sortDir,
             showDownloads:   section.downloadStats && section.ecosystem === 'python',
             showSupplyChain,
+            socketSlug:      showSupplyChain ? (SOCKET_URL_SLUG[section.ecosystem] ?? null) : null,
           });
 
           sectionEl.querySelectorAll('th[data-col]').forEach(th => {
