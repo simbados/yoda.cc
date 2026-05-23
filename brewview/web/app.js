@@ -10,6 +10,27 @@ import { resolve } from './src/homebrew/resolver.js';
 // ── Pure utility functions (exported for testing) ─────────────────────────────
 
 /**
+ * Parses a freeform multi-formula input string into an array of lowercase formula names.
+ * Supports three input formats:
+ *   1. Comma-separated:      "vim, ffmpeg, wget"
+ *   2. Backslash-newline:    "vim \\\n  ffmpeg"
+ *   3. brew outdated output: "fzf (0.72.0) < 0.73.0"  → extracts "fzf"
+ * Names are lowercased, deduplicated, and empty entries are dropped.
+ * @param {string} text - raw user input
+ * @returns {string[]} ordered, deduplicated list of formula names
+ */
+export function parseBrewInput(text) {
+  const MAX_NAMES = 50;
+  return text
+    .replace(/\\[ \t]*\n[ \t]*/g, ',')
+    .split(/[,\n]+/)
+    .map(part => (part.trim().split(/\s+/)[0] ?? '').toLowerCase())
+    .filter(Boolean)
+    .filter((v, i, a) => a.indexOf(v) === i)
+    .slice(0, MAX_NAMES);
+}
+
+/**
  * Returns the number of whole days elapsed between today and an ISO date string.
  * Returns Infinity for null or unparseable dates so those entries never match
  * a recency threshold.
@@ -104,16 +125,18 @@ function renderResults(container, sorted) {
   container.hidden = false;
   container.innerHTML = '';
 
-  const total      = sorted.length;
+  const total         = sorted.length;
+  const rootCount       = sorted.filter(p => p.depth === 0).length;
   const directCount     = sorted.filter(p => p.depth === 1).length;
   const transitiveCount = sorted.filter(p => p.depth > 1).length;
 
   const summary = document.createElement('p');
   summary.className = 'summary';
-  if (directCount > 0) {
+  if (rootCount > 0 && (directCount > 0 || transitiveCount > 0)) {
+    const rootLabel = `${rootCount} root${rootCount !== 1 ? 's' : ''}`;
     summary.textContent =
       `${total} package${total !== 1 ? 's' : ''} total ` +
-      `(1 root, ${directCount} direct, ${transitiveCount} transitive)`;
+      `(${rootLabel}, ${directCount} direct, ${transitiveCount} transitive)`;
   } else {
     summary.textContent = `${total} package${total !== 1 ? 's' : ''} total`;
   }
@@ -149,7 +172,7 @@ function renderResults(container, sorted) {
 
     const nameTd = tr.insertCell();
     const a = document.createElement('a');
-    a.href   = pkg.link;
+    a.href   = pkg.link?.startsWith('https://') ? pkg.link : '#';
     a.target = '_blank';
     a.rel    = 'noopener noreferrer';
     a.textContent = pkg.name;
@@ -183,6 +206,13 @@ if (typeof document !== 'undefined') {
   const progressDiv    = document.getElementById('progress');
   const resultsDiv     = document.getElementById('results');
 
+  formulaInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      form.requestSubmit();
+    }
+  });
+
   function appendProgress(text) {
     progressDiv.hidden = false;
     progressDiv.textContent += text;
@@ -204,13 +234,18 @@ if (typeof document !== 'undefined') {
     resultsDiv.hidden    = true;
     resultsDiv.innerHTML = '';
 
-    const formulaName    = formulaInput.value.trim().toLowerCase();
+    const names          = parseBrewInput(formulaInput.value);
     const includeBuildDeps = includeBuildCb.checked;
+
+    if (names.length === 0) {
+      showError('Enter at least one formula name.');
+      return;
+    }
 
     submitBtn.disabled = true;
 
     try {
-      const { results, rateLimited } = await resolve(formulaName, {
+      const { results, rateLimited } = await resolve(names, {
         includeBuildDeps,
         onProgress: msg => appendProgress(msg + '\n'),
       });

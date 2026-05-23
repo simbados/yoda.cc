@@ -76,8 +76,11 @@ export class RateLimitError extends Error {
  * @returns {Promise<string|null>}
  * @throws {RateLimitError} when the GitHub API rate limit is exceeded
  */
+/** Expected shape for Homebrew ruby_source_path values, e.g. "Formula/w/wget.rb". */
+const RUBY_PATH_RE = /^Formula\/[A-Za-z0-9][\w@.+-]*\/[\w@.+-]+\.rb$/;
+
 export async function fetchFormulaLastUpdated(rubySourcePath) {
-  if (!rubySourcePath) return null;
+  if (!rubySourcePath || !RUBY_PATH_RE.test(rubySourcePath)) return null;
   try {
     const res = await fetch(
       `https://api.github.com/repos/Homebrew/homebrew-core/commits` +

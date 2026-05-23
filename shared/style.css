@@ -283,7 +283,6 @@ code {
 }
 
 #url-input,
-#formula-input,
 .token-row input {
   padding: 0.6rem 0.85rem;
   border: 1px solid var(--border);
@@ -295,15 +294,12 @@ code {
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
-#url-input,
-#formula-input { flex: 1; min-width: 280px; }
+#url-input { flex: 1; min-width: 280px; }
 
 #url-input::placeholder,
-#formula-input::placeholder,
 .token-row input::placeholder { color: var(--muted); }
 
 #url-input:focus,
-#formula-input:focus,
 .token-row input:focus {
   outline: none;
   border-color: var(--accent);
@@ -318,6 +314,7 @@ code {
   border: none;
   border-radius: 8px;
   font-size: 1rem;
+  align-self: flex-start;
   font-family: inherit;
   font-weight: 500;
   cursor: pointer;
@@ -548,6 +545,36 @@ th.th-sort-asc::after  { content: ' ▲'; font-size: 0.75em; opacity: 0.8; }
 }
 
 #pkg-submit-btn:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+
+/* ── Brew textarea input row ─────────────────────────────────────────────── */
+.brew-input-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+#formula-input {
+  padding: 0.6rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-family: ui-monospace, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+  color: var(--text);
+  background: var(--surface);
+  line-height: 1.65;
+  resize: vertical;
+  min-height: 7rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+#formula-input::placeholder { color: var(--muted); }
+
+#formula-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--glow);
+}
 
 /* ── Form cards (optional sections) ──────────────────────────────────────── */
 .form-card {

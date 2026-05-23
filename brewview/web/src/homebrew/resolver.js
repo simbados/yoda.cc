@@ -64,19 +64,20 @@ export function parseFormula(data, opts = {}) {
  * API rate limit — in that case some packages' `updatedAt` will be null even
  * though the formula itself resolved fine, and the caller should surface it.
  *
- * @param {string} rootName - formula name to start from
+ * @param {string|string[]} rootNames - formula name(s) to start from
  * @param {{ includeBuildDeps?: boolean, onProgress?: (msg: string) => void }} [opts]
  * @returns {Promise<{ results: Map<string, object>, rateLimited: boolean }>}
  *   results: name → package record (includes updatedAt); rateLimited: see above
  */
-export async function resolve(rootName, opts = {}) {
+export async function resolve(rootNames, opts = {}) {
   const { includeBuildDeps = false, onProgress } = opts;
+  const roots = Array.isArray(rootNames) ? rootNames : [rootNames];
 
   // ── Phase 1: BFS — resolve formula metadata ───────────────────────────────
   // parseFormula() returns rubySourcePath, which is spread into pkg below.
   // The catch branch sets rubySourcePath: null since no data was retrieved.
   const results = new Map();
-  const queue   = [{ name: rootName, depth: 0 }];
+  const queue   = roots.map(name => ({ name, depth: 0 }));
   const visited = new Set();
 
   while (queue.length > 0) {
