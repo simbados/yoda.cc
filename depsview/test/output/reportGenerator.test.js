@@ -2,6 +2,12 @@
  * Tests for src/output/reportGenerator.js.
  * generateReport is a pure function (returns an HTML string) so all tests
  * simply call it and assert on the returned string — no DOM or fs required.
+ *
+ * Architecture note: table rows are rendered entirely client-side by the
+ * embedded sort script, so package data (names, versions, dates, scores)
+ * lives in the embedded JSON blob rather than in static HTML. Tests that
+ * previously checked for row content in the HTML now verify the JSON data
+ * and the security properties of the script.
  */
 
 import { describe, it } from 'node:test';
@@ -32,24 +38,27 @@ function makeResults(items) {
 
 /**
  * Test shim that wraps a single (results, directNames) pair into the
- * sections Map that the production `generateReport` now expects. Lets the
- * existing tests stay terse without rewriting every call site.
- *
- * The legacy `opts.ecosystem` and `opts.source` are extracted and applied to
- * the section instead of being passed through to the renderer.
- *
- * @param {Map<string, object>} results
- * @param {Set<string>} [directNames]
- * @param {object} [opts]
- * @returns {string} HTML document
+ * sections Map that the production `generateReport` now expects.
  */
 function generateReport(results, directNames = new Set(), opts = {}) {
   const ecosystem = opts.ecosystem ?? 'python';
   const source    = opts.source    ?? null;
   const { ecosystem: _e, source: _s, ...rendererOpts } = opts;
   const sections = new Map([[ecosystem, { results, directNames, source, note: null }]]);
-  // downloadStats defaults to true so legacy tests still see the Downloads/mo column.
   return generateReportRaw(sections, { downloadStats: true, ...rendererOpts });
+}
+
+/**
+ * Extracts and parses the JSON data block embedded in the sort script.
+ * The block is `var D={...};` immediately before `var state=`.
+ * Returns the parsed { sections: [...] } object.
+ */
+function extractScriptData(html) {
+  const start = html.indexOf('var D=') + 6;
+  assert.ok(start > 5, 'Could not find embedded script data (var D=) in HTML');
+  const end = html.indexOf(';\nvar state=', start);
+  assert.ok(end > start, 'Could not find end of embedded script data in HTML');
+  return JSON.parse(html.slice(start, end));
 }
 
 // ── HTML structure ─────────────────────────────────────────────────────────────
@@ -75,6 +84,14 @@ describe('generateReport — HTML structure', () => {
   it('renders the "Dependency Report" heading', () => {
     const html = generateReport(new Map(), new Set());
     assert.ok(html.includes('Dependency Report'));
+  });
+
+  it('emits an empty <tbody> — rows are rendered client-side', () => {
+    const results = makeResults([
+      { name: 'requests', version: '2.31.0', releaseDate: '2023-05-22' },
+    ]);
+    const html = generateReport(results, new Set());
+    assert.ok(html.includes('<tbody></tbody>'), '<tbody> must be empty in the static HTML');
   });
 });
 
@@ -173,165 +190,76 @@ describe('generateReport — table columns', () => {
   });
 });
 
-// ── Package data ──────────────────────────────────────────────────────────────
+// ── Embedded script JSON ───────────────────────────────────────────────────────
 
-describe('generateReport — package data', () => {
-  it('renders the package name in a link to its registry page', () => {
+describe('generateReport — embedded script JSON', () => {
+  it('embeds the package name in the rows array', () => {
     const results = makeResults([
       { name: 'requests', version: '2.31.0', releaseDate: '2023-05-22' },
     ]);
-    const html = generateReport(results, new Set());
-    assert.ok(html.includes('requests'));
-    assert.ok(html.includes('https://pypi.org/project/requests/'));
+    const data = extractScriptData(generateReport(results, new Set()));
+    const row = data.sections[0].rows.find(r => r.name === 'requests');
+    assert.ok(row, 'requests must be present in the embedded rows');
   });
 
-  it('renders the package version', () => {
+  it('embeds the registry link in the row', () => {
+    const results = makeResults([
+      { name: 'requests', version: '2.31.0', releaseDate: '2023-05-22',
+        link: 'https://pypi.org/project/requests/' },
+    ]);
+    const data = extractScriptData(generateReport(results, new Set()));
+    const row = data.sections[0].rows.find(r => r.name === 'requests');
+    assert.equal(row.link, 'https://pypi.org/project/requests/');
+  });
+
+  it('embeds the version in the row', () => {
     const results = makeResults([
       { name: 'requests', version: '2.31.0', releaseDate: '2023-05-22' },
     ]);
-    const html = generateReport(results, new Set());
-    assert.ok(html.includes('2.31.0'));
+    const data = extractScriptData(generateReport(results, new Set()));
+    const row = data.sections[0].rows.find(r => r.name === 'requests');
+    assert.equal(row.version, '2.31.0');
   });
 
-  it('renders the release date', () => {
+  it('embeds the release date in the row', () => {
     const results = makeResults([
       { name: 'requests', version: '2.31.0', releaseDate: '2023-05-22' },
     ]);
-    const html = generateReport(results, new Set());
-    assert.ok(html.includes('2023-05-22'));
+    const data = extractScriptData(generateReport(results, new Set()));
+    const row = data.sections[0].rows.find(r => r.name === 'requests');
+    assert.equal(row.released, '2023-05-22');
   });
 
-  it('renders the first release date', () => {
+  it('embeds the first release date in the row', () => {
     const results = makeResults([
-      { name: 'requests', version: '2.31.0', releaseDate: '2023-05-22', firstReleaseDate: '2011-02-14' },
+      { name: 'requests', version: '2.31.0', releaseDate: '2023-05-22',
+        firstReleaseDate: '2011-02-14' },
     ]);
-    const html = generateReport(results, new Set());
-    assert.ok(html.includes('2011-02-14'));
+    const data = extractScriptData(generateReport(results, new Set()));
+    const row = data.sections[0].rows.find(r => r.name === 'requests');
+    assert.equal(row.firstReleased, '2011-02-14');
   });
 
-  it('renders the release count', () => {
+  it('embeds the release count in the row', () => {
     const results = makeResults([
       { name: 'requests', version: '2.31.0', releaseDate: '2023-05-22', releaseCount: 144 },
     ]);
-    const html = generateReport(results, new Set());
-    assert.ok(html.includes('144'));
+    const data = extractScriptData(generateReport(results, new Set()));
+    const row = data.sections[0].rows.find(r => r.name === 'requests');
+    assert.equal(row.releases, 144);
   });
 
-  it('renders "–" for missing downloads', () => {
-    const results = makeResults([
-      { name: 'requests', version: '2.31.0', releaseDate: '2023-05-22', downloadsLastMonth: null },
-    ]);
-    const html = generateReport(results, new Set(), { downloadStats: true });
-    assert.ok(html.includes('–'));
-  });
-
-  it('renders a formatted download count', () => {
-    const results = makeResults([
-      { name: 'requests', version: '2.31.0', releaseDate: '2023-05-22', downloadsLastMonth: 34_567_890 },
-    ]);
-    const html = generateReport(results, new Set(), { downloadStats: true });
-    assert.ok(html.includes('34,567,890'));
-  });
-});
-
-// ── Age classes ───────────────────────────────────────────────────────────────
-
-describe('generateReport — age CSS classes', () => {
-  it('applies age-new (red) when a date is 3 days old or less', () => {
-    const fresh = new Date(Date.now() - 2 * 86_400_000).toISOString().slice(0, 10);
-    const results = makeResults([
-      { name: 'new-release', version: '1.0.0', releaseDate: fresh },
-    ]);
-    const html = generateReport(results, new Set());
-    assert.ok(html.includes('class="age-new"'), `Expected class="age-new" for date ${fresh}`);
-  });
-
-  it('applies age-orange when a date is between 4 and 7 days old', () => {
-    const recent = new Date(Date.now() - 5 * 86_400_000).toISOString().slice(0, 10);
-    const results = makeResults([
-      { name: 'orange-release', version: '1.0.0', releaseDate: recent },
-    ]);
-    const html = generateReport(results, new Set());
-    assert.ok(html.includes('class="age-orange"'), `Expected class="age-orange" for date ${recent}`);
-  });
-
-  it('applies age-fresh (yellow) when a date is between 8 and 30 days old', () => {
-    const recent = new Date(Date.now() - 14 * 86_400_000).toISOString().slice(0, 10);
-    const results = makeResults([
-      { name: 'recent-release', version: '1.0.0', releaseDate: recent },
-    ]);
-    const html = generateReport(results, new Set());
-    assert.ok(html.includes('class="age-fresh"'), `Expected class="age-fresh" for date ${recent}`);
-  });
-
-  it('applies age-new (red) to a firstReleaseDate 3 days old or less', () => {
-    const recent = new Date(Date.now() - 2 * 86_400_000).toISOString().slice(0, 10);
-    const results = makeResults([
-      { name: 'brand-new', version: '0.1.0', releaseDate: '2020-01-01', firstReleaseDate: recent },
-    ]);
-    const html = generateReport(results, new Set());
-    assert.ok(html.includes('class="age-new"'), `Expected class="age-new" for first release ${recent}`);
-  });
-
-  it('does not apply any age class to a release date older than 30 days', () => {
-    const results = makeResults([
-      { name: 'requests', version: '2.31.0', releaseDate: '2020-01-01' },
-    ]);
-    const html = generateReport(results, new Set());
-    // Check only the <tbody> — the embedded sort script legitimately contains
-    // the age-class literals as JS strings, so we must not scan the whole doc.
-    const tbody = html.slice(html.indexOf('<tbody>'), html.indexOf('</tbody>') + 8);
-    assert.ok(!tbody.includes('class="age-fresh"'),  'no age-fresh on a 5-year-old release');
-    assert.ok(!tbody.includes('class="age-orange"'), 'no age-orange on a 5-year-old release');
-    assert.ok(!tbody.includes('class="age-new"'),    'no age-new on a 5-year-old release');
-  });
-});
-
-// ── Supply chain scores ───────────────────────────────────────────────────────
-
-describe('generateReport — supply chain scores', () => {
-  it('renders a score as a percentage', () => {
+  it('embeds the supply chain score in the row', () => {
     const results = makeResults([
       { name: 'requests', version: '2.31.0', releaseDate: '2023-05-22' },
     ]);
     const socketScores = new Map([['pypi:requests@2.31.0', 0.87]]);
-    const html = generateReport(results, new Set(), { socketScores });
-    assert.ok(html.includes('87%'));
+    const data = extractScriptData(generateReport(results, new Set(), { socketScores }));
+    const row = data.sections[0].rows.find(r => r.name === 'requests');
+    assert.ok(Math.abs(row.supplyChain - 0.87) < 0.001);
   });
 
-  it('applies score-good class for scores >= 80%', () => {
-    const results = makeResults([
-      { name: 'requests', version: '2.31.0', releaseDate: '2023-05-22' },
-    ]);
-    const html = generateReport(results, new Set(), { socketScores: new Map([['pypi:requests@2.31.0', 0.82]]) });
-    assert.ok(html.includes('class="score-good"'));
-  });
-
-  it('applies score-warn class for scores between 50% and 79%', () => {
-    const results = makeResults([
-      { name: 'requests', version: '2.31.0', releaseDate: '2023-05-22' },
-    ]);
-    const html = generateReport(results, new Set(), { socketScores: new Map([['pypi:requests@2.31.0', 0.65]]) });
-    assert.ok(html.includes('class="score-warn"'));
-  });
-
-  it('applies score-bad class for scores below 50%', () => {
-    const results = makeResults([
-      { name: 'requests', version: '2.31.0', releaseDate: '2023-05-22' },
-    ]);
-    const html = generateReport(results, new Set(), { socketScores: new Map([['pypi:requests@2.31.0', 0.30]]) });
-    assert.ok(html.includes('class="score-bad"'));
-  });
-
-  it('renders "–" when a package has no score', () => {
-    const results = makeResults([
-      { name: 'requests', version: '2.31.0', releaseDate: '2023-05-22' },
-    ]);
-    const html = generateReport(results, new Set(), { socketScores: new Map() });
-    assert.ok(html.includes('–'));
-  });
-
-  it('links the score to socket.dev for PyPI packages', () => {
+  it('embeds the socketSlug so the script can build socket.dev links', () => {
     const results = makeResults([
       { name: 'requests', version: '2.31.0', releaseDate: '2023-05-22' },
     ]);
@@ -339,160 +267,68 @@ describe('generateReport — supply chain scores', () => {
       socketScores: new Map([['pypi:requests@2.31.0', 0.87]]),
       ecosystem: 'python',
     });
-    assert.ok(html.includes('https://socket.dev/pypi/package/requests'), 'must link to socket.dev/pypi for Python packages');
+    const data = extractScriptData(html);
+    assert.equal(data.sections[0].socketSlug, 'pypi');
   });
 
-  it('links the score to socket.dev for npm packages', () => {
+  it('rows are ordered newest-first in the embedded JSON', () => {
     const results = makeResults([
-      { name: 'express', version: '4.19.2', releaseDate: '2024-03-25',
-        link: 'https://www.npmjs.com/package/express' },
+      { name: 'old', version: '1.0.0', releaseDate: '2020-01-01' },
+      { name: 'new', version: '2.0.0', releaseDate: '2024-06-01' },
     ]);
-    const html = generateReport(results, new Set(), {
-      socketScores: new Map([['npm:express@4.19.2', 0.75]]),
-      ecosystem: 'npm',
-    });
-    assert.ok(html.includes('https://socket.dev/npm/package/express'), 'must link to socket.dev/npm for npm packages');
-  });
-
-  it('does not link the score when the score is absent for a package', () => {
-    const results = makeResults([
-      { name: 'requests', version: '2.31.0', releaseDate: '2023-05-22' },
-    ]);
-    const html = generateReport(results, new Set(), {
-      socketScores: new Map(), // score column shown but this package has no score
-      ecosystem: 'python',
-    });
-    // Check only <tbody> for the same reason as above.
-    const tbody = html.slice(html.indexOf('<tbody>'), html.indexOf('</tbody>') + 8);
-    assert.ok(!tbody.includes('socket.dev'), 'must not render a link when score is null');
+    const data = extractScriptData(generateReport(results, new Set()));
+    const rows = data.sections[0].rows;
+    assert.equal(rows[0].name, 'new', 'newer package must appear first');
+    assert.equal(rows[1].name, 'old');
   });
 });
 
-// ── Error rows ────────────────────────────────────────────────────────────────
+// ── Client-side rendering logic in the sort script ────────────────────────────
 
-describe('generateReport — error rows', () => {
-  it('applies row-error class to packages with errors', () => {
-    const results = makeResults([
-      { name: 'broken', version: 'error', releaseDate: 'unknown', error: 'Package not found' },
-    ]);
-    const html = generateReport(results, new Set());
-    assert.ok(html.includes('row-error'));
+describe('generateReport — sort script rendering logic', () => {
+  it('includes age-class assignment logic for recent release dates', () => {
+    const html = generateReport(
+      makeResults([{ name: 'pkg', version: '1.0', releaseDate: '2023-01-01' }]),
+      new Set(),
+    );
+    assert.ok(html.includes('age-new'),    'script must reference age-new class');
+    assert.ok(html.includes('age-orange'), 'script must reference age-orange class');
+    assert.ok(html.includes('age-fresh'),  'script must reference age-fresh class');
   });
 
-  it('still links the package name even for error rows', () => {
-    const results = makeResults([
-      { name: 'broken', version: 'error', releaseDate: 'unknown', error: 'Package not found' },
-    ]);
-    const html = generateReport(results, new Set());
-    assert.ok(html.includes('broken'));
-  });
-});
-
-// ── XSS safety ───────────────────────────────────────────────────────────────
-
-describe('generateReport — XSS safety', () => {
-  it('escapes < and > in package names', () => {
-    const results = makeResults([
-      { name: '<script>alert(1)</script>', version: '1.0.0', releaseDate: '2023-01-01' },
-    ]);
-    const html = generateReport(results, new Set());
-    assert.ok(!html.includes('<script>alert'), 'raw <script> tag must not appear in output');
-    assert.ok(html.includes('&lt;script&gt;'), 'name must be HTML-escaped');
+  it('includes supply chain score class thresholds', () => {
+    const html = generateReport(
+      makeResults([{ name: 'pkg', version: '1.0', releaseDate: '2023-01-01' }]),
+      new Set(),
+      { socketScores: new Map() },
+    );
+    assert.ok(html.includes('score-good'), 'script must reference score-good class');
+    assert.ok(html.includes('score-warn'), 'script must reference score-warn class');
+    assert.ok(html.includes('score-bad'),  'script must reference score-bad class');
   });
 
-  it('escapes & in package versions', () => {
-    const results = makeResults([
-      { name: 'pkg', version: '1.0&beta', releaseDate: '2023-01-01' },
-    ]);
-    const html = generateReport(results, new Set());
-    assert.ok(html.includes('1.0&amp;beta'));
+  it('uses encodeURIComponent to build socket.dev package links', () => {
+    const html = generateReport(
+      makeResults([{ name: 'requests', version: '2.31.0', releaseDate: '2023-05-22' }]),
+      new Set(),
+      { socketScores: new Map() },
+    );
+    assert.ok(html.includes('encodeURIComponent'),
+      'sort script must use encodeURIComponent for socket.dev links');
   });
 
-  it('replaces a javascript: link with "#" in href attributes', () => {
-    const results = makeResults([
-      { name: 'evil', version: '1.0.0', releaseDate: '2023-01-01',
-        link: 'javascript:alert(document.cookie)' },
-    ]);
-    const html = generateReport(results, new Set());
-    // The href must be sanitised; the link text may still show the URL string
-    // as visible text (harmless), so we check the attribute context specifically.
-    assert.ok(!html.includes('href="javascript:'), 'javascript: must not appear as an href value');
-    assert.ok(html.includes('href="#"'), 'unsafe link must be replaced with "#"');
-  });
-
-  it('replaces a data: link with "#" in href attributes', () => {
-    const results = makeResults([
-      { name: 'evil', version: '1.0.0', releaseDate: '2023-01-01',
-        link: 'data:text/html,<script>alert(1)</script>' },
-    ]);
-    const html = generateReport(results, new Set());
-    assert.ok(!html.includes('href="data:'), 'data: URI must not appear as an href value');
-    assert.ok(html.includes('href="#"'));
-  });
-
-  it('allows https:// links through', () => {
-    const results = makeResults([
-      { name: 'requests', version: '2.31.0', releaseDate: '2023-05-22',
-        link: 'https://pypi.org/project/requests/' },
-    ]);
-    const html = generateReport(results, new Set());
-    assert.ok(html.includes('href="https://pypi.org/project/requests/"'));
-  });
-
-  it('includes a Content-Security-Policy meta tag', () => {
+  it('validates the URL scheme before assigning to a.href', () => {
     const html = generateReport(new Map(), new Set());
-    assert.ok(html.includes('Content-Security-Policy'), 'CSP meta tag must be present');
-    assert.ok(html.includes("default-src 'none'"), 'CSP must block all sources by default');
+    assert.ok(html.includes('https?:'),
+      'sort script must validate URL scheme (https?:) before assigning href');
   });
 
-  it('escapes & in source filenames rendered inside the per-section summary', () => {
-    const results = makeResults([
-      { name: 'requests', version: '2.31.0', releaseDate: '2023-05-22' },
-    ]);
-    const html = generateReport(results, new Set(), { ecosystem: 'python', source: 'a&b.json' });
-    assert.ok(html.includes('a&amp;b.json'));
-    assert.ok(!html.includes('a&b.json'));
-  });
-
-  it("escapes single quotes in package names (defense in depth for ' in attributes)", () => {
-    const results = makeResults([
-      { name: "it's-a-package", version: '1.0.0', releaseDate: '2023-01-01' },
-    ]);
-    const html = generateReport(results, new Set());
-    // Raw ' must not appear in any attribute value — it must be &#x27; instead
-    assert.ok(!html.includes(`href="https://pypi.org/project/it's-a-package/"`),
-      "raw ' must not appear unescaped in href attribute");
-    assert.ok(html.includes('&#x27;'), "single quote must be encoded as &#x27;");
-  });
-
-  it('percent-encodes special URL characters in socket.dev link for package name', () => {
-    // A package name containing characters that could corrupt a URL or inject HTML
-    // must be percent-encoded before being placed in the href.
-    const weirdName = 'pkg?inject=1&other=2';
-    const results = makeResults([
-      { name: weirdName, version: '1.0.0', releaseDate: '2023-05-22',
-        link: 'https://pypi.org/project/pkg/' },
-    ]);
-    const html = generateReport(results, new Set(), {
-      socketScores: new Map([[`pypi:${weirdName.toLowerCase()}@1.0.0`, 0.9]]),
-      ecosystem: 'python',
-    });
-    assert.ok(!html.includes('socket.dev/pypi/package/pkg?inject=1'),
-      'raw ? must not appear unencoded in socket.dev href');
-    assert.ok(html.includes('pkg%3Finject%3D1'), 'special chars must be percent-encoded');
-  });
-
-  it('preserves @ and / in scoped npm package name in socket.dev link', () => {
-    const results = makeResults([
-      { name: '@scope/pkg', version: '1.0.0', releaseDate: '2023-05-22',
-        link: 'https://www.npmjs.com/package/@scope/pkg' },
-    ]);
-    const html = generateReport(results, new Set(), {
-      socketScores: new Map([['npm:@scope/pkg@1.0.0', 0.8]]),
-      ecosystem: 'npm',
-    });
-    assert.ok(html.includes('socket.dev/npm/package/@scope/pkg'),
-      'scoped package @ and / must not be percent-encoded in socket.dev URL');
+  it('uses textContent to set row cell text (no innerHTML with user data)', () => {
+    const html = generateReport(new Map(), new Set());
+    assert.ok(html.includes('textContent'),
+      'sort script must use textContent for safe DOM text insertion');
+    assert.ok(!html.includes('innerHTML='),
+      'sort script must not assign innerHTML (user data goes through textContent)');
   });
 });
 
@@ -504,7 +340,6 @@ describe('generateReport — sort UI', () => {
       { name: 'requests', version: '2.31.0', releaseDate: '2023-05-22' },
     ]);
     const html = generateReport(results, new Set());
-    // All default columns must carry a data-col attribute for the sort script
     for (const col of ['name', 'version', 'released', 'firstReleased', 'releases']) {
       assert.ok(html.includes(`data-col="${col}"`), `Expected data-col="${col}" on a <th>`);
     }
@@ -546,21 +381,68 @@ describe('generateReport — sort UI', () => {
     ]);
     const html = generateReport(results, new Set());
     assert.ok(html.includes('"rows"'), 'embedded JSON must contain a rows key');
-    assert.ok(html.includes('"requests"'), 'embedded JSON must contain the package name');
   });
 });
 
-// ── Sort order ────────────────────────────────────────────────────────────────
+// ── XSS safety ───────────────────────────────────────────────────────────────
 
-describe('generateReport — sort order', () => {
-  it('renders packages newest-first', () => {
+describe('generateReport — XSS safety', () => {
+  it('unicode-escapes < and > in the embedded JSON so raw script tags cannot appear', () => {
     const results = makeResults([
-      { name: 'old', version: '1.0.0', releaseDate: '2020-01-01' },
-      { name: 'new', version: '2.0.0', releaseDate: '2024-06-01' },
+      { name: '<script>alert(1)</script>', version: '1.0.0', releaseDate: '2023-01-01' },
     ]);
     const html = generateReport(results, new Set());
-    const posOld = html.indexOf('>old<');
-    const posNew = html.indexOf('>new<');
-    assert.ok(posNew < posOld, 'newer package must appear before older one in the HTML');
+    assert.ok(!html.includes('<script>alert'),
+      'raw <script> tag must not appear anywhere in the output');
+    // JSON.stringify + unicode-escape replaces < and > with < / >
+    assert.ok(html.includes('\\u003cscript\\u003e'),
+      'angle brackets must be unicode-escaped in the embedded JSON');
+  });
+
+  it('includes a Content-Security-Policy meta tag', () => {
+    const html = generateReport(new Map(), new Set());
+    assert.ok(html.includes('Content-Security-Policy'), 'CSP meta tag must be present');
+    assert.ok(html.includes("default-src 'none'"), 'CSP must block all sources by default');
+  });
+
+  it('escapes & in source filenames rendered inside the per-section summary', () => {
+    const results = makeResults([
+      { name: 'requests', version: '2.31.0', releaseDate: '2023-05-22' },
+    ]);
+    const html = generateReport(results, new Set(), { ecosystem: 'python', source: 'a&b.json' });
+    assert.ok(html.includes('a&amp;b.json'));
+    assert.ok(!html.includes('a&b.json'));
+  });
+
+  it('does not place raw package names into HTML attributes or text', () => {
+    const results = makeResults([
+      { name: '"quoted"', version: '1.0.0', releaseDate: '2023-01-01',
+        link: 'https://pypi.org/project/quoted/' },
+    ]);
+    const html = generateReport(results, new Set());
+    // The name must only appear inside JSON (as a JS string), never in raw HTML markup
+    assert.ok(!html.includes('<td>"quoted"'),
+      'raw package name must not appear as HTML text content');
+    assert.ok(!html.includes('>"quoted"<'),
+      'raw package name must not appear between HTML tags');
+  });
+});
+
+// ── Error rows ────────────────────────────────────────────────────────────────
+
+describe('generateReport — error rows', () => {
+  it('embeds the error flag in the row JSON so the client can render row-error', () => {
+    const results = makeResults([
+      { name: 'broken', version: 'error', releaseDate: 'unknown', error: 'Package not found' },
+    ]);
+    const data = extractScriptData(generateReport(results, new Set()));
+    const row = data.sections[0].rows.find(r => r.name === 'broken');
+    assert.ok(row, 'broken package must appear in rows');
+    assert.ok(row.error, 'error field must be truthy');
+  });
+
+  it('script source includes row-error class for client-side error rendering', () => {
+    const html = generateReport(new Map(), new Set());
+    assert.ok(html.includes('row-error'), 'sort script must reference row-error class');
   });
 });

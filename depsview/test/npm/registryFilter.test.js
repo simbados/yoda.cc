@@ -89,6 +89,18 @@ describe('partitionNpmPackages — basic partitioning', () => {
       assert.equal('resolved' in pkg,  false);
     }
   });
+
+  it('privatePkgs contains the private package with name and url', () => {
+    const { privatePkgs } = partitionNpmPackages(packages);
+    assert.equal(privatePkgs.length, 1);
+    assert.equal(privatePkgs[0].name, 'internal');
+    assert.equal(privatePkgs[0].url, 'https://private.registry.corp/internal/-/internal-1.0.0.tgz');
+  });
+
+  it('privatePkgs entries do not contain a version field', () => {
+    const { privatePkgs } = partitionNpmPackages(packages);
+    assert.equal('version' in privatePkgs[0], false);
+  });
 });
 
 describe('partitionNpmPackages — packages with no resolved field', () => {
@@ -109,6 +121,12 @@ describe('partitionNpmPackages — packages with no resolved field', () => {
     const { privateCount } = partitionNpmPackages(packages);
     assert.equal(privateCount, 1);
   });
+
+  it('privatePkgs excludes packages with null or undefined resolved', () => {
+    const { privatePkgs } = partitionNpmPackages(packages);
+    assert.equal(privatePkgs.length, 1);
+    assert.equal(privatePkgs[0].name, 'private-pkg');
+  });
 });
 
 describe('partitionNpmPackages — empty and all-public inputs', () => {
@@ -116,6 +134,11 @@ describe('partitionNpmPackages — empty and all-public inputs', () => {
     const { publicPkgs, privateCount } = partitionNpmPackages([]);
     assert.deepEqual(publicPkgs, []);
     assert.equal(privateCount, 0);
+  });
+
+  it('returns empty privatePkgs for empty input', () => {
+    const { privatePkgs } = partitionNpmPackages([]);
+    assert.deepEqual(privatePkgs, []);
   });
 
   it('returns all packages as public when none are private', () => {
@@ -128,6 +151,15 @@ describe('partitionNpmPackages — empty and all-public inputs', () => {
     assert.equal(privateCount, 0);
   });
 
+  it('returns empty privatePkgs when all packages are public', () => {
+    const packages = [
+      { name: 'a', version: '1.0.0', resolved: 'https://registry.npmjs.org/a/-/a-1.0.0.tgz' },
+      { name: 'b', version: '2.0.0', resolved: 'https://registry.npmjs.org/b/-/b-2.0.0.tgz' },
+    ];
+    const { privatePkgs } = partitionNpmPackages(packages);
+    assert.deepEqual(privatePkgs, []);
+  });
+
   it('returns zero publicPkgs and full count when all are private', () => {
     const packages = [
       { name: 'x', version: '1.0.0', resolved: 'https://private.corp/x/-/x-1.0.0.tgz' },
@@ -136,6 +168,19 @@ describe('partitionNpmPackages — empty and all-public inputs', () => {
     const { publicPkgs, privateCount } = partitionNpmPackages(packages);
     assert.deepEqual(publicPkgs, []);
     assert.equal(privateCount, 2);
+  });
+
+  it('privatePkgs contains all packages when all are private', () => {
+    const packages = [
+      { name: 'x', version: '1.0.0', resolved: 'https://private.corp/x/-/x-1.0.0.tgz' },
+      { name: 'y', version: '2.0.0', resolved: 'https://private.corp/y/-/y-2.0.0.tgz' },
+    ];
+    const { privatePkgs } = partitionNpmPackages(packages);
+    assert.equal(privatePkgs.length, 2);
+    assert.equal(privatePkgs[0].name, 'x');
+    assert.equal(privatePkgs[0].url, 'https://private.corp/x/-/x-1.0.0.tgz');
+    assert.equal(privatePkgs[1].name, 'y');
+    assert.equal(privatePkgs[1].url, 'https://private.corp/y/-/y-2.0.0.tgz');
   });
 });
 
@@ -170,5 +215,15 @@ describe('partitionNpmPackages — scoped packages', () => {
     const { publicPkgs, privateCount } = partitionNpmPackages(packages);
     assert.deepEqual(publicPkgs, []);
     assert.equal(privateCount, 1);
+  });
+
+  it('privatePkgs contains the resolved URL for a scoped private package', () => {
+    const packages = [
+      { name: '@myorg/secret', version: '1.0.0', resolved: 'https://npm.pkg.github.com/@myorg/secret/-/secret-1.0.0.tgz' },
+    ];
+    const { privatePkgs } = partitionNpmPackages(packages);
+    assert.equal(privatePkgs.length, 1);
+    assert.equal(privatePkgs[0].name, '@myorg/secret');
+    assert.equal(privatePkgs[0].url, 'https://npm.pkg.github.com/@myorg/secret/-/secret-1.0.0.tgz');
   });
 });

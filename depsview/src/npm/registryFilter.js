@@ -25,21 +25,31 @@ export function isPublicNpmResolved(resolved) {
 }
 
 /**
- * Splits a list of lock-file packages into public and private arrays.
- * Returns { publicPkgs, privateCount } so callers can report the skip count.
+ * Splits a list of lock-file packages into public and non-public arrays.
+ * Non-public packages are reported in `privatePkgs` with their resolved URL so
+ * callers can surface them to the user — the URL itself reveals whether this is
+ * a private registry, a GitHub Package Registry, a direct tarball, etc.
+ * Packages with no resolved field (workspace roots, bundled packages) are treated
+ * as public.
  * Does not mutate the input array.
  * @param {Array<{ name: string, version: string, resolved: string|null }>} packages
- * @returns {{ publicPkgs: Array<{ name: string, version: string }>, privateCount: number }}
+ * @returns {{
+ *   publicPkgs:   Array<{ name: string, version: string }>,
+ *   privateCount: number,
+ *   privatePkgs:  Array<{ name: string, url: string }>
+ * }}
  */
 export function partitionNpmPackages(packages) {
-  const publicPkgs = [];
-  let privateCount = 0;
+  const publicPkgs  = [];
+  const privatePkgs = [];
+
   for (const pkg of packages) {
     if (isPublicNpmResolved(pkg.resolved)) {
       publicPkgs.push({ name: pkg.name, version: pkg.version });
     } else {
-      privateCount++;
+      privatePkgs.push({ name: pkg.name, url: pkg.resolved });
     }
   }
-  return { publicPkgs, privateCount };
+
+  return { publicPkgs, privateCount: privatePkgs.length, privatePkgs };
 }

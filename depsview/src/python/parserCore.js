@@ -302,4 +302,32 @@ function parseManifestJson(content) {
     .filter(Boolean);
 }
 
-export { parseDependencyString, parseRequiresDist, parsePyprojectToml, parseSetupCfg, parsePipfile, parseManifestJson };
+/** Hostnames considered safe PyPI sources — not flagged as non-standard. */
+const PYPI_HOSTS = new Set(['pypi.org', 'files.pythonhosted.org']);
+
+/**
+ * Parses a PEP 508 URL requirement (`name @ https://...`) and returns a
+ * non-standard dep entry when the URL's hostname is not a known PyPI host.
+ * Returns null for PyPI URLs, non-URL `@` forms, or unparseable input.
+ * Only `http://` and `https://` URLs are recognised; git+https etc. that
+ * contain embedded at-signs are intentionally not matched here.
+ * @param {string} depStr - raw requirement line
+ * @returns {{ name: string, spec: string, reason: string }|null}
+ */
+function parsePep508UrlRequirement(depStr) {
+  if (!depStr || typeof depStr !== 'string') return null;
+  const trimmed = depStr.trim();
+  // Must match: name @ https://...  (name as PEP 508 identifier)
+  const m = trimmed.match(/^([A-Za-z0-9][A-Za-z0-9._-]*)\s*@\s*(https?:\/\/\S+)/i);
+  if (!m) return null;
+  const name = m[1];
+  const url  = m[2];
+  let hostname;
+  try { hostname = new URL(url).hostname; } catch { return null; }
+  if (PYPI_HOSTS.has(hostname)) return null;
+  // Cap hostname to the DNS maximum (253 chars) to avoid oversized reason strings.
+  const displayHost = hostname.length > 253 ? hostname.slice(0, 253) + '…' : hostname;
+  return { name, spec: `${name} @ ${url}`, reason: `direct URL install (${displayHost})` };
+}
+
+export { parseDependencyString, parseRequiresDist, parsePyprojectToml, parseSetupCfg, parsePipfile, parseManifestJson, parsePep508UrlRequirement };

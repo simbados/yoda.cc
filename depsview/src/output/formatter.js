@@ -15,6 +15,8 @@
  * ecosystems are present.
  */
 
+import { domainOf, groupByDomain } from './nonStandardSources.js';
+
 const ANSI_RED    = '\x1b[31m';
 const ANSI_ORANGE = '\x1b[38;5;208m';
 const ANSI_YELLOW = '\x1b[33m';
@@ -140,6 +142,35 @@ function formatDownloads(count) {
 }
 
 /**
+ * Prints a non-standard sources block after the table.
+ * - `dangerousDeps` (⚠) — explicitly declared non-registry specs in manifests.
+ * - `privatePkgs`   (ℹ) — packages resolved from non-public registries; grouped by domain.
+ * Emits nothing when both arrays are empty.
+ * @param {Array<{ name: string, spec: string, reason: string }>} dangerousDeps
+ * @param {Array<{ name: string, url: string }>}                  privatePkgs
+ */
+function printNonStandardSources(dangerousDeps, privatePkgs) {
+  if (!dangerousDeps.length && !privatePkgs.length) return;
+
+  console.log('');
+  console.log('Non-standard sources:');
+
+  if (dangerousDeps.length) {
+    console.log('  ⚠ Non-registry dependency specs (declared in manifest):');
+    for (const { name, spec, reason } of dangerousDeps) {
+      console.log(`    ${name}  ${spec}  [${reason}]`);
+    }
+  }
+
+  if (privatePkgs.length) {
+    console.log('  ℹ Non-public registry packages (skipped from resolution):');
+    for (const [domain, names] of groupByDomain(privatePkgs)) {
+      console.log(`    ${domain}: ${names.join(', ')}`);
+    }
+  }
+}
+
+/**
  * Formats one section (one ecosystem) as a padded plain-text table.
  *
  * Column visibility:
@@ -169,6 +200,8 @@ function formatTable(results, directNames, opts = {}) {
     source         = null,
     note           = null,
     privateCount   = 0,
+    privatePkgs    = [],
+    dangerousDeps  = [],
     firstRelease   = true,
     printHeader    = false,
   } = opts;
@@ -259,6 +292,7 @@ function formatTable(results, directNames, opts = {}) {
     console.log(`${rows.length} packages total`);
   }
   if (source) console.log(`Files: ${source}`);
+  printNonStandardSources(dangerousDeps, privatePkgs);
   if (printHeader) console.log('');
 }
 
@@ -278,7 +312,7 @@ function formatMulti(sections, opts = {}) {
   const printHeader = present.length >= 2;
 
   for (const ecosystem of present) {
-    const { results, directNames, source, note, privateCount = 0 } = sections.get(ecosystem);
+    const { results, directNames, source, note, privateCount = 0, privatePkgs = [], dangerousDeps = [] } = sections.get(ecosystem);
     formatTable(results, directNames, {
       ecosystem,
       // Per-ecosystem column rules:
@@ -287,6 +321,8 @@ function formatMulti(sections, opts = {}) {
       source,
       note,
       privateCount,
+      privatePkgs,
+      dangerousDeps,
       firstRelease: ecosystem !== 'go',
       printHeader,
     });

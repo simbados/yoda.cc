@@ -22,21 +22,21 @@ describe('parsePackageJson — dependencies only', () => {
   });
 
   it('returns exactly 2 deps by default', () => {
-    assert.equal(parsePackageJson(content).length, 2);
+    assert.equal(parsePackageJson(content).deps.length, 2);
   });
 
   it('parses lodash spec', () => {
-    const dep = parsePackageJson(content).find(d => d.name === 'lodash');
+    const dep = parsePackageJson(content).deps.find(d => d.name === 'lodash');
     assert.equal(dep.versionSpec, '^4.17.21');
   });
 
   it('parses vite spec', () => {
-    const dep = parsePackageJson(content).find(d => d.name === 'vite');
+    const dep = parsePackageJson(content).deps.find(d => d.name === 'vite');
     assert.equal(dep.versionSpec, '^5.0.0');
   });
 
   it('excludes devDependencies by default', () => {
-    assert.ok(!parsePackageJson(content).find(d => d.name === 'eslint'));
+    assert.ok(!parsePackageJson(content).deps.find(d => d.name === 'eslint'));
   });
 });
 
@@ -47,15 +47,15 @@ describe('parsePackageJson — includeTests: true', () => {
   });
 
   it('returns 3 deps with includeTests', () => {
-    assert.equal(parsePackageJson(content, true).length, 3);
+    assert.equal(parsePackageJson(content, true).deps.length, 3);
   });
 
   it('includes eslint when includeTests is true', () => {
-    assert.ok(parsePackageJson(content, true).find(d => d.name === 'eslint'));
+    assert.ok(parsePackageJson(content, true).deps.find(d => d.name === 'eslint'));
   });
 });
 
-describe('parsePackageJson — non-registry specs skipped', () => {
+describe('parsePackageJson — non-registry specs collected as dangerousDeps', () => {
   const content = JSON.stringify({
     dependencies: {
       local:    'file:../local',
@@ -65,10 +65,26 @@ describe('parsePackageJson — non-registry specs skipped', () => {
     },
   });
 
-  it('only includes the registry-resolvable entry', () => {
-    const deps = parsePackageJson(content);
+  it('only includes the registry-resolvable entry in deps', () => {
+    const { deps } = parsePackageJson(content);
     assert.equal(deps.length, 1);
     assert.equal(deps[0].name, 'valid');
+  });
+
+  it('collects file: spec as dangerousDep', () => {
+    const { dangerousDeps } = parsePackageJson(content);
+    assert.ok(dangerousDeps.find(d => d.name === 'local'));
+  });
+
+  it('collects git+ spec as dangerousDep', () => {
+    const { dangerousDeps } = parsePackageJson(content);
+    assert.ok(dangerousDeps.find(d => d.name === 'hosted'));
+  });
+
+  it('silently skips workspace: spec (not dangerous)', () => {
+    const { deps, dangerousDeps } = parsePackageJson(content);
+    assert.ok(!deps.find(d => d.name === 'ws'));
+    assert.ok(!dangerousDeps.find(d => d.name === 'ws'));
   });
 });
 
@@ -78,7 +94,7 @@ describe('parsePackageJson — scoped packages', () => {
   });
 
   it('preserves scoped package names', () => {
-    const deps = parsePackageJson(content);
+    const { deps } = parsePackageJson(content);
     assert.equal(deps.length, 2);
     assert.ok(deps.find(d => d.name === '@babel/core'));
     assert.ok(deps.find(d => d.name === '@types/node'));
@@ -86,17 +102,17 @@ describe('parsePackageJson — scoped packages', () => {
 });
 
 describe('parsePackageJson — empty sections', () => {
-  it('returns empty array when dependencies is absent', () => {
-    assert.deepEqual(parsePackageJson(JSON.stringify({})), []);
+  it('returns empty deps when dependencies is absent', () => {
+    assert.deepEqual(parsePackageJson(JSON.stringify({})).deps, []);
   });
 
-  it('returns empty array when dependencies is empty object', () => {
-    assert.deepEqual(parsePackageJson(JSON.stringify({ dependencies: {} })), []);
+  it('returns empty deps when dependencies is empty object', () => {
+    assert.deepEqual(parsePackageJson(JSON.stringify({ dependencies: {} })).deps, []);
   });
 
   it('treats empty string spec as null versionSpec', () => {
     const content = JSON.stringify({ dependencies: { lodash: '' } });
-    const deps = parsePackageJson(content);
+    const { deps } = parsePackageJson(content);
     assert.equal(deps[0].versionSpec, null);
   });
 });

@@ -23,9 +23,10 @@ import {
 } from '../python/parserCore.js';
 import { normalizePackageName } from '../python/pypiClient.js';
 import { isTestDirectory, isTestRequirementsFile } from '../python/testFilter.js';
-import { parseGoSum, parseGoMod } from '../go/parserCore.js';
+import { parseGoSum, parseGoMod, parseGoModReplaces } from '../go/parserCore.js';
 import { partitionNpmPackages } from '../npm/registryFilter.js';
 import { partitionGoModules    } from '../go/moduleFilter.js';
+import { parsePep508UrlRequirement } from '../python/parserCore.js';
 
 /** Recognised dependency filenames, checked case-sensitively against the repo listing. */
 const DEP_FILENAMES = new Set(['pyproject.toml', 'manifest.json', 'requirements.txt', 'requirements_all.txt', 'setup.cfg', 'Pipfile']);
@@ -76,10 +77,11 @@ function resolvePath(base, relative) {
  * @param {Set<string>} visited - repo-relative paths already parsed in this chain
  * @param {boolean} includeTests - when false (default), skip -r includes whose
  *   filename contains a test-related keyword (e.g. requirements-test.txt)
- * @returns {Promise<Array<{ name: string, versionSpec: string|null }>>}
+ * @returns {Promise<{ deps: Array<{ name: string, versionSpec: string|null }>, dangerousDeps: Array<{ name: string, spec: string, reason: string }> }>}
  */
 async function parseRequirementsTxtAsync(content, owner, repo, baseDir, ref, visited = new Set(), includeTests = false) {
   const deps = [];
+  const dangerousDeps = [];
 
   for (let line of content.split('\n')) {
     line = line.split('#')[0].trim();
@@ -103,7 +105,9 @@ async function parseRequirementsTxtAsync(content, owner, repo, baseDir, ref, vis
       const includeDir     = fullPath.includes('/') ? fullPath.slice(0, fullPath.lastIndexOf('/')) : '';
       const includeContent = await fetchFileContent(owner, repo, fullPath, ref);
       if (includeContent) {
-        deps.push(...await parseRequirementsTxtAsync(includeContent, owner, repo, includeDir, ref, new Set([...visited, fullPath]), includeTests));
+        const sub = await parseRequirementsTxtAsync(includeContent, owner, repo, includeDir, ref, new Set([...visited, fullPath]), includeTests);
+        deps.push(...sub.deps);
+        dangerousDeps.push(...sub.dangerousDeps);
       }
       continue;
     }
@@ -111,10 +115,15 @@ async function parseRequirementsTxtAsync(content, owner, repo, baseDir, ref, vis
     if (/^-/.test(line)) continue;
 
     const dep = parseDependencyString(line);
-    if (dep) deps.push(dep);
+    if (dep) {
+      deps.push(dep);
+    } else {
+      const danger = parsePep508UrlRequirement(line);
+      if (danger) dangerousDeps.push(danger);
+    }
   }
 
-  return deps;
+  return { deps, dangerousDeps };
 }
 
 /**
@@ -238,18 +247,21 @@ async function parseGithubDependencies({ owner, repo, ref, subpath }, options = 
       .filter(({ content }) => content !== null)
       .map(async ({ name, filePath, dirPath, content }) => {
         const baseDir = dirPath || '';
-        if (name === 'pyproject.toml')     return { filePath, deps: parsePyprojectToml(content, includeTests) };
-        if (name === 'manifest.json')      return { filePath, deps: parseManifestJson(content) };
-        if (name === 'requirements.txt' || name === 'requirements_all.txt')
-          return { filePath, deps: await parseRequirementsTxtAsync(content, owner, repo, baseDir, ref, new Set([filePath]), includeTests) };
-        if (name === 'setup.cfg')          return { filePath, deps: parseSetupCfg(content) };
-        if (name === 'Pipfile')            return { filePath, deps: parsePipfile(content, includeTests) };
-        return { filePath, deps: [] };
+        if (name === 'pyproject.toml')     return { filePath, deps: parsePyprojectToml(content, includeTests), dangerousDeps: [] };
+        if (name === 'manifest.json')      return { filePath, deps: parseManifestJson(content), dangerousDeps: [] };
+        if (name === 'requirements.txt' || name === 'requirements_all.txt') {
+          const { deps, dangerousDeps } = await parseRequirementsTxtAsync(content, owner, repo, baseDir, ref, new Set([filePath]), includeTests);
+          return { filePath, deps, dangerousDeps };
+        }
+        if (name === 'setup.cfg')          return { filePath, deps: parseSetupCfg(content), dangerousDeps: [] };
+        if (name === 'Pipfile')            return { filePath, deps: parsePipfile(content, includeTests), dangerousDeps: [] };
+        return { filePath, deps: [], dangerousDeps: [] };
       })
   );
 
   return {
     deps: mergeDeps(allDepArrays.flatMap(({ deps }) => deps)),
+    dangerousDeps: allDepArrays.flatMap(({ dangerousDeps }) => dangerousDeps),
     source: allDepArrays.map(({ filePath }) => filePath).join(', '),
   };
 }
@@ -293,20 +305,21 @@ async function parseGithubNpmDependencies({ owner, repo, ref, subpath }, options
     throw new Error(`Failed to fetch ${filePath} from ${owner}/${repo}`);
   }
 
-  const isLockFile = preferred === 'package-lock.json' || preferred === 'pnpm-lock.yaml';
-  const rawDeps = preferred === 'package-lock.json' ? parsePackageLock(content, includeTests)
-    : preferred === 'pnpm-lock.yaml'               ? parsePnpmLock(content, includeTests)
-    : parsePackageJson(content, includeTests);
-
   const note = preferred === 'pnpm-lock.yaml' && getPnpmMajorVersion(content) >= 9
     ? 'pnpm-lock.yaml v9 does not flag packages as dev-only — all installed packages are listed, including test and dev dependencies.'
     : null;
 
-  if (isLockFile) {
-    const { publicPkgs, privateCount } = partitionNpmPackages(rawDeps);
-    return { deps: publicPkgs, source: preferred, note, privateCount };
+  if (preferred === 'package-lock.json' || preferred === 'pnpm-lock.yaml') {
+    const rawDeps = preferred === 'package-lock.json'
+      ? parsePackageLock(content, includeTests)
+      : parsePnpmLock(content, includeTests);
+    const { publicPkgs, privateCount, privatePkgs } = partitionNpmPackages(rawDeps);
+    return { deps: publicPkgs, source: preferred, note, privateCount, privatePkgs, dangerousDeps: [] };
   }
-  return { deps: rawDeps, source: preferred, note, privateCount: 0 };
+
+  // package.json: returns { deps, dangerousDeps }
+  const { deps, dangerousDeps } = parsePackageJson(content, includeTests);
+  return { deps, source: preferred, note, privateCount: 0, privatePkgs: [], dangerousDeps };
 }
 
 /**
@@ -345,8 +358,10 @@ async function parseGithubGoDependencies({ owner, repo, ref, subpath }) {
   }
 
   const rawDeps = preferred === 'go.sum' ? parseGoSum(content) : parseGoMod(content);
-  const { publicMods, privateCount } = partitionGoModules(rawDeps);
-  return { deps: publicMods, source: preferred, privateCount };
+  const { publicMods, privateCount, privateMods } = partitionGoModules(rawDeps);
+  // Replace directive detection only when go.mod is the primary source — no extra fetch.
+  const dangerousDeps = preferred === 'go.mod' ? parseGoModReplaces(content).dangerousDeps : [];
+  return { deps: publicMods, source: preferred, privateCount, privatePkgs: privateMods, dangerousDeps };
 }
 
 export { parseGithubDependencies, parseGithubNpmDependencies, parseGithubGoDependencies, resolvePath, mergeDeps };

@@ -7,7 +7,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { parseGoSum, parseGoMod } from './parserCore.js';
+import { parseGoSum, parseGoMod, parseGoModReplaces } from './parserCore.js';
 import { partitionGoModules } from './moduleFilter.js';
 
 /**
@@ -15,14 +15,33 @@ import { partitionGoModules } from './moduleFilter.js';
  * Priority order: go.sum (preferred, full transitive closure) → go.mod (direct + indirect).
  * Returns the parsed dependencies and a label indicating which file was used.
  *
+ * Also reads go.mod for `replace` directives: local-path replaces are returned as
+ * `dangerousDeps`; fork/alias redirects are informational (`redirectDeps` is not
+ * currently forwarded — callers receive only the dangerous subset).
+ *
  * Each returned dep has `{ name, version }`; entries parsed from go.mod
  * additionally carry an `indirect` boolean.
  *
  * @param {string} projectPath - absolute path to the Go project root
- * @returns {{ deps: Array<{ name: string, version: string, indirect?: boolean }>, source: string }}
+ * @returns {{
+ *   deps: Array<{ name: string, version: string, indirect?: boolean }>,
+ *   source: string,
+ *   privateCount: number,
+ *   privatePkgs: Array<{ name: string, url: string }>,
+ *   dangerousDeps: Array<{ name: string, spec: string, reason: string }>
+ * }}
  * @throws {Error} when neither go.sum nor go.mod is present
  */
 export function parseDependencyFile(projectPath) {
+  // Always read go.mod for replace directives when present.
+  let dangerousDeps = [];
+  const goModPath = path.join(projectPath, 'go.mod');
+  if (fs.existsSync(goModPath) && !fs.statSync(goModPath).isDirectory()) {
+    try {
+      dangerousDeps = parseGoModReplaces(fs.readFileSync(goModPath, 'utf8')).dangerousDeps;
+    } catch { /* ignore — replace parsing is best-effort */ }
+  }
+
   const candidates = [
     { file: 'go.sum', parse: parseGoSum },
     { file: 'go.mod', parse: parseGoMod },
@@ -34,8 +53,8 @@ export function parseDependencyFile(projectPath) {
     if (fs.statSync(fullPath).isDirectory()) continue;
     try {
       const content = fs.readFileSync(fullPath, 'utf8');
-      const { publicMods, privateCount } = partitionGoModules(parse(content));
-      return { deps: publicMods, source: file, privateCount };
+      const { publicMods, privateCount, privateMods } = partitionGoModules(parse(content));
+      return { deps: publicMods, source: file, privateCount, privatePkgs: privateMods, dangerousDeps };
     } catch (err) {
       throw new Error(`Failed to parse ${file}: ${err.message}`);
     }

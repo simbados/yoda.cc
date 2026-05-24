@@ -17,6 +17,7 @@ import {
   parseSetupCfg,
   parsePipfile,
   parseManifestJson,
+  parsePep508UrlRequirement,
 } from './parserCore.js';
 
 /**
@@ -47,11 +48,12 @@ const REQUIREMENTS_FILES = ['requirements_all.txt', 'requirements.txt'];
  * @param {Set<string>} visited - absolute paths already parsed in this include chain
  * @param {boolean} includeTests - when false (default), -r includes whose filename contains
  *                                 a test-related keyword are silently skipped
- * @returns {Array<{ name: string, versionSpec: string|null }>}
+ * @returns {{ deps: Array<{ name: string, versionSpec: string|null }>, dangerousDeps: Array<{ name: string, spec: string, reason: string }> }}
  */
 function parseRequirementsTxt(content, filePath, projectRoot, visited = new Set(), includeTests = false) {
   visited.add(filePath);
   const deps = [];
+  const dangerousDeps = [];
   const dir = path.dirname(filePath);
 
   for (let line of content.split('\n')) {
@@ -78,7 +80,9 @@ function parseRequirementsTxt(content, filePath, projectRoot, visited = new Set(
 
       try {
         const includeContent = fs.readFileSync(fullPath, 'utf8');
-        deps.push(...parseRequirementsTxt(includeContent, fullPath, projectRoot, visited, includeTests));
+        const sub = parseRequirementsTxt(includeContent, fullPath, projectRoot, visited, includeTests);
+        deps.push(...sub.deps);
+        dangerousDeps.push(...sub.dangerousDeps);
       } catch { /* missing include — skip silently */ }
       continue;
     }
@@ -87,10 +91,15 @@ function parseRequirementsTxt(content, filePath, projectRoot, visited = new Set(
     if (/^-/.test(line)) continue;
 
     const dep = parseDependencyString(line);
-    if (dep) deps.push(dep);
+    if (dep) {
+      deps.push(dep);
+    } else {
+      const danger = parsePep508UrlRequirement(line);
+      if (danger) dangerousDeps.push(danger);
+    }
   }
 
-  return deps;
+  return { deps, dangerousDeps };
 }
 
 /**
@@ -136,12 +145,13 @@ function mergeRequirementsDeps(allDeps) {
  *
  * @param {string} projectPath - absolute path to the Python project root
  * @param {boolean} includeTests - forwarded to parseRequirementsTxt
- * @returns {{ deps: Array<{ name: string, versionSpec: string|null }>, source: string }|null}
+ * @returns {{ deps: Array<{ name: string, versionSpec: string|null }>, dangerousDeps: Array<{ name: string, spec: string, reason: string }>, source: string }|null}
  *   null when no requirements file is present in the directory
  */
 function parseRequirementsFiles(projectPath, includeTests) {
   const visited = new Set();
   const allDeps = [];
+  const allDangerousDeps = [];
   const sources = [];
 
   for (const file of REQUIREMENTS_FILES) {
@@ -152,7 +162,9 @@ function parseRequirementsFiles(projectPath, includeTests) {
     if (visited.has(fullPath)) continue;
     try {
       const content = fs.readFileSync(fullPath, 'utf8');
-      allDeps.push(...parseRequirementsTxt(content, fullPath, projectPath, visited, includeTests));
+      const { deps, dangerousDeps } = parseRequirementsTxt(content, fullPath, projectPath, visited, includeTests);
+      allDeps.push(...deps);
+      allDangerousDeps.push(...dangerousDeps);
       sources.push(file);
     } catch (err) {
       throw new Error(`Failed to parse ${file}: ${err.message}`);
@@ -160,7 +172,7 @@ function parseRequirementsFiles(projectPath, includeTests) {
   }
 
   if (sources.length === 0) return null;
-  return { deps: mergeRequirementsDeps(allDeps), source: sources.join(', ') };
+  return { deps: mergeRequirementsDeps(allDeps), dangerousDeps: allDangerousDeps, source: sources.join(', ') };
 }
 
 /**
@@ -180,16 +192,17 @@ function parseDependencyFile(projectPath, options = {}) {
 
   /**
    * Reads and parses a single dependency file if it exists.
+   * Parsers that do not detect non-standard deps return dangerousDeps: [].
    * @param {string} file - filename relative to projectPath
    * @param {(content: string, fullPath: string) => Array} parse
-   * @returns {{ deps: Array, source: string }|null} null when the file is absent
+   * @returns {{ deps: Array, dangerousDeps: Array, source: string }|null} null when the file is absent
    */
   const tryFile = (file, parse) => {
     const fullPath = path.join(projectPath, file);
     // Guard against a directory entry matching the filename (e.g. case-insensitive fs)
     if (!fs.existsSync(fullPath) || fs.statSync(fullPath).isDirectory()) return null;
     try {
-      return { deps: parse(fs.readFileSync(fullPath, 'utf8'), fullPath), source: file };
+      return { deps: parse(fs.readFileSync(fullPath, 'utf8'), fullPath), dangerousDeps: [], source: file };
     } catch (err) {
       throw new Error(`Failed to parse ${file}: ${err.message}`);
     }

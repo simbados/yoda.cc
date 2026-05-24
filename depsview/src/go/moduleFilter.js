@@ -55,20 +55,27 @@ export function isPublicGoModule(modulePath) {
 
 /**
  * Splits a list of Go modules into public and private arrays.
- * Returns { publicMods, privateCount } so callers can report the skip count.
+ * Private modules are those whose path hostname is not in the public allowlist —
+ * typically internal corporate modules or single-label hostnames.
+ * Returns `privateMods` with the module path (used as URL equivalent) so callers
+ * can surface them to the user.
  * Does not mutate the input array.
  * @param {Array<{ name: string, version: string, indirect?: boolean }>} modules
- * @returns {{ publicMods: Array<{ name: string, version: string, indirect?: boolean }>, privateCount: number }}
+ * @returns {{
+ *   publicMods:   Array<{ name: string, version: string, indirect?: boolean }>,
+ *   privateCount: number,
+ *   privateMods:  Array<{ name: string, url: string }>
+ * }}
  */
 export function partitionGoModules(modules) {
-  const publicMods = [];
-  let privateCount = 0;
+  const publicMods  = [];
+  const privateMods = [];
   for (const mod of modules) {
     if (isPublicGoModule(mod.name)) {
       publicMods.push(mod);
     } else {
-      privateCount++;
+      privateMods.push({ name: mod.name, url: mod.name });
     }
   }
-  return { publicMods, privateCount };
+  return { publicMods, privateCount: privateMods.length, privateMods };
 }

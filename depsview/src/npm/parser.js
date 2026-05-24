@@ -21,7 +21,14 @@ import { partitionNpmPackages } from './registryFilter.js';
  * distinguish dev-only packages from production packages.
  * @param {string} projectPath - absolute path to the npm project root
  * @param {{ includeTests?: boolean }} [options]
- * @returns {{ deps: Array<{ name: string, version?: string, versionSpec?: string|null }>, source: string, note: string|null }}
+ * @returns {{
+ *   deps: Array<{ name: string, version?: string, versionSpec?: string|null }>,
+ *   source: string,
+ *   note: string|null,
+ *   privateCount: number,
+ *   privatePkgs: Array<{ name: string, url: string }>,
+ *   dangerousDeps: Array<{ name: string, spec: string, reason: string }>
+ * }}
  */
 function parseDependencyFile(projectPath, options = {}) {
   const { includeTests = false } = options;
@@ -29,8 +36,8 @@ function parseDependencyFile(projectPath, options = {}) {
   const lockPath = path.join(projectPath, 'package-lock.json');
   if (fs.existsSync(lockPath) && !fs.statSync(lockPath).isDirectory()) {
     try {
-      const { publicPkgs, privateCount } = partitionNpmPackages(parsePackageLock(fs.readFileSync(lockPath, 'utf8'), includeTests));
-      return { deps: publicPkgs, source: 'package-lock.json', note: null, privateCount };
+      const { publicPkgs, privateCount, privatePkgs } = partitionNpmPackages(parsePackageLock(fs.readFileSync(lockPath, 'utf8'), includeTests));
+      return { deps: publicPkgs, source: 'package-lock.json', note: null, privateCount, privatePkgs, dangerousDeps: [] };
     } catch (err) {
       throw new Error(`Failed to parse package-lock.json: ${err.message}`);
     }
@@ -43,8 +50,8 @@ function parseDependencyFile(projectPath, options = {}) {
       const note = getPnpmMajorVersion(content) >= 9
         ? 'pnpm-lock.yaml v9 does not flag packages as dev-only — all installed packages are listed, including test and dev dependencies.'
         : null;
-      const { publicPkgs, privateCount } = partitionNpmPackages(parsePnpmLock(content, includeTests));
-      return { deps: publicPkgs, source: 'pnpm-lock.yaml', note, privateCount };
+      const { publicPkgs, privateCount, privatePkgs } = partitionNpmPackages(parsePnpmLock(content, includeTests));
+      return { deps: publicPkgs, source: 'pnpm-lock.yaml', note, privateCount, privatePkgs, dangerousDeps: [] };
     } catch (err) {
       throw new Error(`Failed to parse pnpm-lock.yaml: ${err.message}`);
     }
@@ -53,7 +60,8 @@ function parseDependencyFile(projectPath, options = {}) {
   const pkgPath = path.join(projectPath, 'package.json');
   if (fs.existsSync(pkgPath) && !fs.statSync(pkgPath).isDirectory()) {
     try {
-      return { deps: parsePackageJson(fs.readFileSync(pkgPath, 'utf8'), includeTests), source: 'package.json', note: null, privateCount: 0 };
+      const { deps, dangerousDeps } = parsePackageJson(fs.readFileSync(pkgPath, 'utf8'), includeTests);
+      return { deps, source: 'package.json', note: null, privateCount: 0, privatePkgs: [], dangerousDeps };
     } catch (err) {
       throw new Error(`Failed to parse package.json: ${err.message}`);
     }
@@ -75,8 +83,8 @@ function parseDependencyFile(projectPath, options = {}) {
 function readDirectNamesFromPackageJson(dirPath, includeTests) {
   try {
     const content = fs.readFileSync(path.join(dirPath, 'package.json'), 'utf8');
-    const direct  = parsePackageJson(content, includeTests);
-    return new Set(direct.map(d => normalizePackageName(d.name)));
+    const { deps } = parsePackageJson(content, includeTests);
+    return new Set(deps.map(d => normalizePackageName(d.name)));
   } catch {
     return new Set();
   }

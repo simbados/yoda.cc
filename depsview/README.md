@@ -174,9 +174,13 @@ Scoped package names (e.g. `@babel/core`, `@types/node`) are fully supported thr
 
 Pass `--include-tests` to include `devDependencies` alongside `dependencies`.
 
+### Non-registry specs
+
+Dependencies declared with non-registry specs in `package.json` — `file:`, `link:`, `git+`, direct `https:` URLs, or relative paths — are collected as **non-standard sources** and flagged with a ⚠ warning. `workspace:` specs (monorepo cross-links) are silently skipped since they are not resolvable via the registry.
+
 ### Private registries
 
-Packages from private or custom registries are **automatically skipped**. When a `package-lock.json` or `pnpm-lock.yaml` contains a package whose `resolved` URL does not start with `https://registry.npmjs.org/`, that package is excluded and not looked up. The count of skipped packages is printed to stderr (CLI) or shown in the results when any are found (web).
+Packages from private or custom registries are **automatically skipped**. When a `package-lock.json` or `pnpm-lock.yaml` contains a package whose `resolved` URL does not start with `https://registry.npmjs.org/`, that package is excluded and not looked up. All skipped packages are listed with their resolved URL, grouped by domain, in the non-standard sources block.
 
 ## Python support
 
@@ -205,7 +209,7 @@ Pass `--download-stats` (or `--ds`) to also fetch monthly download counts from [
 
 ### URL-pinned packages
 
-[PEP 508](https://peps.python.org/pep-0508/) URL requirements (`package @ https://...`) are **silently skipped** — they are pinned to a specific URL rather than a registry and cannot be resolved via PyPI. This includes wheel URLs, VCS references (`@ git+https://...`), and local file paths (`@ file://...`). Plain package names and version constraints are unaffected.
+[PEP 508](https://peps.python.org/pep-0508/) URL requirements (`package @ https://...`) in `requirements.txt` / `requirements_all.txt` are **detected and shown as non-standard sources** when the URL's hostname is not a known PyPI host (`pypi.org`, `files.pythonhosted.org`). They are excluded from registry resolution because they are pinned to a specific URL and cannot be looked up via PyPI. This includes wheel URLs from custom hosts, corporate artifact repositories, and similar direct-URL installs. Plain package names and version constraints are unaffected.
 
 ## Go support
 
@@ -224,7 +228,7 @@ When both `go.sum` and `go.mod` are present, the matching `go.mod` is read along
 
 When only `go.mod` is present, every `require` entry is resolved. Entries marked `// indirect` are flagged as transitive in the footer; entries without the marker are reported as direct.
 
-`module`, `go`, `toolchain`, `replace`, `exclude`, and `retract` directives are ignored.
+`module`, `go`, `toolchain`, `exclude`, and `retract` directives are ignored. `replace` directives are parsed: local-path replacements (`=> ./path` or `=> ../path`) are flagged as non-standard sources (⚠), while module-to-module fork redirects are noted informally.
 
 ### Metadata
 
@@ -240,7 +244,18 @@ The supply chain score (with `--socket-key` / `--socket-org`) works for Go modul
 
 ### Private modules
 
-Modules whose path hostname is not a known public host are **automatically skipped** — they cannot be resolved via `proxy.golang.org`. Public hosts include `github.com`, `golang.org`, `google.golang.org`, `go.uber.org`, and many others. Internal or corporate module paths (e.g. `corp.internal/pkg`) are excluded and the count of skipped modules is printed to stderr (CLI) or shown in the results header (web).
+Modules whose path hostname is not a known public host are **automatically skipped** — they cannot be resolved via `proxy.golang.org`. Public hosts include `github.com`, `golang.org`, `google.golang.org`, `go.uber.org`, and many others. Internal or corporate module paths (e.g. `corp.internal/pkg`) are excluded and listed with their module path, grouped by domain, in the non-standard sources block.
+
+## Non-standard sources
+
+When any non-standard package sources are detected, a collapsible **non-standard sources** block appears below the dependency table (web UI, HTML report, and CLI). It contains two categories:
+
+| Symbol | Category | Meaning |
+|---|---|---|
+| ⚠ | Non-registry dependency specs | Explicitly declared in the manifest with a non-registry spec — `file:`, `git+`, direct URL, local `replace`, etc. These are flagged because they bypass the public registry and may introduce supply-chain risk. |
+| ℹ | Non-public registry packages | Resolved from a non-public registry or skipped because their path/URL hostname is not a known public host. Listed with the source URL or module path, grouped by domain. |
+
+The block summarises the total count in the collapsed header (e.g. *"3 non-standard sources"*) and expands to show per-package details on click.
 
 ## GitHub URL support
 

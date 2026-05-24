@@ -67,6 +67,60 @@ function unquote(s) {
   return s.startsWith('"') && s.endsWith('"') ? s.slice(1, -1) : s;
 }
 
+/**
+ * Parses `replace` directives from a go.mod file.
+ *
+ * Local-path replacements (`=> ./path` or `=> ../path`) are returned as
+ * `dangerousDeps` because they substitute a module with a local directory —
+ * acceptable in development, but a red flag in production or third-party code.
+ *
+ * Fork/alias replacements (`=> other/module version`) redirect one module path
+ * to another published module; these are common and intentional, so they are
+ * returned separately as `redirectDeps` for informational display only.
+ *
+ * @param {string} content - raw go.mod file content
+ * @returns {{
+ *   dangerousDeps: Array<{ name: string, spec: string, reason: string }>,
+ *   redirectDeps:  Array<{ name: string, replacement: string }>
+ * }}
+ */
+export function parseGoModReplaces(content) {
+  const dangerousDeps = [];
+  const redirectDeps  = [];
+  let inReplaceBlock  = false;
+
+  const parseLine = (line) => {
+    // go.mod replace syntax: module [version] => replacement [version]
+    // replacement can be a local path (./... or ../...) or another module path
+    const m = line.match(/^(\S+)(?:\s+\S+)?\s+=>\s+(\S+)(?:\s+\S+)?$/);
+    if (!m) return;
+    const original    = unquote(m[1]);
+    const replacement = unquote(m[2]);
+    if (/^\.\.?[/\\]/.test(replacement)) {
+      dangerousDeps.push({ name: original, spec: `${original} => ${replacement}`, reason: 'local path replace' });
+    } else {
+      redirectDeps.push({ name: original, replacement });
+    }
+  };
+
+  for (const rawLine of content.split('\n')) {
+    const commentIdx = rawLine.indexOf('//');
+    const line = (commentIdx !== -1 ? rawLine.slice(0, commentIdx) : rawLine).trim();
+    if (!line) continue;
+
+    if (inReplaceBlock) {
+      if (line === ')') { inReplaceBlock = false; continue; }
+      parseLine(line);
+      continue;
+    }
+
+    if (/^replace\s*\(/.test(line)) { inReplaceBlock = true; continue; }
+    if (/^replace\s+\S/.test(line)) parseLine(line.replace(/^replace\s+/, ''));
+  }
+
+  return { dangerousDeps, redirectDeps };
+}
+
 export function parseGoMod(content) {
   const deps = [];
   let inRequireBlock = false;

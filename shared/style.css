@@ -648,6 +648,30 @@ th.th-sort-asc::after  { content: ' ▲'; font-size: 0.75em; opacity: 0.8; }
 .info-details-body .note,
 .info-details-body .legend { margin: 0; }
 
+/* ── Non-standard sources block ──────────────────────────────────────────── */
+details.nonstd {
+  margin-top: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+details.nonstd > summary {
+  padding: 0.5rem 0.85rem;
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: var(--muted);
+  user-select: none;
+  list-style: none;
+}
+details.nonstd > summary::-webkit-details-marker { display: none; }
+details.nonstd > summary::before { content: '▸'; font-size: 1.2em; margin-right: 0.35rem; vertical-align: -0.05em; }
+details.nonstd[open] > summary::before { content: '▾'; }
+details.nonstd > summary:hover { color: var(--text); }
+.nonstd-body { padding: 0.5rem 0.85rem 0.75rem; border-top: 1px solid var(--border); }
+.nonstd-warn { color: #fbbf24; font-size: 0.82rem; margin: 0.2rem 0; }
+.nonstd-info { color: var(--muted); font-size: 0.82rem; margin: 0.2rem 0; }
+.nonstd-indent { padding-left: 1.25rem; }
+
 /* ── Ecosystem picker ─────────────────────────────────────────────────────── */
 .ecosystem-row { flex-wrap: wrap; gap: 0.5rem 0.75rem; margin-bottom: 0.75rem; }
 

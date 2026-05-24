@@ -14,6 +14,7 @@ import {
   parseSetupCfg,
   parsePipfile,
   parseManifestJson,
+  parsePep508UrlRequirement,
 } from '../../src/python/parserCore.js';
 
 // ── parseDependencyString ──────────────────────────────────────────────────────
@@ -187,6 +188,70 @@ pytest = "*"
 `;
     const deps = parsePipfile(content, false);
     assert.ok(!deps.some(d => d.name === 'pytest'));
+  });
+});
+
+// ── parsePep508UrlRequirement ──────────────────────────────────────────────────
+
+describe('parsePep508UrlRequirement', () => {
+  describe('non-PyPI URL requirements', () => {
+    it('returns a non-null result for a package installed from a non-PyPI https URL', () => {
+      const result = parsePep508UrlRequirement('requests @ https://evil.example.com/requests.tar.gz');
+      assert.notEqual(result, null);
+    });
+
+    it('returns the package name for a non-PyPI URL requirement', () => {
+      const result = parsePep508UrlRequirement('requests @ https://evil.example.com/requests.tar.gz');
+      assert.equal(result.name, 'requests');
+    });
+
+    it('returns the full spec string for a non-PyPI URL requirement', () => {
+      const result = parsePep508UrlRequirement('requests @ https://evil.example.com/requests.tar.gz');
+      assert.equal(result.spec, 'requests @ https://evil.example.com/requests.tar.gz');
+    });
+
+    it('includes the hostname in the reason string', () => {
+      const result = parsePep508UrlRequirement('requests @ https://evil.example.com/requests.tar.gz');
+      assert.ok(result.reason.includes('evil.example.com'));
+    });
+
+    it('returns non-null for an http (non-https) non-PyPI URL', () => {
+      const result = parsePep508UrlRequirement('mypkg @ http://internal.company.com/mypkg-1.0.tar.gz');
+      assert.notEqual(result, null);
+      assert.equal(result.name, 'mypkg');
+    });
+  });
+
+  describe('PyPI safe URLs', () => {
+    it('returns null for a URL from pypi.org', () => {
+      assert.equal(parsePep508UrlRequirement('requests @ https://pypi.org/requests.tar.gz'), null);
+    });
+
+    it('returns null for a URL from files.pythonhosted.org', () => {
+      assert.equal(parsePep508UrlRequirement('requests @ https://files.pythonhosted.org/packages/requests.tar.gz'), null);
+    });
+  });
+
+  describe('non-URL requirement strings', () => {
+    it('returns null for a plain version-pinned requirement', () => {
+      assert.equal(parsePep508UrlRequirement('requests>=2.0'), null);
+    });
+
+    it('returns null for a bare package name with no version', () => {
+      assert.equal(parsePep508UrlRequirement('requests'), null);
+    });
+
+    it('returns null for an empty string', () => {
+      assert.equal(parsePep508UrlRequirement(''), null);
+    });
+
+    it('returns null for null input', () => {
+      assert.equal(parsePep508UrlRequirement(null), null);
+    });
+
+    it('returns null for a package with extras but no URL', () => {
+      assert.equal(parsePep508UrlRequirement('requests[security]>=2.0'), null);
+    });
   });
 });
 

@@ -13,6 +13,7 @@
 
 import { randomBytes } from 'node:crypto';
 import { sortedResults, ECOSYSTEM_ORDER, purlEcosystem } from './formatter.js';
+import { groupByDomain } from './nonStandardSources.js';
 
 /** Maps a depsview ecosystem label to the socket.dev URL slug for "(link)" anchors. */
 const SOCKET_URL_SLUG = { npm: 'npm', python: 'pypi', go: 'go' };
@@ -32,20 +33,6 @@ function escapeHtml(value) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#x27;');
-}
-
-/**
- * Returns an HTML-escaped URL safe for use in an href attribute.
- * Only http:// and https:// URLs are allowed; anything else (javascript:,
- * data:, vbscript:, relative paths, …) is replaced with the safe sentinel "#".
- * escapeHtml alone is insufficient for href values because it does not
- * validate the URL scheme and would pass `javascript:…` through unchanged.
- * @param {string|null|undefined} url
- * @returns {string}
- */
-function safeHref(url) {
-  const s = String(url ?? '');
-  return /^https?:\/\//i.test(s) ? escapeHtml(s) : '#';
 }
 
 /**
@@ -192,63 +179,17 @@ table a:hover { text-decoration: underline; }
   padding: 0.5rem 0.85rem;
   border-radius: 0 6px 6px 0;
 }
+details.nonstd { margin-top: 0.75rem; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+details.nonstd > summary { padding: 0.5rem 0.85rem; cursor: pointer; font-size: 0.82rem; color: var(--muted); user-select: none; list-style: none; }
+details.nonstd > summary::-webkit-details-marker { display: none; }
+details.nonstd > summary::before { content: '▸'; font-size: 1.2em; margin-right: 0.35rem; vertical-align: -0.05em; }
+details.nonstd[open] > summary::before { content: '▾'; }
+details.nonstd > summary:hover { color: var(--text); }
+.nonstd-body { padding: 0.5rem 0.85rem 0.75rem; border-top: 1px solid var(--border); }
+.nonstd-warn { color: #fbbf24; font-size: 0.82rem; margin: 0.2rem 0; }
+.nonstd-info { color: var(--muted); font-size: 0.82rem; margin: 0.2rem 0; }
+.nonstd-indent { padding-left: 1.25rem; }
 `.trim();
-
-/**
- * Builds a single `<td>` HTML string, optionally wrapped in a CSS class.
- * @param {string} content
- * @param {string|null} [className]
- * @returns {string}
- */
-function td(content, className = null) {
-  return className
-    ? `<td class="${escapeHtml(className)}">${content}</td>`
-    : `<td>${content}</td>`;
-}
-
-/**
- * Renders one table row for a resolved package.
- * @param {object} row                   - entry from sortedResults()
- * @param {object} cfg                   - section render config
- * @param {boolean} cfg.showFirst
- * @param {boolean} cfg.showDl
- * @param {boolean} cfg.showSocket
- * @param {string|null} cfg.socketSlug
- * @returns {string}
- */
-function renderRow(row, cfg) {
-  const dataCols = 3 + (cfg.showFirst ? 1 : 0) + (cfg.showDl ? 1 : 0) + (cfg.showSocket ? 1 : 0);
-  if (row.error) {
-    const nameCell = `<td><a href="${safeHref(row.link)}" target="_blank" rel="noopener noreferrer">${escapeHtml(row.name)}</a></td>`;
-    const errCell  = `<td colspan="${dataCols}" title="${escapeHtml(row.error)}">${escapeHtml(row.version ?? 'error')}</td>`;
-    return `<tr class="row-error">${nameCell}${errCell}</tr>`;
-  }
-
-  const relAge     = daysSince(row.released);
-  const relClass   = relAge <= 3 ? 'age-new' : relAge <= 7 ? 'age-orange' : relAge <= 30 ? 'age-fresh' : null;
-  const firstAge   = daysSince(row.firstReleased);
-  const firstClass = cfg.showFirst
-    ? (firstAge <= 3 ? 'age-new' : firstAge <= 7 ? 'age-orange' : firstAge <= 30 ? 'age-fresh' : null)
-    : null;
-  const { text: scoreText, className: scoreClass } = scoreDisplay(row.supplyChain);
-
-  const socketUrl = socketPackageUrl(row.name, cfg.socketSlug);
-  const scoreContent = (row.supplyChain != null && socketUrl)
-    ? `${escapeHtml(scoreText)} <a href="${safeHref(socketUrl)}" target="_blank" rel="noopener noreferrer">(link)</a>`
-    : escapeHtml(scoreText);
-
-  const nameCell = `<td><a href="${safeHref(row.link)}" target="_blank" rel="noopener noreferrer">${escapeHtml(row.name)}</a></td>`;
-
-  return `<tr>
-    ${nameCell}
-    ${td(escapeHtml(row.version))}
-    ${td(escapeHtml(row.released), relClass)}
-    ${cfg.showFirst  ? td(escapeHtml(row.firstReleased), firstClass) : ''}
-    ${td(escapeHtml(String(row.releases)))}
-    ${cfg.showDl     ? td(escapeHtml(formatDownloads(row.downloadsLastMonth))) : ''}
-    ${cfg.showSocket ? td(scoreContent, scoreClass) : ''}
-  </tr>`;
-}
 
 /**
  * Builds one section block: heading + summary + table (or error banner when
@@ -313,9 +254,8 @@ function renderSection(ecosystem, section, showHeader, socketScores, downloadSta
   ).join('');
 
   const cfg = { showFirst, showDl, showSocket, socketSlug };
-  const bodyHtml = total === 0
-    ? `<tr><td colspan="${colDefs.length}">No dependencies found.</td></tr>`
-    : rows.map(r => renderRow(r, cfg)).join('\n');
+  // tbody is intentionally empty — all rows are rendered client-side by the
+  // embedded sort script using DOM methods so no user data touches HTML strings.
 
   const privateCount = section.privateCount ?? 0;
   const privateNote = privateCount > 0
@@ -326,6 +266,11 @@ function renderSection(ecosystem, section, showHeader, socketScores, downloadSta
     .map(n => `<p class="note-warning">${escapeHtml(n)}</p>`)
     .join('\n');
 
+  // Convert private packages to [{domain, names}] server-side so the embedded
+  // script receives structured data rather than raw URLs.
+  const byDomain = groupByDomain(section.privatePkgs ?? []);
+  const privatePkgsByDomain = [...byDomain.entries()].map(([domain, names]) => ({ domain, names }));
+
   const html = `<section class="section" data-section="${escapeHtml(sectionId)}">
   ${headerHtml}
   <p class="summary">${escapeHtml(summaryText)}</p>
@@ -333,12 +278,22 @@ function renderSection(ecosystem, section, showHeader, socketScores, downloadSta
   <div class="table-scroll">
     <table data-section="${escapeHtml(sectionId)}">
       <thead><tr>${headerCellsHtml}</tr></thead>
-      <tbody>${bodyHtml}</tbody>
+      <tbody></tbody>
     </table>
   </div>
+  <div class="nonstd-slot" data-section="${escapeHtml(sectionId)}"></div>
 </section>`;
 
-  return { html, scriptCfg: { id: sectionId, rows, ...cfg } };
+  return {
+    html,
+    scriptCfg: {
+      id: sectionId,
+      rows,
+      ...cfg,
+      dangerousDeps: section.dangerousDeps ?? [],
+      privatePkgsByDomain,
+    },
+  };
 }
 
 /**
@@ -354,30 +309,37 @@ function buildSortScript(scriptDataJson) {
 var D=${scriptDataJson};
 var state={};
 D.sections.forEach(function(s){state[s.id]={col:'released',dir:'desc'};});
-function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');}
-function safeUrl(u){var s=String(u==null?'':u);return/^https?:\\/\\//i.test(s)?s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'):'#';}
 function daysSince(d){if(!d||d==='unknown')return Infinity;var ms=Date.now()-new Date(d).getTime();return isNaN(ms)?Infinity:Math.floor(ms/86400000);}
 function scoreInfo(v){if(v==null||typeof v!=='number')return{text:'\\u2013',cls:''};var p=Math.round(v*100);return{text:p+'%',cls:v>=0.8?'score-good':v>=0.5?'score-warn':'score-bad'};}
 function socketUrl(name,slug){if(!slug)return null;var n=encodeURIComponent(name).replace(/%40/g,'@').replace(/%2F/gi,'/');return'https://socket.dev/'+slug+'/package/'+n;}
-function buildRow(r,cfg){
+function buildRowEl(r,cfg){
   var dataCols=3+(cfg.showFirst?1:0)+(cfg.showDl?1:0)+(cfg.showSocket?1:0);
+  var tr=document.createElement('tr');
+  var nameTd=document.createElement('td');
+  var a=document.createElement('a');
+  a.href=/^https?:\\/\\//i.test(String(r.link??''))?r.link:'#';
+  a.target='_blank';a.rel='noopener noreferrer';a.textContent=r.name;
+  nameTd.appendChild(a);tr.appendChild(nameTd);
   if(r.error){
-    return '<tr class="row-error"><td><a href="'+safeUrl(r.link)+'" target="_blank" rel="noopener noreferrer">'+esc(r.name)+'</a></td><td colspan="'+dataCols+'" title="'+esc(r.error)+'">'+esc(r.version||'error')+'</td></tr>';
+    tr.className='row-error';
+    var eTd=document.createElement('td');eTd.colSpan=dataCols;
+    eTd.title=String(r.error??'');eTd.textContent=r.version??'error';tr.appendChild(eTd);
+    return tr;
   }
-  var ra=daysSince(r.released),fa=daysSince(r.firstReleased);
-  var rcls=ra<=3?'age-new':ra<=7?'age-orange':ra<=30?'age-fresh':'';
-  var fcls=cfg.showFirst?(fa<=3?'age-new':fa<=7?'age-orange':fa<=30?'age-fresh':''):'';
-  var rc=rcls?' class="'+rcls+'"':'';
-  var fc=fcls?' class="'+fcls+'"':'';
-  var first=cfg.showFirst?'<td'+fc+'>'+esc(r.firstReleased)+'</td>':'';
-  var dl=cfg.showDl?'<td>'+(typeof r.downloadsLastMonth==='number'?r.downloadsLastMonth.toLocaleString('en-US'):'\\u2013')+'</td>':'';
-  var si=cfg.showSocket?(function(){
-    var s=scoreInfo(r.supplyChain);
-    var su=socketUrl(r.name,cfg.socketSlug);
-    var inner=r.supplyChain!=null&&su?s.text+' <a href="'+safeUrl(su)+'" target="_blank" rel="noopener noreferrer">(link)</a>':s.text;
-    return'<td'+(s.cls?' class="'+s.cls+'"':'')+'>'+inner+'</td>';
-  })():'';
-  return'<tr><td><a href="'+safeUrl(r.link)+'" target="_blank" rel="noopener noreferrer">'+esc(r.name)+'</a></td><td>'+esc(r.version)+'</td><td'+rc+'>'+esc(r.released)+'</td>'+first+'<td>'+esc(String(r.releases))+'</td>'+dl+si+'</tr>';
+  var addTd=function(text,cls){var td=document.createElement('td');td.textContent=String(text??'');if(cls)td.className=cls;tr.appendChild(td);};
+  addTd(r.version);
+  var ra=daysSince(r.released);
+  addTd(r.released,ra<=3?'age-new':ra<=7?'age-orange':ra<=30?'age-fresh':'');
+  if(cfg.showFirst){var fa=daysSince(r.firstReleased);addTd(r.firstReleased,fa<=3?'age-new':fa<=7?'age-orange':fa<=30?'age-fresh':'');}
+  addTd(String(r.releases));
+  if(cfg.showDl)addTd(typeof r.downloadsLastMonth==='number'?r.downloadsLastMonth.toLocaleString('en-US'):'\\u2013');
+  if(cfg.showSocket){
+    var sc=scoreInfo(r.supplyChain);
+    var sTd=document.createElement('td');sTd.textContent=sc.text;if(sc.cls)sTd.className=sc.cls;
+    if(r.supplyChain!=null){var su=socketUrl(r.name,cfg.socketSlug);if(su){var lnk=document.createElement('a');lnk.href=su;lnk.target='_blank';lnk.rel='noopener noreferrer';lnk.textContent=' (link)';sTd.appendChild(lnk);}}
+    tr.appendChild(sTd);
+  }
+  return tr;
 }
 function sortedRows(rows,col,dir){
   var sign=dir==='asc'?1:-1;
@@ -409,7 +371,9 @@ function rerender(s){
   var tbl=document.querySelector('table[data-section="'+s.id+'"]');
   var tbody=tbl.querySelector('tbody');
   var ncols=tbl.querySelectorAll('thead th').length;
-  tbody.innerHTML=rows.length?rows.map(function(r){return buildRow(r,s);}).join(''):'<tr><td colspan="'+ncols+'">No dependencies found.</td></tr>';
+  tbody.textContent='';
+  if(rows.length){rows.forEach(function(r){tbody.appendChild(buildRowEl(r,s));});}
+  else{var tr=document.createElement('tr');var td=document.createElement('td');td.colSpan=ncols;td.textContent='No dependencies found.';tr.appendChild(td);tbody.appendChild(tr);}
   tbl.querySelectorAll('th[data-col]').forEach(function(th){
     th.classList.remove('th-sort-asc','th-sort-desc');
     if(th.dataset.col===st.col)th.classList.add('th-sort-'+st.dir);
@@ -427,6 +391,45 @@ D.sections.forEach(function(s){
       rerender(s);
     });
   });
+});
+D.sections.forEach(function(s){rerender(s);});
+// Render non-standard sources via DOM only — no user data in HTML strings.
+function renderNonstd(slot,danger,priv){
+  if(!danger.length&&!priv.length)return;
+  var total=danger.length+priv.length;
+  var det=document.createElement('details');det.className='nonstd';
+  var sum=document.createElement('summary');
+  sum.textContent=total+' non-standard source'+(total!==1?'s':'');
+  det.appendChild(sum);
+  var body=document.createElement('div');body.className='nonstd-body';
+  if(danger.length){
+    var h=document.createElement('p');h.className='nonstd-warn';
+    h.textContent='⚠ Non-registry dependency specs (declared in manifest):';
+    body.appendChild(h);
+    danger.forEach(function(d){
+      var p=document.createElement('p');p.className='nonstd-warn nonstd-indent';
+      p.appendChild(document.createTextNode(d.name+' — '));
+      var code=document.createElement('code');code.textContent=d.spec;p.appendChild(code);
+      p.appendChild(document.createTextNode(' ('+d.reason+')'));
+      body.appendChild(p);
+    });
+  }
+  if(priv.length){
+    var h2=document.createElement('p');h2.className='nonstd-info';
+    h2.textContent='ℹ Non-public registry packages (skipped from resolution):';
+    body.appendChild(h2);
+    priv.forEach(function(g){
+      var p=document.createElement('p');p.className='nonstd-info nonstd-indent';
+      var strong=document.createElement('strong');strong.textContent=g.domain;p.appendChild(strong);
+      p.appendChild(document.createTextNode(': '+g.names.join(', ')));
+      body.appendChild(p);
+    });
+  }
+  det.appendChild(body);slot.appendChild(det);
+}
+D.sections.forEach(function(s){
+  var slot=document.querySelector('.nonstd-slot[data-section="'+s.id+'"]');
+  if(slot)renderNonstd(slot,s.dangerousDeps||[],s.privatePkgsByDomain||[]);
 });
 })();`;
 }

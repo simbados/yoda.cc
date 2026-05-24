@@ -24,6 +24,7 @@ import { setGithubToken               } from './src/github/client.js';
 import { listDirectory                } from './src/github/client.js';
 import { parseMultiPackageInput        } from './src/multiPackageParser.js';
 import { fetchSocketScores, scoreKey  } from './src/socket/client.js';
+import { groupByDomain                } from './src/output/nonStandardSources.js';
 
 /** Fixed rendering order for ecosystem sections. */
 export const ECOSYSTEM_ORDER = ['npm', 'python', 'go'];
@@ -352,6 +353,54 @@ function renderSection(container, cfg) {
 }
 
 /**
+ * Appends a collapsible non-standard sources `<details>` block to `sectionEl`.
+ * Uses `groupByDomain` from the shared nonStandardSources module for data processing.
+ * All dynamic text is set via `textContent` (never innerHTML) — no XSS risk.
+ * Does nothing when both arrays are empty.
+ * @param {HTMLElement} sectionEl
+ * @param {Array<{ name: string, spec: string, reason: string }>} dangerousDeps
+ * @param {Array<{ name: string, url: string }>}                  privatePkgs
+ */
+function appendNonStandardSources(sectionEl, dangerousDeps, privatePkgs) {
+  if (!dangerousDeps.length && !privatePkgs.length) return;
+
+  const total = dangerousDeps.length + privatePkgs.length;
+  const details = document.createElement('details');
+  details.className = 'nonstd';
+
+  const summary = document.createElement('summary');
+  summary.textContent = `${total} non-standard source${total !== 1 ? 's' : ''}`;
+  details.appendChild(summary);
+
+  const body = document.createElement('div');
+  body.className = 'nonstd-body';
+
+  const addRow = (className, text) => {
+    const p = document.createElement('p');
+    p.className = className;
+    p.textContent = text;
+    body.appendChild(p);
+  };
+
+  if (dangerousDeps.length) {
+    addRow('nonstd-warn', '⚠ Non-registry dependency specs (declared in manifest):');
+    for (const { name, spec, reason } of dangerousDeps) {
+      addRow('nonstd-warn nonstd-indent', `${name} — ${spec}  (${reason})`);
+    }
+  }
+
+  if (privatePkgs.length) {
+    addRow('nonstd-info', 'ℹ Non-public registry packages (skipped from resolution):');
+    for (const [domain, names] of groupByDomain(privatePkgs)) {
+      addRow('nonstd-info nonstd-indent', `${domain}: ${names.join(', ')}`);
+    }
+  }
+
+  details.appendChild(body);
+  sectionEl.appendChild(details);
+}
+
+/**
  * Renders one section into an error banner. Used when a single ecosystem's
  * parse / resolve threw — the other sections still render normally.
  * @param {HTMLElement} container
@@ -395,7 +444,7 @@ function renderSectionError(container, ecosystem, message, showHeader) {
 async function resolveEcosystem(ecosystem, githubRef, opts) {
   const { includeTests, onProgress, packageInputs, downloadStats = false } = opts;
 
-  let deps, source, note = null, privateCount = 0;
+  let deps, source, note = null, privateCount = 0, privatePkgs = [], dangerousDeps = [];
   if (packageInputs && packageInputs.length > 0) {
     source = 'package search';
     deps = packageInputs.map(p => ecosystem === 'go'
@@ -403,13 +452,13 @@ async function resolveEcosystem(ecosystem, githubRef, opts) {
       : { name: p.name, versionSpec: p.version }
     );
   } else if (ecosystem === 'npm') {
-    ({ deps, source, note, privateCount } = await parseGithubNpmDependencies(githubRef, { includeTests }));
+    ({ deps, source, note, privateCount, privatePkgs, dangerousDeps } = await parseGithubNpmDependencies(githubRef, { includeTests }));
     if (privateCount > 0) onProgress(`[npm] Skipped ${privateCount} private package${privateCount === 1 ? '' : 's'} (not on public registry).\n`);
   } else if (ecosystem === 'go') {
-    ({ deps, source, privateCount } = await parseGithubGoDependencies(githubRef));
+    ({ deps, source, privateCount, privatePkgs, dangerousDeps } = await parseGithubGoDependencies(githubRef));
     if (privateCount > 0) onProgress(`[go] Skipped ${privateCount} private module${privateCount === 1 ? '' : 's'} (not on public module proxy).\n`);
   } else {
-    ({ deps, source } = await parseGithubDependencies(githubRef, { includeTests }));
+    ({ deps, source, dangerousDeps } = await parseGithubDependencies(githubRef, { includeTests }));
   }
 
   const isLockFile = source === 'package-lock.json' || source === 'pnpm-lock.yaml' || source === 'go.sum';
@@ -451,7 +500,7 @@ async function resolveEcosystem(ecosystem, githubRef, opts) {
     directCount = [...results.values()].filter(r => directNames.has(r.name.toLowerCase())).length;
   }
 
-  return { ecosystem, deps, results, directCount, source, note, privateCount, downloadStats };
+  return { ecosystem, deps, results, directCount, source, note, privateCount, privatePkgs, dangerousDeps, downloadStats };
 }
 
 // ── Browser initialisation ────────────────────────────────────────────────────
@@ -766,6 +815,7 @@ if (typeof document !== 'undefined') {
             showSupplyChain,
             socketSlug:      showSupplyChain ? (SOCKET_URL_SLUG[section.ecosystem] ?? null) : null,
           });
+          appendNonStandardSources(sectionEl, section.dangerousDeps ?? [], section.privatePkgs ?? []);
 
           sectionEl.querySelectorAll('th[data-col]').forEach(th => {
             const col = th.dataset.col;
