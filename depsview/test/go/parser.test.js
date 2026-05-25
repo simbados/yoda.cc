@@ -63,7 +63,7 @@ describe('go parseDependencyFile — private filtering', () => {
     assert.equal(privateCount, 1, 'one private module should be skipped');
     assert.ok(names.includes('github.com/gin-gonic/gin'),  'public module should be included');
     assert.ok(names.includes('golang.org/x/crypto'),       'public module should be included');
-    assert.ok(!names.includes('corp.internal/secret-pkg'), 'private module should be excluded');
+    assert.ok(!names.includes('corp.invalid/secret-pkg'), 'private module should be excluded');
   });
 
   it('returns privateCount 0 for all-public go.mod', () => {

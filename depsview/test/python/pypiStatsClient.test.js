@@ -184,11 +184,11 @@ describe('fetchDownloadStats — custom baseUrl option', () => {
       };
     };
 
-    const result = await fetchDownloadStats('requests', { baseUrl: 'https://proxy.example.com/pypi-stats' });
+    const result = await fetchDownloadStats('requests', { baseUrl: 'https://proxy.example.invalid/pypi-stats' });
 
     assert.equal(capturedUrls.length, 1);
     assert.ok(
-      capturedUrls[0].startsWith('https://proxy.example.com/pypi-stats/'),
+      capturedUrls[0].startsWith('https://proxy.example.invalid/pypi-stats/'),
       `Expected URL to start with custom base, got: ${capturedUrls[0]}`
     );
     assert.ok(
@@ -214,7 +214,7 @@ describe('fetchDownloadStats — custom baseUrl option', () => {
       };
     };
 
-    await fetchDownloadStats('My_Pkg', { baseUrl: 'https://proxy.example.com/stats' });
+    await fetchDownloadStats('My_Pkg', { baseUrl: 'https://proxy.example.invalid/stats' });
 
     assert.equal(capturedUrls.length, 1);
     assert.ok(

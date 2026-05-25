@@ -112,7 +112,7 @@ describe('isPublicGoModule — known public hosts', () => {
 
 describe('isPublicGoModule — private / unknown hosts', () => {
   it('returns false for an internal corporate hostname', () => {
-    assert.equal(isPublicGoModule('internal.corp.example.com/mylib'), false);
+    assert.equal(isPublicGoModule('internal.corp.example.invalid/mylib'), false);
   });
 
   it('returns false for a single-label hostname', () => {
@@ -120,7 +120,7 @@ describe('isPublicGoModule — private / unknown hosts', () => {
   });
 
   it('returns false for a module path that looks like a private mirror', () => {
-    assert.equal(isPublicGoModule('goproxy.company.internal/github.com/foo/bar'), false);
+    assert.equal(isPublicGoModule('goproxy.company.invalid/github.com/foo/bar'), false);
   });
 
   it('returns false for a completely unknown TLD host', () => {
@@ -156,7 +156,7 @@ describe('isPublicGoModule — edge cases', () => {
 describe('partitionGoModules — basic partitioning', () => {
   const modules = [
     { name: 'github.com/gin-gonic/gin',    version: 'v1.9.1',  indirect: false },
-    { name: 'internal.corp.com/secret',    version: 'v1.0.0',  indirect: false },
+    { name: 'internal.corp.invalid/secret',    version: 'v1.0.0',  indirect: false },
     { name: 'golang.org/x/crypto',         version: 'v0.21.0', indirect: true  },
   ];
 
@@ -182,8 +182,8 @@ describe('partitionGoModules — basic partitioning', () => {
   it('privateMods contains the private module with name and url set to module path', () => {
     const { privateMods } = partitionGoModules(modules);
     assert.equal(privateMods.length, 1);
-    assert.equal(privateMods[0].name, 'internal.corp.com/secret');
-    assert.equal(privateMods[0].url, 'internal.corp.com/secret');
+    assert.equal(privateMods[0].name, 'internal.corp.invalid/secret');
+    assert.equal(privateMods[0].url, 'internal.corp.invalid/secret');
   });
 
   it('privateMods entries do not contain version or indirect fields', () => {
@@ -226,8 +226,8 @@ describe('partitionGoModules — empty and all-public inputs', () => {
 
   it('returns zero publicMods and full count when all are private', () => {
     const modules = [
-      { name: 'private.corp/a', version: 'v1.0.0', indirect: false },
-      { name: 'private.corp/b', version: 'v2.0.0', indirect: false },
+      { name: 'private.invalid/a', version: 'v1.0.0', indirect: false },
+      { name: 'private.invalid/b', version: 'v2.0.0', indirect: false },
     ];
     const { publicMods, privateCount } = partitionGoModules(modules);
     assert.deepEqual(publicMods, []);
@@ -236,15 +236,15 @@ describe('partitionGoModules — empty and all-public inputs', () => {
 
   it('privateMods contains all modules with name and url equal to module path when all are private', () => {
     const modules = [
-      { name: 'private.corp/a', version: 'v1.0.0', indirect: false },
-      { name: 'private.corp/b', version: 'v2.0.0', indirect: false },
+      { name: 'private.invalid/a', version: 'v1.0.0', indirect: false },
+      { name: 'private.invalid/b', version: 'v2.0.0', indirect: false },
     ];
     const { privateMods } = partitionGoModules(modules);
     assert.equal(privateMods.length, 2);
-    assert.equal(privateMods[0].name, 'private.corp/a');
-    assert.equal(privateMods[0].url, 'private.corp/a');
-    assert.equal(privateMods[1].name, 'private.corp/b');
-    assert.equal(privateMods[1].url, 'private.corp/b');
+    assert.equal(privateMods[0].name, 'private.invalid/a');
+    assert.equal(privateMods[0].url, 'private.invalid/a');
+    assert.equal(privateMods[1].name, 'private.invalid/b');
+    assert.equal(privateMods[1].url, 'private.invalid/b');
   });
 });
 

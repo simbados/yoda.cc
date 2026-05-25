@@ -267,11 +267,11 @@ describe('fetchSocketScores — opts.proxyBase', () => {
       [{ name: 'express', version: '4.19.2', ecosystem: 'npm' }],
       'key',
       'my-org',
-      { proxyBase: 'https://socket-proxy.example.workers.dev' }
+      { proxyBase: 'https://socket-proxy.example.workers.invalid' }
     );
 
     assert.ok(
-      capturedUrl.startsWith('https://socket-proxy.example.workers.dev/my-org/purl'),
+      capturedUrl.startsWith('https://socket-proxy.example.workers.invalid/my-org/purl'),
       `Expected URL to start with proxy base + org slug, got: ${capturedUrl}`
     );
     assert.ok(
@@ -295,11 +295,11 @@ describe('fetchSocketScores — opts.proxyBase', () => {
       [{ name: 'lodash', version: '4.17.21', ecosystem: 'npm' }],
       'key',
       'acme-corp',
-      { proxyBase: 'https://proxy.example.com' }
+      { proxyBase: 'https://proxy.example.invalid' }
     );
 
     assert.ok(
-      capturedUrl.startsWith('https://proxy.example.com/acme-corp/purl'),
+      capturedUrl.startsWith('https://proxy.example.invalid/acme-corp/purl'),
       `Expected URL to contain org slug after proxy base, got: ${capturedUrl}`
     );
   });

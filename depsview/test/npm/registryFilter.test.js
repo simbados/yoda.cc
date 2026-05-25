@@ -26,7 +26,7 @@ describe('isPublicNpmResolved', () => {
 
   it('returns false for a private registry URL', () => {
     assert.equal(
-      isPublicNpmResolved('https://my-private-registry.example.com/lodash/-/lodash-4.17.21.tgz'),
+      isPublicNpmResolved('https://my-private-registry.example.invalid/lodash/-/lodash-4.17.21.tgz'),
       false,
     );
   });
@@ -40,14 +40,14 @@ describe('isPublicNpmResolved', () => {
 
   it('returns false for a Verdaccio / Artifactory URL', () => {
     assert.equal(
-      isPublicNpmResolved('https://verdaccio.corp.internal/private-pkg/-/private-pkg-2.0.0.tgz'),
+      isPublicNpmResolved('https://verdaccio.corp.invalid/private-pkg/-/private-pkg-2.0.0.tgz'),
       false,
     );
   });
 
   it('returns false when URL contains registry.npmjs.org but not at the start', () => {
     assert.equal(
-      isPublicNpmResolved('https://mirror.example.com/proxy/registry.npmjs.org/lodash/-/lodash-4.17.21.tgz'),
+      isPublicNpmResolved('https://mirror.example.invalid/proxy/registry.npmjs.org/lodash/-/lodash-4.17.21.tgz'),
       false,
     );
   });
@@ -65,7 +65,7 @@ describe('isPublicNpmResolved', () => {
 describe('partitionNpmPackages — basic partitioning', () => {
   const packages = [
     { name: 'lodash',   version: '4.17.21', resolved: 'https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz' },
-    { name: 'internal', version: '1.0.0',   resolved: 'https://private.registry.corp/internal/-/internal-1.0.0.tgz' },
+    { name: 'internal', version: '1.0.0',   resolved: 'https://private.registry.invalid/internal/-/internal-1.0.0.tgz' },
     { name: 'vite',     version: '4.0.0',   resolved: 'https://registry.npmjs.org/vite/-/vite-4.0.0.tgz' },
   ];
 
@@ -94,7 +94,7 @@ describe('partitionNpmPackages — basic partitioning', () => {
     const { privatePkgs } = partitionNpmPackages(packages);
     assert.equal(privatePkgs.length, 1);
     assert.equal(privatePkgs[0].name, 'internal');
-    assert.equal(privatePkgs[0].url, 'https://private.registry.corp/internal/-/internal-1.0.0.tgz');
+    assert.equal(privatePkgs[0].url, 'https://private.registry.invalid/internal/-/internal-1.0.0.tgz');
   });
 
   it('privatePkgs entries do not contain a version field', () => {
@@ -107,7 +107,7 @@ describe('partitionNpmPackages — packages with no resolved field', () => {
   const packages = [
     { name: 'workspace-root', version: '1.0.0', resolved: null },
     { name: 'bundled-dep',    version: '2.0.0', resolved: undefined },
-    { name: 'private-pkg',   version: '3.0.0', resolved: 'https://private.corp/pkg/-/pkg-3.0.0.tgz' },
+    { name: 'private-pkg',   version: '3.0.0', resolved: 'https://private.invalid/pkg/-/pkg-3.0.0.tgz' },
   ];
 
   it('treats null and undefined resolved as public', () => {
@@ -162,8 +162,8 @@ describe('partitionNpmPackages — empty and all-public inputs', () => {
 
   it('returns zero publicPkgs and full count when all are private', () => {
     const packages = [
-      { name: 'x', version: '1.0.0', resolved: 'https://private.corp/x/-/x-1.0.0.tgz' },
-      { name: 'y', version: '2.0.0', resolved: 'https://private.corp/y/-/y-2.0.0.tgz' },
+      { name: 'x', version: '1.0.0', resolved: 'https://private.invalid/x/-/x-1.0.0.tgz' },
+      { name: 'y', version: '2.0.0', resolved: 'https://private.invalid/y/-/y-2.0.0.tgz' },
     ];
     const { publicPkgs, privateCount } = partitionNpmPackages(packages);
     assert.deepEqual(publicPkgs, []);
@@ -172,15 +172,15 @@ describe('partitionNpmPackages — empty and all-public inputs', () => {
 
   it('privatePkgs contains all packages when all are private', () => {
     const packages = [
-      { name: 'x', version: '1.0.0', resolved: 'https://private.corp/x/-/x-1.0.0.tgz' },
-      { name: 'y', version: '2.0.0', resolved: 'https://private.corp/y/-/y-2.0.0.tgz' },
+      { name: 'x', version: '1.0.0', resolved: 'https://private.invalid/x/-/x-1.0.0.tgz' },
+      { name: 'y', version: '2.0.0', resolved: 'https://private.invalid/y/-/y-2.0.0.tgz' },
     ];
     const { privatePkgs } = partitionNpmPackages(packages);
     assert.equal(privatePkgs.length, 2);
     assert.equal(privatePkgs[0].name, 'x');
-    assert.equal(privatePkgs[0].url, 'https://private.corp/x/-/x-1.0.0.tgz');
+    assert.equal(privatePkgs[0].url, 'https://private.invalid/x/-/x-1.0.0.tgz');
     assert.equal(privatePkgs[1].name, 'y');
-    assert.equal(privatePkgs[1].url, 'https://private.corp/y/-/y-2.0.0.tgz');
+    assert.equal(privatePkgs[1].url, 'https://private.invalid/y/-/y-2.0.0.tgz');
   });
 });
 

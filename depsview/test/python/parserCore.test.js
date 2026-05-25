@@ -37,11 +37,11 @@ describe('parseDependencyString', () => {
   });
 
   it('returns null for a URL', () => {
-    assert.equal(parseDependencyString('https://example.com/pkg.tar.gz'), null);
+    assert.equal(parseDependencyString('https://example.invalid/pkg.tar.gz'), null);
   });
 
   it('returns null for a PEP 508 URL requirement (package @ https://...)', () => {
-    assert.equal(parseDependencyString('requests @ https://internal.server/requests.whl'), null);
+    assert.equal(parseDependencyString('requests @ https://internal.invalid/requests.whl'), null);
   });
 
   it('returns null for a PEP 508 URL requirement with a git VCS URL', () => {
@@ -196,27 +196,27 @@ pytest = "*"
 describe('parsePep508UrlRequirement', () => {
   describe('non-PyPI URL requirements', () => {
     it('returns a non-null result for a package installed from a non-PyPI https URL', () => {
-      const result = parsePep508UrlRequirement('requests @ https://evil.example.com/requests.tar.gz');
+      const result = parsePep508UrlRequirement('requests @ https://evil.example.invalid/requests.tar.gz');
       assert.notEqual(result, null);
     });
 
     it('returns the package name for a non-PyPI URL requirement', () => {
-      const result = parsePep508UrlRequirement('requests @ https://evil.example.com/requests.tar.gz');
+      const result = parsePep508UrlRequirement('requests @ https://evil.example.invalid/requests.tar.gz');
       assert.equal(result.name, 'requests');
     });
 
     it('returns the full spec string for a non-PyPI URL requirement', () => {
-      const result = parsePep508UrlRequirement('requests @ https://evil.example.com/requests.tar.gz');
-      assert.equal(result.spec, 'requests @ https://evil.example.com/requests.tar.gz');
+      const result = parsePep508UrlRequirement('requests @ https://evil.example.invalid/requests.tar.gz');
+      assert.equal(result.spec, 'requests @ https://evil.example.invalid/requests.tar.gz');
     });
 
     it('includes the hostname in the reason string', () => {
-      const result = parsePep508UrlRequirement('requests @ https://evil.example.com/requests.tar.gz');
-      assert.ok(result.reason.includes('evil.example.com'));
+      const result = parsePep508UrlRequirement('requests @ https://evil.example.invalid/requests.tar.gz');
+      assert.ok(result.reason.includes('evil.example.invalid'));
     });
 
     it('returns non-null for an http (non-https) non-PyPI URL', () => {
-      const result = parsePep508UrlRequirement('mypkg @ http://internal.company.com/mypkg-1.0.tar.gz');
+      const result = parsePep508UrlRequirement('mypkg @ http://internal.company.invalid/mypkg-1.0.tar.gz');
       assert.notEqual(result, null);
       assert.equal(result.name, 'mypkg');
     });
