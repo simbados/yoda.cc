@@ -44,6 +44,32 @@
         <input id="include-build" type="checkbox">
         <label for="include-build">Include build dependencies</label>
       </div>
+
+      <!-- ── GitHub authentication ───────────────────────────────────────── -->
+      <div class="form-card">
+        <p class="form-card-label">GitHub authentication <span class="form-card-optional">optional</span></p>
+        <div class="input-row token-row">
+          <input
+            id="token-input"
+            type="password"
+            placeholder="Personal access token"
+            spellcheck="false"
+            autocomplete="off"
+          >
+        </div>
+        <div class="option-row">
+          <input id="remember-token" type="checkbox">
+          <label for="remember-token">Remember token <span class="option-hint">· local storage only</span></label>
+        </div>
+        <p class="storage-note" id="storage-note" hidden>
+          Saved in your browser's <strong>local storage</strong> — readable by any JavaScript on this page. Uncheck and submit to remove.
+        </p>
+        <p class="form-card-note">
+          60 req/hr without a token · 5 000 req/hr with one · used only for "Updated" date lookups ·
+          token sent only to <code>api.github.com</code>
+        </p>
+      </div>
+
     </form>
 
     <p class="note">

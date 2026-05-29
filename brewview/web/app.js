@@ -6,6 +6,7 @@
  */
 
 import { resolve } from './src/homebrew/resolver.js';
+import { setGithubToken } from './src/homebrew/client.js';
 
 // ── Pure utility functions (exported for testing) ─────────────────────────────
 
@@ -198,13 +199,39 @@ function renderResults(container, sorted) {
 // ── Browser initialisation ────────────────────────────────────────────────────
 
 if (typeof document !== 'undefined') {
-  const form           = document.getElementById('form');
-  const formulaInput   = document.getElementById('formula-input');
-  const includeBuildCb = document.getElementById('include-build');
-  const submitBtn      = document.getElementById('submit-btn');
-  const errorDiv       = document.getElementById('error');
-  const progressDiv    = document.getElementById('progress');
-  const resultsDiv     = document.getElementById('results');
+  const form             = document.getElementById('form');
+  const formulaInput     = document.getElementById('formula-input');
+  const includeBuildCb   = document.getElementById('include-build');
+  const tokenInput       = document.getElementById('token-input');
+  const rememberTokenCb  = document.getElementById('remember-token');
+  const storageNote      = document.getElementById('storage-note');
+  const submitBtn        = document.getElementById('submit-btn');
+  const errorDiv         = document.getElementById('error');
+  const progressDiv      = document.getElementById('progress');
+  const resultsDiv       = document.getElementById('results');
+
+  const TOKEN_STORAGE_KEY = 'brewview.github_token';
+
+  function syncStorageNote() {
+    storageNote.hidden = !rememberTokenCb.checked;
+  }
+
+  const savedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
+  if (savedToken) {
+    tokenInput.value        = savedToken;
+    rememberTokenCb.checked = true;
+    syncStorageNote();
+  }
+
+  rememberTokenCb.addEventListener('change', () => {
+    syncStorageNote();
+    if (rememberTokenCb.checked) {
+      const token = tokenInput.value.trim();
+      if (token) localStorage.setItem(TOKEN_STORAGE_KEY, token);
+    } else {
+      localStorage.removeItem(TOKEN_STORAGE_KEY);
+    }
+  });
 
   formulaInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
@@ -234,14 +261,22 @@ if (typeof document !== 'undefined') {
     resultsDiv.hidden    = true;
     resultsDiv.innerHTML = '';
 
+    const token          = tokenInput.value.trim();
     const names          = parseBrewInput(formulaInput.value);
     const includeBuildDeps = includeBuildCb.checked;
+
+    if (rememberTokenCb.checked && token) {
+      localStorage.setItem(TOKEN_STORAGE_KEY, token);
+    } else {
+      localStorage.removeItem(TOKEN_STORAGE_KEY);
+    }
 
     if (names.length === 0) {
       showError('Enter at least one formula name.');
       return;
     }
 
+    setGithubToken(token || null);
     submitBtn.disabled = true;
 
     try {
@@ -258,7 +293,7 @@ if (typeof document !== 'undefined') {
       if (rateLimited) {
         showError(
           'GitHub API rate limit reached — some "Updated" dates could not be fetched. ' +
-          'The unauthenticated limit (60 requests/hour) resets within an hour.'
+          'Add a personal access token above to raise the limit to 5 000 req/hr, or wait for the unauthenticated limit (60/hr) to reset.'
         );
       }
 

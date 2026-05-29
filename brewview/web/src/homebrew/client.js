@@ -2,9 +2,23 @@
  * Homebrew formula and cask API client.
  * Fetches package metadata from the public formulae.brew.sh JSON API,
  * which is CORS-enabled and requires no authentication.
+ * GitHub API calls (update-date lookups) optionally use a personal access
+ * token set via setGithubToken() to raise the rate limit from 60 to 5 000/hr.
  */
 
 const FORMULA_API = 'https://formulae.brew.sh/api/formula';
+
+/** Currently active GitHub personal access token, or null when unauthenticated. */
+let githubToken = null;
+
+/**
+ * Sets the GitHub personal access token used for update-date API requests.
+ * Pass null to clear the token and revert to unauthenticated requests.
+ * @param {string|null} token
+ */
+export function setGithubToken(token) {
+  githubToken = token ?? null;
+}
 const CASK_API    = 'https://formulae.brew.sh/api/cask';
 
 /**
@@ -85,7 +99,12 @@ export async function fetchFormulaLastUpdated(rubySourcePath) {
     const res = await fetch(
       `https://api.github.com/repos/Homebrew/homebrew-core/commits` +
       `?path=${encodeURIComponent(rubySourcePath)}&per_page=${COMMIT_PAGE_SIZE}`,
-      { headers: { Accept: 'application/vnd.github.v3+json' } }
+      {
+        headers: {
+          Accept: 'application/vnd.github.v3+json',
+          ...(githubToken ? { Authorization: `Bearer ${githubToken}` } : {}),
+        },
+      }
     );
     // 403/429 from GitHub means the rate limit was hit. Raise it distinctly so
     // resolve() can report it instead of letting the date silently go missing.
