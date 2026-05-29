@@ -1,3 +1,3 @@
 module gos
 
-go 1.25.9
+go 1.26.3

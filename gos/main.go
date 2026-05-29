@@ -1,11 +1,13 @@
-// Minimal static file server for the depsview web interface.
-// Serves the entire repository root so that web/app.js can import
-// from ../src/ using relative ES module paths.
+// gos — minimal static file server.
+// Serves the given directory (default: current directory) over HTTP.
+// Registers .js as "application/javascript" so browsers accept ES module
+// scripts on hosts whose MIME database omits that mapping.
 //
-// Run from the repository root:
+// Usage:
 //
-//	go run server.go
-//	go run server.go -port 9000
+//	gos
+//	gos -dir ./web
+//	gos -dir ./web -port 9000
 package main
 
 import (
@@ -18,9 +20,6 @@ import (
 )
 
 // newHandler returns an http.Handler that serves static files from dir.
-// It explicitly registers the .js MIME type as "application/javascript" so
-// that browsers accept ES module scripts regardless of the host OS's MIME
-// database (some minimal Linux environments omit this mapping).
 func newHandler(dir string) http.Handler {
 	mime.AddExtensionType(".js", "application/javascript")
 	return http.FileServer(http.Dir(dir))
@@ -29,7 +28,7 @@ func newHandler(dir string) http.Handler {
 // main parses the -port and -dir flags, starts the file server, and prints the URL.
 func main() {
 	port := flag.String("port", "8080", "TCP port to listen on")
-	dir  := flag.String("dir", "./web", "Directory to serve")
+	dir  := flag.String("dir", ".", "Directory to serve")
 	flag.Parse()
 
 	handler := newHandler(*dir)
