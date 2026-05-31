@@ -141,3 +141,42 @@ export async function fetchCask(token) {
   if (!res.ok) throw new Error(`HTTP ${res.status} fetching cask "${token}"`);
   return res.json();
 }
+
+/** Expected shape for Homebrew cask ruby_source_path values, e.g. "Cask/f/firefox.rb". */
+const CASK_RUBY_PATH_RE = /^Casks\/[A-Za-z0-9][\w@.+-]*\/[\w@.+-]+\.rb$/;
+
+/**
+ * Fetches the date a cask was last updated by looking up the most recent
+ * BrewTestBot commit to its Ruby source file in homebrew-cask.
+ * Mirrors fetchFormulaLastUpdated() but queries Homebrew/homebrew-cask.
+ * @param {string|null} rubySourcePath - e.g. "Cask/f/firefox.rb"
+ * @returns {Promise<string|null>}
+ * @throws {RateLimitError} when the GitHub API rate limit is exceeded
+ */
+export async function fetchCaskLastUpdated(rubySourcePath) {
+  if (!rubySourcePath || !CASK_RUBY_PATH_RE.test(rubySourcePath)) return null;
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/Homebrew/homebrew-cask/commits` +
+      `?path=${encodeURIComponent(rubySourcePath)}&per_page=${COMMIT_PAGE_SIZE}`,
+      {
+        headers: {
+          Accept: 'application/vnd.github.v3+json',
+          ...(githubToken ? { Authorization: `Bearer ${githubToken}` } : {}),
+        },
+      }
+    );
+    if (res.status === 403 || res.status === 429) throw new RateLimitError();
+    if (!res.ok) return null;
+    const commits = await res.json();
+    if (!Array.isArray(commits)) return null;
+    const hit = commits.find(c =>
+      c?.author?.login === BREW_TEST_BOT || c?.committer?.login === BREW_TEST_BOT
+    );
+    const date = hit?.commit?.committer?.date;
+    return date ? date.slice(0, 10) : null;
+  } catch (err) {
+    if (err instanceof RateLimitError) throw err;
+    return null;
+  }
+}

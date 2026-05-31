@@ -8,7 +8,7 @@
  * OS-provided and not Homebrew packages.
  */
 
-import { fetchFormula, fetchFormulaLastUpdated, RateLimitError } from './client.js';
+import { fetchFormula, fetchCask, fetchFormulaLastUpdated, fetchCaskLastUpdated, RateLimitError } from './client.js';
 
 /**
  * Sums all install counts from an analytics period object.
@@ -54,6 +54,25 @@ export function parseFormula(data, opts = {}) {
 }
 
 /**
+ * Normalises a raw cask JSON object into a resolved package record.
+ * Casks do not expose a transitive dependency graph, so deps is always empty.
+ * @param {object} data - raw cask JSON from the Homebrew API
+ * @returns {{ name: string, version: string, deps: string[], installs365: number|null, installs30: number|null, link: string, type: 'cask', rubySourcePath: string|null }}
+ */
+export function parseCask(data) {
+  return {
+    name:           data.token,
+    version:        data.version ?? 'unknown',
+    deps:           [],
+    installs365:    totalInstalls(data.analytics, '365d'),
+    installs30:     totalInstalls(data.analytics, '30d'),
+    link:           `https://formulae.brew.sh/cask/${data.token}`,
+    type:           'cask',
+    rubySourcePath: data.ruby_source_path ?? null,
+  };
+}
+
+/**
  * Resolves the full transitive dependency tree for a Homebrew formula using BFS.
  * The root formula is included in the result map at depth 0.
  * Each resolved package carries a `depth` field: 0 = root, 1 = direct dep,
@@ -64,13 +83,13 @@ export function parseFormula(data, opts = {}) {
  * API rate limit — in that case some packages' `updatedAt` will be null even
  * though the formula itself resolved fine, and the caller should surface it.
  *
- * @param {string|string[]} rootNames - formula name(s) to start from
- * @param {{ includeBuildDeps?: boolean, onProgress?: (msg: string) => void }} [opts]
+ * @param {string|string[]} rootNames - formula or cask name(s) to start from
+ * @param {{ includeBuildDeps?: boolean, isCask?: boolean, onProgress?: (msg: string) => void }} [opts]
  * @returns {Promise<{ results: Map<string, object>, rateLimited: boolean }>}
  *   results: name → package record (includes updatedAt); rateLimited: see above
  */
 export async function resolve(rootNames, opts = {}) {
-  const { includeBuildDeps = false, onProgress } = opts;
+  const { includeBuildDeps = false, isCask = false, onProgress } = opts;
   const roots = Array.isArray(rootNames) ? rootNames : [rootNames];
 
   // ── Phase 1: BFS — resolve formula metadata ───────────────────────────────
@@ -89,8 +108,13 @@ export async function resolve(rootNames, opts = {}) {
 
     let pkg;
     try {
-      const data = await fetchFormula(name);
-      pkg = { ...parseFormula(data, { includeBuildDeps }), depth };
+      if (isCask) {
+        const data = await fetchCask(name);
+        pkg = { ...parseCask(data), depth };
+      } else {
+        const data = await fetchFormula(name);
+        pkg = { ...parseFormula(data, { includeBuildDeps }), depth };
+      }
     } catch (err) {
       pkg = {
         name,
@@ -98,8 +122,10 @@ export async function resolve(rootNames, opts = {}) {
         deps:           [],
         installs365:    null,
         installs30:     null,
-        link:           `https://formulae.brew.sh/formula/${name}`,
-        type:           'formula',
+        link:           isCask
+          ? `https://formulae.brew.sh/cask/${name}`
+          : `https://formulae.brew.sh/formula/${name}`,
+        type:           isCask ? 'cask' : 'formula',
         rubySourcePath: null,
         depth,
         error:          err.message,
@@ -125,7 +151,9 @@ export async function resolve(rootNames, opts = {}) {
       .filter(pkg => !pkg.error && pkg.rubySourcePath)
       .map(async pkg => {
         try {
-          pkg.updatedAt = await fetchFormulaLastUpdated(pkg.rubySourcePath);
+          pkg.updatedAt = await (isCask
+            ? fetchCaskLastUpdated(pkg.rubySourcePath)
+            : fetchFormulaLastUpdated(pkg.rubySourcePath));
         } catch (err) {
           pkg.updatedAt = null;
           if (err instanceof RateLimitError) rateLimited = true;
