@@ -79,6 +79,10 @@ export function parseCask(data) {
  * 2+ = transitive dep. Packages that fail to fetch are recorded with error = message.
  * Does not mutate any input; returns a new Map on each call.
  *
+ * By default each root name is tried against both the formula and cask APIs in
+ * parallel; the formula result is preferred when both succeed. Set isCask: true
+ * to skip this and force all roots to resolve as casks.
+ *
  * `rateLimited` is true when at least one update-date request hit the GitHub
  * API rate limit — in that case some packages' `updatedAt` will be null even
  * though the formula itself resolved fine, and the caller should surface it.
@@ -92,15 +96,15 @@ export async function resolve(rootNames, opts = {}) {
   const { includeBuildDeps = false, isCask = false, onProgress } = opts;
   const roots = Array.isArray(rootNames) ? rootNames : [rootNames];
 
-  // ── Phase 1: BFS — resolve formula metadata ───────────────────────────────
-  // parseFormula() returns rubySourcePath, which is spread into pkg below.
-  // The catch branch sets rubySourcePath: null since no data was retrieved.
+  // ── Phase 1: BFS — resolve package metadata ───────────────────────────────
+  // Queue items carry a `hint` so deps of resolved formulas are always fetched
+  // as formulas ('formula'), while root names use 'auto' to try both APIs.
   const results = new Map();
-  const queue   = roots.map(name => ({ name, depth: 0 }));
+  const queue   = roots.map(name => ({ name, depth: 0, hint: isCask ? 'cask' : 'auto' }));
   const visited = new Set();
 
   while (queue.length > 0) {
-    const { name, depth } = queue.shift();
+    const { name, depth, hint } = queue.shift();
     if (visited.has(name)) continue;
     visited.add(name);
 
@@ -108,7 +112,21 @@ export async function resolve(rootNames, opts = {}) {
 
     let pkg;
     try {
-      if (isCask) {
+      if (hint === 'auto') {
+        // Try formula and cask in parallel; prefer formula when both succeed.
+        const [formulaResult, caskResult] = await Promise.allSettled([
+          fetchFormula(name),
+          fetchCask(name),
+        ]);
+        if (formulaResult.status === 'fulfilled') {
+          pkg = { ...parseFormula(formulaResult.value, { includeBuildDeps }), depth };
+          if (caskResult.status === 'fulfilled') pkg.caskAlsoExists = true;
+        } else if (caskResult.status === 'fulfilled') {
+          pkg = { ...parseCask(caskResult.value), depth };
+        } else {
+          throw new Error(`Not found as formula or cask: ${name}`);
+        }
+      } else if (hint === 'cask') {
         const data = await fetchCask(name);
         pkg = { ...parseCask(data), depth };
       } else {
@@ -122,10 +140,10 @@ export async function resolve(rootNames, opts = {}) {
         deps:           [],
         installs365:    null,
         installs30:     null,
-        link:           isCask
+        link:           hint === 'cask'
           ? `https://formulae.brew.sh/cask/${name}`
           : `https://formulae.brew.sh/formula/${name}`,
-        type:           isCask ? 'cask' : 'formula',
+        type:           hint === 'cask' ? 'cask' : 'formula',
         rubySourcePath: null,
         depth,
         error:          err.message,
@@ -134,14 +152,15 @@ export async function resolve(rootNames, opts = {}) {
 
     results.set(name, pkg);
 
+    // Deps of a formula are always formulas; casks expose no dep graph.
     for (const dep of pkg.deps) {
-      if (!visited.has(dep)) queue.push({ name: dep, depth: depth + 1 });
+      if (!visited.has(dep)) queue.push({ name: dep, depth: depth + 1, hint: 'formula' });
     }
   }
 
   // ── Phase 2: fetch last-updated dates in parallel ─────────────────────────
-  // Queries the GitHub commits API for each formula's Ruby source file in
-  // homebrew-core. All requests fire concurrently to minimise total latency.
+  // Queries the GitHub commits API for each package's Ruby source file.
+  // All requests fire concurrently to minimise total latency.
   // A rate-limit response (403/429) on any one request is caught and recorded;
   // the affected package's updatedAt stays null and resolution still completes.
   onProgress?.('Fetching update dates from GitHub…');
@@ -151,7 +170,7 @@ export async function resolve(rootNames, opts = {}) {
       .filter(pkg => !pkg.error && pkg.rubySourcePath)
       .map(async pkg => {
         try {
-          pkg.updatedAt = await (isCask
+          pkg.updatedAt = await (pkg.type === 'cask'
             ? fetchCaskLastUpdated(pkg.rubySourcePath)
             : fetchFormulaLastUpdated(pkg.rubySourcePath));
         } catch (err) {

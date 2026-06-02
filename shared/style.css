@@ -29,6 +29,7 @@ body {
   -webkit-font-smoothing: antialiased;
   /* default padding for depsview */
   padding: 3rem 1.5rem;
+  overflow-x: hidden;
 }
 
 /* ── Landing page (body.pg-landing) ──────────────────────────────────────── */
@@ -478,6 +479,18 @@ tbody tr:hover td { background: #273548; }
 .score-bad  { color: var(--red);   font-weight: 500; }
 
 .row-error td { color: var(--muted); font-style: italic; }
+
+.cask-hint {
+  margin-left: 0.4em;
+  font-size: 0.72em;
+  color: var(--muted);
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  padding: 0 0.3em;
+  vertical-align: middle;
+  opacity: 0.7;
+}
+.cask-hint:hover { opacity: 1; }
 
 table a       { color: var(--accent); text-decoration: none; }
 table a:hover { text-decoration: underline; }

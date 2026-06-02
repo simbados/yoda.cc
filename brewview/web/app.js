@@ -156,6 +156,7 @@ function renderResults(container, sorted) {
   const headerRow = thead.insertRow();
   const COL_DEFS = [
     ['Package',        'name'],
+    ['Type',           'type'],
     ['Version',        'version'],
     ['Updated',        'updatedAt'],
     ['Installs/year',  'installs365'],
@@ -178,11 +179,22 @@ function renderResults(container, sorted) {
     a.rel    = 'noopener noreferrer';
     a.textContent = pkg.name;
     nameTd.appendChild(a);
+    if (pkg.caskAlsoExists) {
+      const hint = document.createElement('a');
+      hint.href      = `https://formulae.brew.sh/cask/${pkg.name}`;
+      hint.target    = '_blank';
+      hint.rel       = 'noopener noreferrer';
+      hint.textContent = 'cask';
+      hint.className = 'cask-hint';
+      nameTd.appendChild(hint);
+    }
+
+    addCell(tr, pkg.type);
 
     if (pkg.error) {
       tr.className = 'row-error';
       const td = addCell(tr, pkg.error);
-      td.colSpan = 2;
+      td.colSpan = 3;
       continue;
     }
 
@@ -193,7 +205,10 @@ function renderResults(container, sorted) {
     addCell(tr, formatInstalls(pkg.installs365));
   }
 
-  container.appendChild(table);
+  const tableScroll = document.createElement('div');
+  tableScroll.className = 'table-scroll';
+  tableScroll.appendChild(table);
+  container.appendChild(tableScroll);
 }
 
 // ── Browser initialisation ────────────────────────────────────────────────────
@@ -201,7 +216,6 @@ function renderResults(container, sorted) {
 if (typeof document !== 'undefined') {
   const form             = document.getElementById('form');
   const formulaInput     = document.getElementById('formula-input');
-  const searchCaskCb     = document.getElementById('search-cask');
   const includeBuildCb   = document.getElementById('include-build');
   const tokenInput       = document.getElementById('token-input');
   const rememberTokenCb  = document.getElementById('remember-token');
@@ -216,12 +230,6 @@ if (typeof document !== 'undefined') {
   function syncStorageNote() {
     storageNote.hidden = !rememberTokenCb.checked;
   }
-
-  function syncCaskMode() {
-    includeBuildCb.disabled = searchCaskCb.checked;
-    if (searchCaskCb.checked) includeBuildCb.checked = false;
-  }
-  searchCaskCb.addEventListener('change', syncCaskMode);
 
   const savedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
   if (savedToken) {
@@ -268,10 +276,9 @@ if (typeof document !== 'undefined') {
     resultsDiv.hidden    = true;
     resultsDiv.innerHTML = '';
 
-    const token          = tokenInput.value.trim();
-    const names          = parseBrewInput(formulaInput.value);
-    const isCask         = searchCaskCb.checked;
-    const includeBuildDeps = !isCask && includeBuildCb.checked;
+    const token            = tokenInput.value.trim();
+    const names            = parseBrewInput(formulaInput.value);
+    const includeBuildDeps = includeBuildCb.checked;
 
     if (rememberTokenCb.checked && token) {
       localStorage.setItem(TOKEN_STORAGE_KEY, token);
@@ -280,7 +287,7 @@ if (typeof document !== 'undefined') {
     }
 
     if (names.length === 0) {
-      showError(`Enter at least one ${isCask ? 'cask' : 'formula'} name.`);
+      showError('Enter at least one formula or cask name.');
       return;
     }
 
@@ -290,7 +297,6 @@ if (typeof document !== 'undefined') {
     try {
       const { results, rateLimited } = await resolve(names, {
         includeBuildDeps,
-        isCask,
         onProgress: msg => appendProgress(msg + '\n'),
       });
 
