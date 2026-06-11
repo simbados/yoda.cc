@@ -25,6 +25,7 @@ import { listDirectory                } from './src/github/client.js';
 import { parseMultiPackageInput        } from './src/multiPackageParser.js';
 import { fetchSocketScores, scoreKey  } from './src/socket/client.js';
 import { groupByDomain                } from './src/output/nonStandardSources.js';
+import { NPM_LOCK_FILENAMES           } from './src/npm/lockRegistry.js';
 
 /** Fixed rendering order for ecosystem sections. */
 export const ECOSYSTEM_ORDER = ['npm', 'python', 'go'];
@@ -153,7 +154,7 @@ export function sortResults(resultsMap) {
 export function detectEcosystems(listing) {
   const names = new Set(listing.map(e => e.name));
   const found = new Set();
-  if (names.has('package-lock.json') || names.has('pnpm-lock.yaml') || names.has('package.json')) found.add('npm');
+  if ([...NPM_LOCK_FILENAMES].some(f => names.has(f)) || names.has('package.json')) found.add('npm');
   if (names.has('go.sum') || names.has('go.mod'))                                                 found.add('go');
   if (names.has('pyproject.toml')   || names.has('requirements.txt') ||
       names.has('requirements_all.txt') ||
@@ -461,7 +462,7 @@ async function resolveEcosystem(ecosystem, githubRef, opts) {
     ({ deps, source, dangerousDeps } = await parseGithubDependencies(githubRef, { includeTests }));
   }
 
-  const isLockFile = source === 'package-lock.json' || source === 'pnpm-lock.yaml' || source === 'go.sum';
+  const isLockFile = NPM_LOCK_FILENAMES.has(source) || source === 'go.sum';
   onProgress(`[${ecosystem}] Found ${deps.length} ${isLockFile ? 'installed' : 'direct'} dep${deps.length === 1 ? '' : 's'} in ${source}. Resolving…\n`);
 
   let results;

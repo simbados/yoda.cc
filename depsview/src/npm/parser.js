@@ -1,24 +1,25 @@
 /**
  * Node.js-specific npm dependency file reader.
- * Checks for package-lock.json first (preferred — contains the full resolved
- * dependency graph at exact versions); falls back to package.json.
- * File-system imports must not be added to parserCore.js or lockParser.js.
+ * Checks for lock files first (preferred — contain the full resolved dependency
+ * graph at exact versions); falls back to package.json.
+ * File-system imports must not be added to parserCore.js or lock parser modules.
+ *
+ * Lock file priority and parser mapping is driven by NPM_LOCK_FILES from
+ * lockRegistry.js — adding a new lock file format only requires a new entry there.
  */
 
 import fs   from 'node:fs';
 import path from 'node:path';
-import { parsePackageJson } from './parserCore.js';
-import { parsePackageLock } from './lockParser.js';
-import { parsePnpmLock, getPnpmMajorVersion } from './pnpmLockParser.js';
-import { normalizePackageName } from './depResolver.js';
-import { partitionNpmPackages } from './registryFilter.js';
+import { parsePackageJson             } from './parserCore.js';
+import { NPM_LOCK_FILES, NPM_LOCK_FILENAMES } from './lockRegistry.js';
+import { normalizePackageName         } from './depResolver.js';
+import { partitionNpmPackages         } from './registryFilter.js';
 
 /**
  * Reads and parses npm dependency files from a project directory.
- * Priority: package-lock.json → pnpm-lock.yaml → package.json.
+ * Priority is defined by the ordered NPM_LOCK_FILES registry, followed by
+ * package.json as a fallback.
  * Returns the parsed deps, a source label, and an optional note string.
- * note is set when pnpm-lock.yaml v9 is used, because that format cannot
- * distinguish dev-only packages from production packages.
  * @param {string} projectPath - absolute path to the npm project root
  * @param {{ includeTests?: boolean }} [options]
  * @returns {{
@@ -33,27 +34,16 @@ import { partitionNpmPackages } from './registryFilter.js';
 function parseDependencyFile(projectPath, options = {}) {
   const { includeTests = false } = options;
 
-  const lockPath = path.join(projectPath, 'package-lock.json');
-  if (fs.existsSync(lockPath) && !fs.statSync(lockPath).isDirectory()) {
-    try {
-      const { publicPkgs, privateCount, privatePkgs } = partitionNpmPackages(parsePackageLock(fs.readFileSync(lockPath, 'utf8'), includeTests));
-      return { deps: publicPkgs, source: 'package-lock.json', note: null, privateCount, privatePkgs, dangerousDeps: [] };
-    } catch (err) {
-      throw new Error(`Failed to parse package-lock.json: ${err.message}`);
-    }
-  }
-
-  const pnpmLockPath = path.join(projectPath, 'pnpm-lock.yaml');
-  if (fs.existsSync(pnpmLockPath) && !fs.statSync(pnpmLockPath).isDirectory()) {
-    try {
-      const content = fs.readFileSync(pnpmLockPath, 'utf8');
-      const note = getPnpmMajorVersion(content) >= 9
-        ? 'pnpm-lock.yaml v9 does not flag packages as dev-only — all installed packages are listed, including test and dev dependencies.'
-        : null;
-      const { publicPkgs, privateCount, privatePkgs } = partitionNpmPackages(parsePnpmLock(content, includeTests));
-      return { deps: publicPkgs, source: 'pnpm-lock.yaml', note, privateCount, privatePkgs, dangerousDeps: [] };
-    } catch (err) {
-      throw new Error(`Failed to parse pnpm-lock.yaml: ${err.message}`);
+  for (const { filename, parse, getNote } of NPM_LOCK_FILES) {
+    const lockPath = path.join(projectPath, filename);
+    if (fs.existsSync(lockPath) && !fs.statSync(lockPath).isDirectory()) {
+      try {
+        const content = fs.readFileSync(lockPath, 'utf8');
+        const { publicPkgs, privateCount, privatePkgs } = partitionNpmPackages(parse(content, includeTests));
+        return { deps: publicPkgs, source: filename, note: getNote(content), privateCount, privatePkgs, dangerousDeps: [] };
+      } catch (err) {
+        throw new Error(`Failed to parse ${filename}: ${err.message}`);
+      }
     }
   }
 
@@ -67,7 +57,7 @@ function parseDependencyFile(projectPath, options = {}) {
     }
   }
 
-  throw new Error(`No npm dependency file found in ${projectPath}. Looked for: package-lock.json, pnpm-lock.yaml, package.json`);
+  throw new Error(`No npm dependency file found in ${projectPath}. Looked for: ${[...NPM_LOCK_FILENAMES].join(', ')}, package.json`);
 }
 
 /**

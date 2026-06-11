@@ -22,11 +22,12 @@ import { generateReport                  } from './output/reportGenerator.js';
 import { fetchSocketScores               } from './socket/client.js';
 import { setDebug                        } from './util/debugging.js';
 import { isGithubUrl, parseGithubUrl     } from './github/url.js';
+import { NPM_LOCK_FILENAMES              } from './npm/lockRegistry.js';
 import { listDirectory                   } from './github/client.js';
 import { parsePackageInput               } from './packageInput.js';
 
 /** npm-specific filenames checked during ecosystem detection. */
-const NPM_FILES    = new Set(['package-lock.json', 'pnpm-lock.yaml', 'package.json']);
+const NPM_FILES    = new Set([...NPM_LOCK_FILENAMES, 'package.json']);
 /** Go-specific filenames checked during ecosystem detection. */
 const GO_FILES     = new Set(['go.sum', 'go.mod']);
 /** Python-specific filenames checked during ecosystem detection. */

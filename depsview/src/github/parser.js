@@ -12,8 +12,7 @@
 
 import { listDirectory, fetchFileContent } from './client.js';
 import { parsePackageJson } from '../npm/parserCore.js';
-import { parsePackageLock } from '../npm/lockParser.js';
-import { parsePnpmLock, getPnpmMajorVersion } from '../npm/pnpmLockParser.js';
+import { NPM_LOCK_FILES, NPM_LOCK_FILENAMES } from '../npm/lockRegistry.js';
 import {
   parseDependencyString,
   parsePyprojectToml,
@@ -268,9 +267,9 @@ async function parseGithubDependencies({ owner, repo, ref, subpath }, options = 
 
 /**
  * Parses npm dependencies from a GitHub repository.
- * Checks the starting directory for package-lock.json first (preferred),
- * then falls back to package.json. No directory traversal is performed;
- * pass a subpath to point at a nested package root.
+ * Checks the starting directory for each registered lock file in priority order
+ * (defined by NPM_LOCK_FILES), then falls back to package.json. No directory
+ * traversal is performed; pass a subpath to point at a nested package root.
  *
  * @param {{ owner: string, repo: string, ref: string, subpath: string }} githubRef
  * @param {{ includeTests?: boolean }} [options]
@@ -289,14 +288,14 @@ async function parseGithubNpmDependencies({ owner, repo, ref, subpath }, options
     listing.filter(e => e.type === 'file').map(e => e.name)
   );
 
-  const preferred = fileNames.has('package-lock.json') ? 'package-lock.json'
-    : fileNames.has('pnpm-lock.yaml')                   ? 'pnpm-lock.yaml'
-    : fileNames.has('package.json')                      ? 'package.json'
+  const lockEntry = NPM_LOCK_FILES.find(e => fileNames.has(e.filename));
+  const preferred = lockEntry ? lockEntry.filename
+    : fileNames.has('package.json') ? 'package.json'
     : null;
 
   if (!preferred) {
     const location = subpath ? `${owner}/${repo}/${subpath}` : `${owner}/${repo}`;
-    throw new Error(`No npm dependency file found in ${location} (ref: ${ref}). Looked for: package-lock.json, pnpm-lock.yaml, package.json`);
+    throw new Error(`No npm dependency file found in ${location} (ref: ${ref}). Looked for: ${[...NPM_LOCK_FILENAMES].join(', ')}, package.json`);
   }
 
   const filePath = subpath ? `${subpath}/${preferred}` : preferred;
@@ -305,21 +304,16 @@ async function parseGithubNpmDependencies({ owner, repo, ref, subpath }, options
     throw new Error(`Failed to fetch ${filePath} from ${owner}/${repo}`);
   }
 
-  const note = preferred === 'pnpm-lock.yaml' && getPnpmMajorVersion(content) >= 9
-    ? 'pnpm-lock.yaml v9 does not flag packages as dev-only — all installed packages are listed, including test and dev dependencies.'
-    : null;
-
-  if (preferred === 'package-lock.json' || preferred === 'pnpm-lock.yaml') {
-    const rawDeps = preferred === 'package-lock.json'
-      ? parsePackageLock(content, includeTests)
-      : parsePnpmLock(content, includeTests);
+  if (lockEntry) {
+    const rawDeps = lockEntry.parse(content, includeTests);
+    const note    = lockEntry.getNote(content);
     const { publicPkgs, privateCount, privatePkgs } = partitionNpmPackages(rawDeps);
     return { deps: publicPkgs, source: preferred, note, privateCount, privatePkgs, dangerousDeps: [] };
   }
 
-  // package.json: returns { deps, dangerousDeps }
+  // package.json fallback: returns { deps, dangerousDeps }
   const { deps, dangerousDeps } = parsePackageJson(content, includeTests);
-  return { deps, source: preferred, note, privateCount: 0, privatePkgs: [], dangerousDeps };
+  return { deps, source: preferred, note: null, privateCount: 0, privatePkgs: [], dangerousDeps };
 }
 
 /**

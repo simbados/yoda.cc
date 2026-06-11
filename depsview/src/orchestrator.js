@@ -17,6 +17,7 @@
 
 import { parseDependencyFile    as parseNpmFile,
          readDirectNamesFromPackageJson } from './npm/parser.js';
+import { NPM_LOCK_FILENAMES             } from './npm/lockRegistry.js';
 import { resolveDependencies    as resolveNpm,
          normalizePackageName   as normalizeNpm } from './npm/depResolver.js';
 
@@ -144,7 +145,7 @@ async function directNamesForSection(ecosystem, deps, source, ctx, opts) {
   const { includeTests } = opts;
 
   if (ecosystem === 'npm') {
-    const isLockFile = source === 'package-lock.json' || source === 'pnpm-lock.yaml';
+    const isLockFile = NPM_LOCK_FILENAMES.has(source);
     if (!isLockFile) return new Set(deps.map(d => normalizeNpm(d.name)));
     return isGithub ? new Set() : readDirectNamesFromPackageJson(absolutePath, includeTests);
   }

@@ -41,7 +41,7 @@ Given a source file path, generate a complete, passing test file that covers eve
 1. Read the source file to understand every exported function, its inputs, outputs, and edge cases.
 2. Read one or two existing test files in the same `test/` subdirectory to confirm local style.
 3. Write the test file — full coverage, no placeholders.
-4. Run `npm test` from `/workspaces/node-container/yoda/depsview` and fix any failures before reporting done.
+4. Run `npm test 2>&1 | tail -20` from `/workspaces/node-container/yoda/depsview` to get the summary without scrolling through all output. Fix any failures, then run the same command once more to confirm a clean pass.
 
 ## Output
 
