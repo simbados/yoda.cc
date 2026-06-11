@@ -142,7 +142,8 @@ Lock files are always preferred over `package.json`. The priority order is:
 
 1. `package-lock.json` (npm)
 2. `pnpm-lock.yaml` (pnpm)
-3. `package.json` (fallback — recursive registry resolution)
+3. `bun.lock` (Bun)
+4. `package.json` (fallback — recursive registry resolution)
 
 ### package-lock.json
 
@@ -162,6 +163,21 @@ Supports lockfile versions 5, 6, and 9:
 | 6 | 7/8 | `dev: true` flag inside each entry |
 | 9 | 9+ | `devDependencies` in the `importers:` section |
 
+### bun.lock
+
+When a `bun.lock` is present, depsview reads the flat package list from the `packages` object. The text-based `bun.lock` format was introduced in Bun 1.2. The binary `bun.lockb` format (older Bun versions) is not supported.
+
+Dev dependencies are detected from the `devDependencies` field across all `workspaces` entries and excluded unless `--include-tests` is passed. Transitive packages that are pulled in exclusively by dev dependencies cannot be identified from the lock file format and may appear in the output.
+
+### Adding a new lock file format
+
+Lock file support is centralised in `src/npm/lockRegistry.js`. Adding a new format requires two steps:
+
+1. Create a parser module (e.g. `src/npm/myLockParser.js`) that exports `parse(content, includeTests)` returning `Array<{ name, version, resolved }>`.
+2. Add one entry to the `NPM_LOCK_FILES` array in `src/npm/lockRegistry.js` with the filename, the parse function, and a `getNote(content)` function (return `null` if no informational note is needed).
+
+Both the CLI and the web/GitHub code paths read from the registry automatically — no other files need to change.
+
 ### package.json fallback
 
 When no lock file is found, depsview reads `package.json` and recursively resolves all transitive dependencies from the npm registry, following each package's `dependencies` field.
@@ -180,7 +196,7 @@ Dependencies declared with non-registry specs in `package.json` — `file:`, `li
 
 ### Private registries
 
-Packages from private or custom registries are **automatically skipped**. When a `package-lock.json` or `pnpm-lock.yaml` contains a package whose `resolved` URL does not start with `https://registry.npmjs.org/`, that package is excluded and not looked up. All skipped packages are listed with their resolved URL, grouped by domain, in the non-standard sources block.
+Packages from private or custom registries are **automatically skipped**. When a `package-lock.json`, `pnpm-lock.yaml`, or `bun.lock` contains a package whose `resolved` URL does not start with `https://registry.npmjs.org/`, that package is excluded and not looked up. All skipped packages are listed with their resolved URL, grouped by domain, in the non-standard sources block.
 
 ## Python support
 
