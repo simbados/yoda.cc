@@ -143,7 +143,8 @@ Lock files are always preferred over `package.json`. The priority order is:
 1. `package-lock.json` (npm)
 2. `pnpm-lock.yaml` (pnpm)
 3. `bun.lock` (Bun)
-4. `package.json` (fallback — recursive registry resolution)
+4. `yarn.lock` (Yarn Classic v1 and Yarn Berry v2+)
+5. `package.json` (fallback — recursive registry resolution)
 
 ### package-lock.json
 
@@ -168,6 +169,21 @@ Supports lockfile versions 5, 6, and 9:
 When a `bun.lock` is present, depsview reads the flat package list from the `packages` object. The text-based `bun.lock` format was introduced in Bun 1.2. The binary `bun.lockb` format (older Bun versions) is not supported.
 
 Dev dependencies are detected from the `devDependencies` field across all `workspaces` entries and excluded unless `--include-tests` is passed. Transitive packages that are pulled in exclusively by dev dependencies cannot be identified from the lock file format and may appear in the output.
+
+### yarn.lock
+
+Both Yarn Classic (v1) and Yarn Berry (v2+) use the same `yarn.lock` filename. The format is auto-detected:
+
+| Format | Detection | Dev filtering | Private registry detection |
+|---|---|---|---|
+| Classic v1 | `# yarn lockfile v1` comment | Not possible — note shown | Yes — via `resolved` URL |
+| Berry v2+ | `__metadata:` block | Not possible — note shown | Not possible — see below |
+
+**Yarn Classic** resolved URLs use `registry.yarnpkg.com` (Yarn's CDN alias for npm), which depsview normalises to `registry.npmjs.org` for filtering purposes. Packages from any other host are treated as private and skipped.
+
+**Yarn Berry** does not store registry URLs in the lockfile. Registry configuration lives in `.yarnrc.yml`, which depsview does not currently read. As a result, all Berry packages are queried against the public npm registry regardless of where they were originally installed from. **If your project uses a private registry, internal package names may be exposed to npm's servers.** Workspace (`linkType: soft`) and non-`@npm:` protocol entries are silently skipped.
+
+Neither format flags packages as dev-only in the lockfile, so `--include-tests` has no effect on `yarn.lock` parsing.
 
 ### Adding a new lock file format
 
@@ -196,7 +212,7 @@ Dependencies declared with non-registry specs in `package.json` — `file:`, `li
 
 ### Private registries
 
-Packages from private or custom registries are **automatically skipped**. When a `package-lock.json`, `pnpm-lock.yaml`, or `bun.lock` contains a package whose `resolved` URL does not start with `https://registry.npmjs.org/`, that package is excluded and not looked up. All skipped packages are listed with their resolved URL, grouped by domain, in the non-standard sources block.
+Packages from private or custom registries are **automatically skipped**. When a `package-lock.json`, `pnpm-lock.yaml`, `bun.lock`, or `yarn.lock` (Classic only) contains a package whose `resolved` URL does not start with `https://registry.npmjs.org/`, that package is excluded and not looked up. Yarn Berry lockfiles do not contain registry URLs — see the yarn.lock section above for the privacy implications. All skipped packages are listed with their resolved URL, grouped by domain, in the non-standard sources block.
 
 ## Python support
 

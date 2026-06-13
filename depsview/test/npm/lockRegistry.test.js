@@ -19,8 +19,12 @@ describe('NPM_LOCK_FILENAMES', () => {
     assert.ok(NPM_LOCK_FILENAMES.has('bun.lock'));
   });
 
-  it('contains exactly three entries', () => {
-    assert.equal(NPM_LOCK_FILENAMES.size, 3);
+  it('contains yarn.lock', () => {
+    assert.ok(NPM_LOCK_FILENAMES.has('yarn.lock'));
+  });
+
+  it('contains exactly four entries', () => {
+    assert.equal(NPM_LOCK_FILENAMES.size, 4);
   });
 });
 

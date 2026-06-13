@@ -18,6 +18,7 @@
 import { parsePackageLock                      } from './lockParser.js';
 import { parsePnpmLock, getPnpmMajorVersion    } from './pnpmLockParser.js';
 import { parseBunLock                          } from './bunLockParser.js';
+import { parseYarnLock, getYarnMajorVersion    } from './yarnLockParser.js';
 
 /**
  * Ordered list of npm lock file descriptors. Priority = array order; first
@@ -47,6 +48,21 @@ export const NPM_LOCK_FILES = [
     filename: 'bun.lock',
     parse:    parseBunLock,
     getNote:  () => null,
+  },
+  {
+    filename: 'yarn.lock',
+    parse:    parseYarnLock,
+    getNote:  (content) => {
+      const devNote = 'yarn.lock does not flag packages as dev-only — all installed packages are listed, including test and dev dependencies.';
+      // Berry lockfiles do not record registry URLs — private packages cannot be
+      // detected and will be queried against the public npm registry. This may
+      // expose internal package names. Registry config lives in .yarnrc.yml which
+      // depsview does not currently read.
+      if (getYarnMajorVersion(content) === 2) {
+        return devNote + ' Yarn Berry (v2+) does not store registry URLs in yarn.lock — private registry packages cannot be detected and will be looked up against the public npm registry, potentially exposing internal package names.';
+      }
+      return devNote;
+    },
   },
 ];
 
