@@ -13,8 +13,9 @@
  *   node src/main.js --package|-p <name> --npm|--python|--go
  */
 
-import fs   from 'node:fs';
-import path from 'node:path';
+import fs       from 'node:fs';
+import path     from 'node:path';
+import readline from 'node:readline';
 
 import { orchestrate, packagesForSocket } from './orchestrator.js';
 import { formatMulti, formatJson, ECOSYSTEM_ORDER } from './output/formatter.js';
@@ -181,6 +182,28 @@ function resolveEcosystems(requested, detected) {
  * Main entry point.
  * @returns {Promise<void>}
  */
+/**
+ * Prints a ⚠ warning to stderr and asks the user to confirm before proceeding.
+ * When stdin is not a TTY (CI, piped output) the warning is still printed but
+ * execution is aborted — the user must re-run interactively to proceed.
+ * @param {string} warning
+ * @returns {Promise<boolean>} true = continue, false = abort
+ */
+async function confirmWarning(warning) {
+  process.stderr.write(`\n⚠  WARNING\n${warning}\n\n`);
+  if (!process.stdin.isTTY) {
+    process.stderr.write('Non-interactive session detected — aborting. Re-run in a terminal to confirm.\n\n');
+    return false;
+  }
+  const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
+  return new Promise(resolve => {
+    rl.question('Continue anyway? [y/N] ', answer => {
+      rl.close();
+      resolve(answer.trim().toLowerCase() === 'y');
+    });
+  });
+}
+
 async function main() {
   const {
     projectPath, packageName, json, debug, includeTests, downloadStats,
@@ -235,6 +258,7 @@ async function main() {
       includeTests,
       downloadStats,
       onProgress: json ? undefined : msg => process.stderr.write(msg + '\n'),
+      onWarning:  (warning) => confirmWarning(warning),
     }
   );
 

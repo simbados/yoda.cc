@@ -34,13 +34,13 @@ import { partitionNpmPackages         } from './registryFilter.js';
 function parseDependencyFile(projectPath, options = {}) {
   const { includeTests = false } = options;
 
-  for (const { filename, parse, getNote } of NPM_LOCK_FILES) {
+  for (const { filename, parse, getNote, getWarning } of NPM_LOCK_FILES) {
     const lockPath = path.join(projectPath, filename);
     if (fs.existsSync(lockPath) && !fs.statSync(lockPath).isDirectory()) {
       try {
         const content = fs.readFileSync(lockPath, 'utf8');
         const { publicPkgs, privateCount, privatePkgs } = partitionNpmPackages(parse(content, includeTests));
-        return { deps: publicPkgs, source: filename, note: getNote(content), privateCount, privatePkgs, dangerousDeps: [] };
+        return { deps: publicPkgs, source: filename, note: getNote(content), warning: getWarning(content), privateCount, privatePkgs, dangerousDeps: [] };
       } catch (err) {
         throw new Error(`Failed to parse ${filename}: ${err.message}`);
       }
@@ -51,7 +51,7 @@ function parseDependencyFile(projectPath, options = {}) {
   if (fs.existsSync(pkgPath) && !fs.statSync(pkgPath).isDirectory()) {
     try {
       const { deps, dangerousDeps } = parsePackageJson(fs.readFileSync(pkgPath, 'utf8'), includeTests);
-      return { deps, source: 'package.json', note: null, privateCount: 0, privatePkgs: [], dangerousDeps };
+      return { deps, source: 'package.json', note: null, warning: null, privateCount: 0, privatePkgs: [], dangerousDeps };
     } catch (err) {
       throw new Error(`Failed to parse package.json: ${err.message}`);
     }

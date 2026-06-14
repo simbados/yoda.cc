@@ -175,10 +175,21 @@ async function directNamesForSection(ecosystem, deps, source, ctx, opts) {
  */
 async function buildSection(ecosystem, ctx, opts) {
   try {
-    const { deps, source, note = null, privateCount = 0, privatePkgs = [], dangerousDeps = [] } = await parseSection(ecosystem, ctx, opts);
+    const { deps, source, note = null, warning = null, privateCount = 0, privatePkgs = [], dangerousDeps = [] } = await parseSection(ecosystem, ctx, opts);
+
+    // If the lock file carries a privacy/security warning (e.g. Yarn Berry), give
+    // the caller a chance to confirm before resolution fires network requests.
+    // onWarning(warning) must return true to continue or false to abort.
+    // Fail closed: when a warning is present but no onWarning handler is wired
+    // up, abort the section rather than silently leaking private package names.
+    if (warning) {
+      const confirmed = opts.onWarning ? await opts.onWarning(warning) : false;
+      if (!confirmed) return { ecosystem, source, deps: [], results: new Map(), directNames: new Set(), note, warning, privateCount: 0, privatePkgs: [], dangerousDeps: [], aborted: true };
+    }
+
     const results       = await resolveSectionDeps(ecosystem, deps, opts);
     const directNames   = await directNamesForSection(ecosystem, deps, source, ctx, opts);
-    return { ecosystem, source, deps, results, directNames, note, privateCount, privatePkgs, dangerousDeps };
+    return { ecosystem, source, deps, results, directNames, note, warning, privateCount, privatePkgs, dangerousDeps };
   } catch (err) {
     return { ecosystem, error: err.message };
   }
@@ -198,12 +209,12 @@ async function buildSection(ecosystem, ctx, opts) {
  * @returns {Promise<Map<'npm'|'python'|'go', object>>} sections
  */
 async function orchestrate(ctx, opts) {
-  const { ecosystems, includeTests, downloadStats, onProgress } = opts;
+  const { ecosystems, includeTests, downloadStats, onProgress, onWarning } = opts;
   const list = [...ecosystems];
   const sections = new Map();
 
   const settled = await Promise.all(
-    list.map(eco => buildSection(eco, ctx, { includeTests, downloadStats, onProgress }))
+    list.map(eco => buildSection(eco, ctx, { includeTests, downloadStats, onProgress, onWarning }))
   );
   for (const section of settled) sections.set(section.ecosystem, section);
   return sections;

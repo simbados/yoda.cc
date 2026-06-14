@@ -183,6 +183,11 @@ Both Yarn Classic (v1) and Yarn Berry (v2+) use the same `yarn.lock` filename. T
 
 **Yarn Berry** does not store registry URLs in the lockfile. Registry configuration lives in `.yarnrc.yml`, which depsview does not currently read. As a result, all Berry packages are queried against the public npm registry regardless of where they were originally installed from. **If your project uses a private registry, internal package names may be exposed to npm's servers.** Workspace (`linkType: soft`) and non-`@npm:` protocol entries are silently skipped.
 
+Because of this exposure risk, Yarn Berry lockfiles trigger a confirmation prompt before any registry lookups happen:
+
+- **CLI:** a ⚠ warning is written to stderr and depsview prompts `Continue anyway? [y/N]`. Press `y` to resolve, anything else to abort. In non-interactive sessions (CI, piped output) the run is aborted immediately — re-run in a terminal to confirm.
+- **Web UI:** a modal dialog appears with the same warning text and **Cancel** / **Continue anyway** buttons. Cancelling skips only the npm section; other detected ecosystems still resolve.
+
 Neither format flags packages as dev-only in the lockfile, so `--include-tests` has no effect on `yarn.lock` parsing.
 
 ### Adding a new lock file format

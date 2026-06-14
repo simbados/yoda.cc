@@ -1,10 +1,6 @@
 /**
  * Central registry of npm lock file descriptors.
  *
- * This is the single source of truth for which lock files are supported,
- * in what priority order, which parser to call, and what informational note
- * (if any) to surface to the user after parsing.
- *
  * Both the CLI path (src/npm/parser.js) and the web/GitHub path
  * (src/github/parser.js) import from here so that adding a new lock file
  * format only requires:
@@ -25,44 +21,43 @@ import { parseYarnLock, getYarnMajorVersion    } from './yarnLockParser.js';
  * file found in a project directory wins.
  *
  * Each descriptor has:
- *   filename  {string}   - the file name to look for (e.g. 'package-lock.json')
- *   parse     {Function} - parse(content: string, includeTests: boolean) →
- *                          Array<{ name, version, resolved }>
- *   getNote   {Function} - getNote(content: string) → string|null
- *                          Returns an informational message for the UI, or null.
+ *   filename    {string}   - file name (e.g. 'package-lock.json')
+ *   parse       {Function} - parse(content, includeTests) → Array<{name, version, resolved}>
+ *   getNote     {Function} - getNote(content) → string|null
+ *                            Informational message shown after results (ⓘ icon).
+ *   getWarning  {Function} - getWarning(content) → string|null
+ *                            Privacy/security concern that requires user confirmation
+ *                            before resolution proceeds. Displayed as ⚠ on CLI (stderr)
+ *                            and as a modal dialog in the web UI.
  */
 export const NPM_LOCK_FILES = [
   {
-    filename: 'package-lock.json',
-    parse:    parsePackageLock,
-    getNote:  () => null,
+    filename:   'package-lock.json',
+    parse:      parsePackageLock,
+    getNote:    () => null,
+    getWarning: () => null,
   },
   {
-    filename: 'pnpm-lock.yaml',
-    parse:    parsePnpmLock,
-    getNote:  (content) => getPnpmMajorVersion(content) >= 9
+    filename:   'pnpm-lock.yaml',
+    parse:      parsePnpmLock,
+    getNote:    (content) => getPnpmMajorVersion(content) >= 9
       ? 'pnpm-lock.yaml v9 does not flag packages as dev-only — all installed packages are listed, including test and dev dependencies.'
       : null,
+    getWarning: () => null,
   },
   {
-    filename: 'bun.lock',
-    parse:    parseBunLock,
-    getNote:  () => null,
+    filename:   'bun.lock',
+    parse:      parseBunLock,
+    getNote:    () => null,
+    getWarning: () => null,
   },
   {
-    filename: 'yarn.lock',
-    parse:    parseYarnLock,
-    getNote:  (content) => {
-      const devNote = 'yarn.lock does not flag packages as dev-only — all installed packages are listed, including test and dev dependencies.';
-      // Berry lockfiles do not record registry URLs — private packages cannot be
-      // detected and will be queried against the public npm registry. This may
-      // expose internal package names. Registry config lives in .yarnrc.yml which
-      // depsview does not currently read.
-      if (getYarnMajorVersion(content) === 2) {
-        return devNote + ' Yarn Berry (v2+) does not store registry URLs in yarn.lock — private registry packages cannot be detected and will be looked up against the public npm registry, potentially exposing internal package names.';
-      }
-      return devNote;
-    },
+    filename:   'yarn.lock',
+    parse:      parseYarnLock,
+    getNote:    () => 'yarn.lock does not flag packages as dev-only — all installed packages are listed, including test and dev dependencies.',
+    getWarning: (content) => getYarnMajorVersion(content) === 2
+      ? 'Yarn Berry (v2+) does not store registry URLs in yarn.lock — private registry packages cannot be detected and will be looked up against the public npm registry. This may expose internal package names to npm\'s servers. Private registry support requires parsing .yarnrc.yml, which is not yet supported.'
+      : null,
   },
 ];
 

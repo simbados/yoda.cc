@@ -425,6 +425,61 @@ function renderSectionError(container, ecosystem, message, showHeader) {
   container.appendChild(sectionEl);
 }
 
+/**
+ * Shows a modal dialog with a ⚠ warning and waits for the user to confirm or cancel.
+ * Returns true when the user clicks "Continue", false on cancel or backdrop-dismiss.
+ *
+ * Uses the native <dialog> element. The dialog is created lazily, appended to the
+ * document body, and removed after the user responds. All content is set via
+ * textContent — never innerHTML — to keep registry-sourced strings XSS-safe.
+ *
+ * @param {string} warning - the warning text
+ * @returns {Promise<boolean>}
+ */
+function showWarningDialog(warning) {
+  return new Promise(resolve => {
+    const dialog = document.createElement('dialog');
+    dialog.className = 'warning-dialog';
+
+    const h = document.createElement('h2');
+    h.textContent = '⚠ Warning';
+
+    const p = document.createElement('p');
+    p.textContent = warning;
+
+    const actions = document.createElement('div');
+    actions.className = 'warning-dialog-actions';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.className = 'btn-secondary';
+
+    const continueBtn = document.createElement('button');
+    continueBtn.type = 'button';
+    continueBtn.textContent = 'Continue anyway';
+    continueBtn.className = 'btn-warning';
+
+    let answered = false;
+    function finish(value) {
+      if (answered) return;
+      answered = true;
+      dialog.close();
+      dialog.remove();
+      resolve(value);
+    }
+
+    cancelBtn.addEventListener('click', () => finish(false));
+    continueBtn.addEventListener('click', () => finish(true));
+    dialog.addEventListener('cancel', () => finish(false));
+
+    actions.append(cancelBtn, continueBtn);
+    dialog.append(h, p, actions);
+    document.body.appendChild(dialog);
+    dialog.showModal();
+  });
+}
+
 // ── Per-ecosystem parse + resolve (browser side) ──────────────────────────────
 
 /**
@@ -445,7 +500,7 @@ function renderSectionError(container, ecosystem, message, showHeader) {
 async function resolveEcosystem(ecosystem, githubRef, opts) {
   const { includeTests, onProgress, packageInputs, downloadStats = false } = opts;
 
-  let deps, source, note = null, privateCount = 0, privatePkgs = [], dangerousDeps = [];
+  let deps, source, note = null, warning = null, privateCount = 0, privatePkgs = [], dangerousDeps = [];
   if (packageInputs && packageInputs.length > 0) {
     source = 'package search';
     deps = packageInputs.map(p => ecosystem === 'go'
@@ -453,7 +508,11 @@ async function resolveEcosystem(ecosystem, githubRef, opts) {
       : { name: p.name, versionSpec: p.version }
     );
   } else if (ecosystem === 'npm') {
-    ({ deps, source, note, privateCount, privatePkgs, dangerousDeps } = await parseGithubNpmDependencies(githubRef, { includeTests }));
+    ({ deps, source, note, warning, privateCount, privatePkgs, dangerousDeps } = await parseGithubNpmDependencies(githubRef, { includeTests }));
+    if (warning) {
+      const confirmed = await showWarningDialog(warning);
+      if (!confirmed) return null;
+    }
     if (privateCount > 0) onProgress(`[npm] Skipped ${privateCount} private package${privateCount === 1 ? '' : 's'} (not on public registry).\n`);
   } else if (ecosystem === 'go') {
     ({ deps, source, privateCount, privatePkgs, dangerousDeps } = await parseGithubGoDependencies(githubRef));
@@ -740,7 +799,7 @@ if (typeof document !== 'undefined') {
       const settled = await Promise.all(
         ordered.map(eco =>
           resolveEcosystem(eco, githubRef, { includeTests, onProgress: appendProgress, packageInputs, downloadStats })
-            .then(section => ({ ok: true, section }))
+            .then(section => section ? { ok: true, section } : { ok: false, ecosystem: eco, error: null })
             .catch(err   => ({ ok: false, ecosystem: eco, error: err.message }))
         )
       );
@@ -788,7 +847,8 @@ if (typeof document !== 'undefined') {
       // Each section keeps its own sort state in its own closure.
       for (const entry of settled) {
         if (!entry.ok) {
-          renderSectionError(resultsDiv, entry.ecosystem, entry.error, showHeader);
+          if (entry.error) renderSectionError(resultsDiv, entry.ecosystem, entry.error, showHeader);
+          // entry.error === null means user cancelled the warning dialog — render nothing.
           continue;
         }
 

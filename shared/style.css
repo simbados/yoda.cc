@@ -722,3 +722,91 @@ details.nonstd > summary:hover { color: var(--text); }
 .eco-btn input[type="radio"]:checked + span { background: var(--accent-deep); color: #fff; }
 .eco-btn:hover span { color: var(--text); }
 .eco-btn input[type="radio"]:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ── Warning confirmation dialog ──────────────────────────────────────────── */
+.warning-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--amber-border);
+  border-radius: 10px;
+  padding: 1.25rem 1.4rem;
+  max-width: 480px;
+  width: calc(100% - 2rem);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
+  font-family: inherit;
+  line-height: 1.55;
+}
+
+.warning-dialog::backdrop {
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(2px);
+}
+
+.warning-dialog h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--amber-text);
+  margin: 0 0 0.65rem;
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  letter-spacing: 0.02em;
+}
+
+.warning-dialog p {
+  font-size: 0.9rem;
+  color: var(--text);
+  margin: 0 0 1.1rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.warning-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.warning-dialog-actions button {
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+}
+
+.warning-dialog-actions .btn-secondary {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.warning-dialog-actions .btn-secondary:hover {
+  border-color: var(--accent);
+  background: rgba(129, 140, 248, 0.08);
+}
+
+.warning-dialog-actions .btn-warning {
+  background: var(--amber-border);
+  color: var(--amber-text);
+  border-color: var(--amber-border);
+}
+
+.warning-dialog-actions .btn-warning:hover {
+  opacity: 0.9;
+  background: #b45309;
+  border-color: #b45309;
+}
+
+.warning-dialog-actions button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
