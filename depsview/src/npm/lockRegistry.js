@@ -13,7 +13,7 @@
 
 import { parsePackageLock                      } from './lockParser.js';
 import { parsePnpmLock, getPnpmMajorVersion    } from './pnpmLockParser.js';
-import { parseBunLock                          } from './bunLockParser.js';
+import { parseBunLock, parseBunDangerousDeps   } from './bunLockParser.js';
 import { parseYarnLock, getYarnMajorVersion    } from './yarnLockParser.js';
 
 /**
@@ -29,35 +29,46 @@ import { parseYarnLock, getYarnMajorVersion    } from './yarnLockParser.js';
  *                            Privacy/security concern that requires user confirmation
  *                            before resolution proceeds. Displayed as ⚠ on CLI (stderr)
  *                            and as a modal dialog in the web UI.
+ *   getDangerousDeps {Function} - getDangerousDeps(content, includeTests) →
+ *                                  Array<{ name, spec, reason }>
+ *                                  Non-registry dependency entries surfaced in the
+ *                                  "non-standard sources" block (file:/link:/git:/
+ *                                  github:/tarball entries from a lock file).
+ *                                  Defaults to () => [] for formats whose lockfile
+ *                                  cannot encode non-registry deps inline.
  */
 export const NPM_LOCK_FILES = [
   {
-    filename:   'package-lock.json',
-    parse:      parsePackageLock,
-    getNote:    () => null,
-    getWarning: () => null,
+    filename:         'package-lock.json',
+    parse:            parsePackageLock,
+    getNote:          () => null,
+    getWarning:       () => null,
+    getDangerousDeps: () => [],
   },
   {
-    filename:   'pnpm-lock.yaml',
-    parse:      parsePnpmLock,
+    filename:         'pnpm-lock.yaml',
+    parse:            parsePnpmLock,
     getNote:    (content) => getPnpmMajorVersion(content) >= 9
       ? 'pnpm-lock.yaml v9 does not flag packages as dev-only — all installed packages are listed, including test and dev dependencies.'
       : null,
-    getWarning: () => null,
+    getWarning:       () => null,
+    getDangerousDeps: () => [],
   },
   {
-    filename:   'bun.lock',
-    parse:      parseBunLock,
-    getNote:    () => null,
-    getWarning: () => null,
+    filename:         'bun.lock',
+    parse:            parseBunLock,
+    getNote:          () => null,
+    getWarning:       () => null,
+    getDangerousDeps: parseBunDangerousDeps,
   },
   {
-    filename:   'yarn.lock',
-    parse:      parseYarnLock,
+    filename:         'yarn.lock',
+    parse:            parseYarnLock,
     getNote:    () => 'yarn.lock does not flag packages as dev-only — all installed packages are listed, including test and dev dependencies.',
     getWarning: (content) => getYarnMajorVersion(content) === 2
       ? 'Yarn Berry (v2+) does not store registry URLs in yarn.lock — private registry packages cannot be detected and will be looked up against the public npm registry. This may expose internal package names to npm\'s servers. Private registry support requires parsing .yarnrc.yml, which is not yet supported.'
       : null,
+    getDangerousDeps: () => [],
   },
 ];
 

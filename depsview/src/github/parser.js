@@ -308,8 +308,9 @@ async function parseGithubNpmDependencies({ owner, repo, ref, subpath }, options
     const rawDeps = lockEntry.parse(content, includeTests);
     const note    = lockEntry.getNote(content);
     const warning = lockEntry.getWarning(content);
+    const dangerousDeps = lockEntry.getDangerousDeps ? lockEntry.getDangerousDeps(content, includeTests) : [];
     const { publicPkgs, privateCount, privatePkgs } = partitionNpmPackages(rawDeps);
-    return { deps: publicPkgs, source: preferred, note, warning, privateCount, privatePkgs, dangerousDeps: [] };
+    return { deps: publicPkgs, source: preferred, note, warning, privateCount, privatePkgs, dangerousDeps };
   }
 
   // package.json fallback: returns { deps, dangerousDeps }

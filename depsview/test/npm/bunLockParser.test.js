@@ -5,7 +5,10 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
   parseBunLock,
+  parseBunDangerousDeps,
   parseBunPackageKey,
+  detectBunResolution,
+  findVersionDelimiter,
   stripUrlHash,
   collectDevOnlyNames,
 } from '../../src/npm/bunLockParser.js';
@@ -15,6 +18,193 @@ const fixtureContent = fs.readFileSync(
   path.join(__dirname, '../fixtures/bun-lock/bun.lock'),
   'utf8',
 );
+
+describe('findVersionDelimiter', () => {
+  describe('plain package names', () => {
+    it('returns the index of the @ between name and version', () => {
+      assert.equal(findVersionDelimiter('lodash@4.17.21'), 6);
+    });
+
+    it('returns -1 when there is no @ at all', () => {
+      assert.equal(findVersionDelimiter('lodash'), -1);
+    });
+
+    it('returns -1 for an empty string', () => {
+      assert.equal(findVersionDelimiter(''), -1);
+    });
+  });
+
+  describe('scoped package names', () => {
+    it('returns the index of the @ after the scope/name, not the leading @', () => {
+      assert.equal(findVersionDelimiter('@babel/core@7.24.0'), 11);
+    });
+
+    it('returns -1 for a bare scoped name without a version (only the leading @)', () => {
+      assert.equal(findVersionDelimiter('@scope/pkg'), -1);
+    });
+
+    it('returns -1 for a leading @ with no slash following', () => {
+      assert.equal(findVersionDelimiter('@noslash'), -1);
+    });
+
+    it('returns -1 for a leading @ followed only by a slash with nothing after', () => {
+      assert.equal(findVersionDelimiter('@scope/'), -1);
+    });
+  });
+
+  describe('first @ semantics (not lastIndexOf)', () => {
+    it('points at the first @ after the name in an npm-alias canonical', () => {
+      const canonical = 'alias@npm:real@1.2.3';
+      const idx = findVersionDelimiter(canonical);
+      assert.equal(idx, 5);
+      assert.equal(canonical.slice(0, idx), 'alias');
+      assert.equal(canonical.slice(idx + 1), 'npm:real@1.2.3');
+      assert.notEqual(idx, canonical.lastIndexOf('@'));
+    });
+
+    it('points at the first @ in a git+ssh URL whose spec contains an embedded user@host @', () => {
+      const canonical = 'pkg@git+ssh://git@github.com/foo.git#sha';
+      const idx = findVersionDelimiter(canonical);
+      assert.equal(idx, 3);
+      assert.equal(canonical.slice(0, idx), 'pkg');
+      assert.notEqual(idx, canonical.lastIndexOf('@'));
+    });
+
+    it('points at the first @ after a scoped name even when the spec contains more @ characters', () => {
+      const canonical = '@scope/alias@npm:@other/real@1.2.3';
+      const idx = findVersionDelimiter(canonical);
+      assert.equal(canonical.slice(0, idx), '@scope/alias');
+      assert.equal(canonical.slice(idx + 1), 'npm:@other/real@1.2.3');
+      assert.notEqual(idx, canonical.lastIndexOf('@'));
+    });
+  });
+});
+
+describe('detectBunResolution', () => {
+  describe('npm kind', () => {
+    it('returns { kind: "npm", name, version } for a plain canonical', () => {
+      assert.deepEqual(
+        detectBunResolution('lodash@4.17.21'),
+        { name: 'lodash', kind: 'npm', version: '4.17.21' },
+      );
+    });
+
+    it('returns { kind: "npm", name, version } for a scoped canonical', () => {
+      assert.deepEqual(
+        detectBunResolution('@babel/core@7.24.0'),
+        { name: '@babel/core', kind: 'npm', version: '7.24.0' },
+      );
+    });
+  });
+
+  describe('workspace kind', () => {
+    it('detects a workspace canonical', () => {
+      assert.deepEqual(
+        detectBunResolution('my-app@workspace:packages/web'),
+        { name: 'my-app', kind: 'workspace', spec: 'workspace:packages/web' },
+      );
+    });
+  });
+
+  describe('root kind', () => {
+    it('detects a root canonical', () => {
+      assert.deepEqual(
+        detectBunResolution('my-app@root:'),
+        { name: 'my-app', kind: 'root', spec: 'root:' },
+      );
+    });
+  });
+
+  describe('alias kind', () => {
+    it('detects an npm-alias canonical and keeps the full spec including the inner @', () => {
+      assert.deepEqual(
+        detectBunResolution('alias@npm:real-name@1.2.3'),
+        { name: 'alias', kind: 'alias', spec: 'npm:real-name@1.2.3' },
+      );
+    });
+  });
+
+  describe('file kind', () => {
+    it('detects a file: canonical', () => {
+      assert.deepEqual(
+        detectBunResolution('local@file:./local'),
+        { name: 'local', kind: 'file', spec: 'file:./local' },
+      );
+    });
+  });
+
+  describe('link kind', () => {
+    it('detects a link: canonical', () => {
+      assert.deepEqual(
+        detectBunResolution('sibling@link:../sibling'),
+        { name: 'sibling', kind: 'link', spec: 'link:../sibling' },
+      );
+    });
+  });
+
+  describe('github kind', () => {
+    it('detects a github: canonical', () => {
+      assert.deepEqual(
+        detectBunResolution('repo@github:owner/repo#sha'),
+        { name: 'repo', kind: 'github', spec: 'github:owner/repo#sha' },
+      );
+    });
+  });
+
+  describe('git kind', () => {
+    it('detects a git+https canonical', () => {
+      assert.deepEqual(
+        detectBunResolution('pkg@git+https://example.com/foo.git'),
+        { name: 'pkg', kind: 'git', spec: 'git+https://example.com/foo.git' },
+      );
+    });
+
+    it('detects a git+ssh canonical with embedded user@host', () => {
+      assert.deepEqual(
+        detectBunResolution('pkg@git+ssh://git@github.com/foo.git#sha'),
+        { name: 'pkg', kind: 'git', spec: 'git+ssh://git@github.com/foo.git#sha' },
+      );
+    });
+  });
+
+  describe('tarball kind', () => {
+    it('detects an https:// tarball URL', () => {
+      assert.deepEqual(
+        detectBunResolution('pkg@https://example.com/p.tgz'),
+        { name: 'pkg', kind: 'tarball', spec: 'https://example.com/p.tgz' },
+      );
+    });
+
+    it('detects an http:// tarball URL', () => {
+      assert.deepEqual(
+        detectBunResolution('pkg@http://example.com/p.tgz'),
+        { name: 'pkg', kind: 'tarball', spec: 'http://example.com/p.tgz' },
+      );
+    });
+  });
+
+  describe('null cases', () => {
+    it('returns null for a canonical without an @ delimiter', () => {
+      assert.equal(detectBunResolution('lodash'), null);
+    });
+
+    it('returns null for a bare scoped name without a version', () => {
+      assert.equal(detectBunResolution('@scope/pkg'), null);
+    });
+
+    it('returns null for the empty string', () => {
+      assert.equal(detectBunResolution(''), null);
+    });
+
+    it('returns null when the name portion is empty (canonical starts with @ with no scope-slash)', () => {
+      assert.equal(detectBunResolution('@1.2.3'), null);
+    });
+
+    it('returns null when the spec portion is empty (canonical ends in @)', () => {
+      assert.equal(detectBunResolution('lodash@'), null);
+    });
+  });
+});
 
 describe('parseBunPackageKey', () => {
   describe('plain package names', () => {
@@ -52,6 +242,43 @@ describe('parseBunPackageKey', () => {
 
     it('returns null for an empty string', () => {
       assert.equal(parseBunPackageKey(''), null);
+    });
+  });
+
+  describe('non-npm resolution kinds', () => {
+    it('returns null for a workspace canonical', () => {
+      assert.equal(parseBunPackageKey('my-app@workspace:packages/web'), null);
+    });
+
+    it('returns null for a root canonical', () => {
+      assert.equal(parseBunPackageKey('my-app@root:'), null);
+    });
+
+    it('returns null for an npm-alias canonical and does not split on lastIndexOf @', () => {
+      assert.equal(parseBunPackageKey('alias@npm:real-name@1.2.3'), null);
+    });
+
+    it('returns null for a file: canonical', () => {
+      assert.equal(parseBunPackageKey('local@file:./local'), null);
+    });
+
+    it('returns null for a link: canonical', () => {
+      assert.equal(parseBunPackageKey('sibling@link:../sibling'), null);
+    });
+
+    it('returns null for a git+ canonical with embedded user@host', () => {
+      assert.equal(
+        parseBunPackageKey('pkg@git+ssh://git@github.com/foo.git#sha'),
+        null,
+      );
+    });
+
+    it('returns null for a github: canonical', () => {
+      assert.equal(parseBunPackageKey('repo@github:owner/repo#sha'), null);
+    });
+
+    it('returns null for an https:// tarball canonical', () => {
+      assert.equal(parseBunPackageKey('pkg@https://example.com/p.tgz'), null);
     });
   });
 });
@@ -359,6 +586,345 @@ describe('parseBunLock', () => {
       const deps = parseBunLock(content);
       assert.equal(deps.length, 2);
       assert.ok(deps.find(d => d.name === '@babel/code-frame'));
+    });
+  });
+
+  describe('mixed resolution kinds', () => {
+    const mixedContent = JSON.stringify({
+      lockfileVersion: 1,
+      workspaces: {
+        '': {
+          name: 'root-app',
+          dependencies: {
+            lodash: '^4.17.21',
+            'local-folder': 'file:./local',
+            'sibling-link': 'link:../sibling',
+            'git-pkg': 'git+ssh://git@github.com/foo/bar.git',
+            'gh-pkg': 'github:owner/repo',
+            'tarball-pkg': 'https://example.com/tarball.tgz',
+            'alias-pkg': 'npm:underlying@1.0.0',
+            'web-app': 'workspace:packages/web',
+          },
+        },
+      },
+      packages: {
+        'lodash@4.17.21': ['lodash@4.17.21', 'https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz', {}, 'sha512-aaa'],
+        'web-app': ['web-app@workspace:packages/web'],
+        'root-app': ['root-app@root:', {}],
+        'alias-pkg': ['alias-pkg@npm:underlying@1.0.0', 'https://registry.npmjs.org/underlying/-/underlying-1.0.0.tgz', {}, 'sha512-bbb'],
+        'local-folder': ['local-folder@file:./local', {}],
+        'sibling-link': ['sibling-link@link:../sibling', {}],
+        'git-pkg': ['git-pkg@git+ssh://git@github.com/foo/bar.git#abc123', {}],
+        'gh-pkg': ['gh-pkg@github:owner/repo#sha', {}],
+        'tarball-pkg': ['tarball-pkg@https://example.com/tarball.tgz', {}],
+      },
+    });
+
+    it('returns only the plain npm registry entry', () => {
+      const deps = parseBunLock(mixedContent, true);
+      assert.equal(deps.length, 1);
+      assert.equal(deps[0].name, 'lodash');
+      assert.equal(deps[0].version, '4.17.21');
+    });
+
+    it('does not include the workspace entry', () => {
+      const deps = parseBunLock(mixedContent, true);
+      assert.equal(deps.find(d => d.name === 'web-app'), undefined);
+    });
+
+    it('does not include the root entry', () => {
+      const deps = parseBunLock(mixedContent, true);
+      assert.equal(deps.find(d => d.name === 'root-app'), undefined);
+    });
+
+    it('does not include the npm-alias entry', () => {
+      const deps = parseBunLock(mixedContent, true);
+      assert.equal(deps.find(d => d.name === 'alias-pkg'), undefined);
+    });
+
+    it('does not include the file: entry', () => {
+      const deps = parseBunLock(mixedContent, true);
+      assert.equal(deps.find(d => d.name === 'local-folder'), undefined);
+    });
+
+    it('does not include the link: entry', () => {
+      const deps = parseBunLock(mixedContent, true);
+      assert.equal(deps.find(d => d.name === 'sibling-link'), undefined);
+    });
+
+    it('does not include the git+ entry', () => {
+      const deps = parseBunLock(mixedContent, true);
+      assert.equal(deps.find(d => d.name === 'git-pkg'), undefined);
+    });
+
+    it('does not include the github: entry', () => {
+      const deps = parseBunLock(mixedContent, true);
+      assert.equal(deps.find(d => d.name === 'gh-pkg'), undefined);
+    });
+
+    it('does not include the https:// tarball entry', () => {
+      const deps = parseBunLock(mixedContent, true);
+      assert.equal(deps.find(d => d.name === 'tarball-pkg'), undefined);
+    });
+  });
+});
+
+describe('parseBunDangerousDeps', () => {
+  describe('per-kind detection', () => {
+    it('returns a file: entry with the file reason', () => {
+      const content = JSON.stringify({
+        packages: {
+          'local-folder': ['local-folder@file:./local', {}],
+        },
+      });
+      const out = parseBunDangerousDeps(content);
+      assert.equal(out.length, 1);
+      assert.deepEqual(out[0], {
+        name: 'local-folder',
+        spec: 'file:./local',
+        reason: 'local folder reference (file:)',
+      });
+    });
+
+    it('returns a link: entry with the link reason', () => {
+      const content = JSON.stringify({
+        packages: {
+          'sibling-link': ['sibling-link@link:../sibling', {}],
+        },
+      });
+      const out = parseBunDangerousDeps(content);
+      assert.equal(out.length, 1);
+      assert.deepEqual(out[0], {
+        name: 'sibling-link',
+        spec: 'link:../sibling',
+        reason: 'symlinked folder (link:)',
+      });
+    });
+
+    it('returns a git+ entry with the git reason and preserves embedded user@host in the spec', () => {
+      const content = JSON.stringify({
+        packages: {
+          'git-pkg': ['git-pkg@git+ssh://git@github.com/foo/bar.git#abc123', {}],
+        },
+      });
+      const out = parseBunDangerousDeps(content);
+      assert.equal(out.length, 1);
+      assert.deepEqual(out[0], {
+        name: 'git-pkg',
+        spec: 'git+ssh://git@github.com/foo/bar.git#abc123',
+        reason: 'git source (git+)',
+      });
+    });
+
+    it('returns a github: entry with the github reason', () => {
+      const content = JSON.stringify({
+        packages: {
+          'gh-pkg': ['gh-pkg@github:owner/repo#sha', {}],
+        },
+      });
+      const out = parseBunDangerousDeps(content);
+      assert.equal(out.length, 1);
+      assert.deepEqual(out[0], {
+        name: 'gh-pkg',
+        spec: 'github:owner/repo#sha',
+        reason: 'github shorthand (github:)',
+      });
+    });
+
+    it('returns an https:// tarball entry with the tarball reason', () => {
+      const content = JSON.stringify({
+        packages: {
+          'tarball-pkg': ['tarball-pkg@https://example.com/p.tgz', {}],
+        },
+      });
+      const out = parseBunDangerousDeps(content);
+      assert.equal(out.length, 1);
+      assert.deepEqual(out[0], {
+        name: 'tarball-pkg',
+        spec: 'https://example.com/p.tgz',
+        reason: 'direct tarball URL',
+      });
+    });
+
+    it('returns an http:// tarball entry with the tarball reason', () => {
+      const content = JSON.stringify({
+        packages: {
+          'tarball-pkg': ['tarball-pkg@http://example.com/p.tgz', {}],
+        },
+      });
+      const out = parseBunDangerousDeps(content);
+      assert.equal(out.length, 1);
+      assert.equal(out[0].reason, 'direct tarball URL');
+    });
+  });
+
+  describe('excluded kinds', () => {
+    it('excludes plain npm registry entries', () => {
+      const content = JSON.stringify({
+        packages: {
+          'lodash@4.17.21': ['lodash@4.17.21', 'https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz', {}, 'sha512-aaa'],
+        },
+      });
+      assert.deepEqual(parseBunDangerousDeps(content), []);
+    });
+
+    it('excludes workspace entries', () => {
+      const content = JSON.stringify({
+        packages: {
+          'web-app': ['web-app@workspace:packages/web'],
+        },
+      });
+      assert.deepEqual(parseBunDangerousDeps(content), []);
+    });
+
+    it('excludes root entries', () => {
+      const content = JSON.stringify({
+        packages: {
+          'root-app': ['root-app@root:', {}],
+        },
+      });
+      assert.deepEqual(parseBunDangerousDeps(content), []);
+    });
+
+    it('excludes npm-alias entries', () => {
+      const content = JSON.stringify({
+        packages: {
+          'alias-pkg': ['alias-pkg@npm:underlying@1.0.0', 'https://registry.npmjs.org/underlying/-/underlying-1.0.0.tgz', {}, 'sha512-bbb'],
+        },
+      });
+      assert.deepEqual(parseBunDangerousDeps(content), []);
+    });
+  });
+
+  describe('deduplication', () => {
+    it('deduplicates by (name, spec) when the same git source appears twice', () => {
+      const content = JSON.stringify({
+        packages: {
+          'git-pkg': ['git-pkg@git+ssh://git@github.com/foo/bar.git#abc', {}],
+          'nested/git-pkg': ['git-pkg@git+ssh://git@github.com/foo/bar.git#abc', {}],
+        },
+      });
+      const out = parseBunDangerousDeps(content);
+      assert.equal(out.length, 1);
+      assert.equal(out[0].name, 'git-pkg');
+    });
+
+    it('deduplicates by (name, spec) when the same file source appears twice', () => {
+      const content = JSON.stringify({
+        packages: {
+          'local-a': ['local@file:./local', {}],
+          'nested/local-b': ['local@file:./local', {}],
+        },
+      });
+      const out = parseBunDangerousDeps(content);
+      assert.equal(out.length, 1);
+      assert.equal(out[0].spec, 'file:./local');
+    });
+
+    it('keeps separate entries when the same name has two different specs', () => {
+      const content = JSON.stringify({
+        packages: {
+          'tarball-pkg-a': ['tarball-pkg@https://example.com/v1.tgz', {}],
+          'tarball-pkg-b': ['tarball-pkg@https://example.com/v2.tgz', {}],
+        },
+      });
+      const out = parseBunDangerousDeps(content);
+      assert.equal(out.length, 2);
+    });
+  });
+
+  describe('mixed packages', () => {
+    it('returns one entry per dangerous kind alongside excluded npm/workspace/root/alias entries', () => {
+      const content = JSON.stringify({
+        lockfileVersion: 1,
+        workspaces: { '': { name: 'root-app', dependencies: { lodash: '^4.17.21' } } },
+        packages: {
+          'lodash@4.17.21': ['lodash@4.17.21', 'https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz', {}, 'sha512-aaa'],
+          'web-app': ['web-app@workspace:packages/web'],
+          'root-app': ['root-app@root:', {}],
+          'alias-pkg': ['alias-pkg@npm:underlying@1.0.0', 'https://registry.npmjs.org/underlying/-/underlying-1.0.0.tgz', {}, 'sha512-bbb'],
+          'local-folder': ['local-folder@file:./local', {}],
+          'sibling-link': ['sibling-link@link:../sibling', {}],
+          'git-pkg': ['git-pkg@git+ssh://git@github.com/foo/bar.git#abc', {}],
+          'gh-pkg': ['gh-pkg@github:owner/repo#sha', {}],
+          'tarball-pkg': ['tarball-pkg@https://example.com/p.tgz', {}],
+        },
+      });
+      const out = parseBunDangerousDeps(content);
+      assert.equal(out.length, 5);
+      assert.ok(out.find(e => e.name === 'local-folder' && e.reason === 'local folder reference (file:)'));
+      assert.ok(out.find(e => e.name === 'sibling-link' && e.reason === 'symlinked folder (link:)'));
+      assert.ok(out.find(e => e.name === 'git-pkg' && e.reason === 'git source (git+)'));
+      assert.ok(out.find(e => e.name === 'gh-pkg' && e.reason === 'github shorthand (github:)'));
+      assert.ok(out.find(e => e.name === 'tarball-pkg' && e.reason === 'direct tarball URL'));
+    });
+  });
+
+  describe('lock file with only plain npm registry entries', () => {
+    it('returns an empty array', () => {
+      const content = JSON.stringify({
+        lockfileVersion: 1,
+        workspaces: { '': { name: 'root-app', dependencies: { lodash: '^4.17.21', vite: '^5.1.0' } } },
+        packages: {
+          'lodash@4.17.21': ['lodash@4.17.21', 'https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz', {}, 'sha512-aaa'],
+          'vite@5.1.0':     ['vite@5.1.0',     'https://registry.npmjs.org/vite/-/vite-5.1.0.tgz',     {}, 'sha512-bbb'],
+        },
+      });
+      assert.deepEqual(parseBunDangerousDeps(content), []);
+    });
+
+    it('returns an empty array for the fixture file', () => {
+      assert.deepEqual(parseBunDangerousDeps(fixtureContent), []);
+    });
+  });
+
+  describe('invalid or empty input', () => {
+    it('returns an empty array for non-JSON content (does not throw)', () => {
+      assert.deepEqual(parseBunDangerousDeps('not json at all'), []);
+    });
+
+    it('returns an empty array for truncated JSON (does not throw)', () => {
+      assert.deepEqual(parseBunDangerousDeps('{"packages":'), []);
+    });
+
+    it('returns an empty array when the packages key is missing', () => {
+      const content = JSON.stringify({ lockfileVersion: 1, workspaces: {} });
+      assert.deepEqual(parseBunDangerousDeps(content), []);
+    });
+
+    it('returns an empty array when packages is an empty object', () => {
+      const content = JSON.stringify({ packages: {} });
+      assert.deepEqual(parseBunDangerousDeps(content), []);
+    });
+
+    it('returns an empty array for an empty string', () => {
+      assert.deepEqual(parseBunDangerousDeps(''), []);
+    });
+  });
+
+  describe('malformed package entries', () => {
+    it('skips entries whose value is not an array', () => {
+      const content = JSON.stringify({
+        packages: {
+          'broken': { not: 'an array' },
+          'local-folder': ['local-folder@file:./local', {}],
+        },
+      });
+      const out = parseBunDangerousDeps(content);
+      assert.equal(out.length, 1);
+      assert.equal(out[0].name, 'local-folder');
+    });
+
+    it('skips entries whose value[0] is not a string', () => {
+      const content = JSON.stringify({
+        packages: {
+          'broken': [42, {}],
+          'local-folder': ['local-folder@file:./local', {}],
+        },
+      });
+      const out = parseBunDangerousDeps(content);
+      assert.equal(out.length, 1);
+      assert.equal(out[0].name, 'local-folder');
     });
   });
 });

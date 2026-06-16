@@ -168,6 +168,22 @@ Supports lockfile versions 5, 6, and 9:
 
 When a `bun.lock` is present, depsview reads the flat package list from the `packages` object. The text-based `bun.lock` format was introduced in Bun 1.2. The binary `bun.lockb` format (older Bun versions) is not supported.
 
+Each `packages` entry's canonical `value[0]` is classified by Bun's `Resolution.Tag` taxonomy and routed accordingly:
+
+| Variant | Example `value[0]` | Handling |
+|---|---|---|
+| npm registry | `lodash@4.17.21` | Resolved against the public registry |
+| workspace | `my-app@workspace:packages/web` | Silently skipped (monorepo cross-link) |
+| root | `my-app@root:` | Silently skipped (the project itself) |
+| npm alias | `my-alias@npm:lodash@4.17.21` | Silently skipped (alias resolution not yet supported) |
+| file folder | `pkg@file:./local` | Listed in non-standard sources (⚠) |
+| symlink | `pkg@link:../sibling` | Listed in non-standard sources (⚠) |
+| git | `pkg@git+https://…` | Listed in non-standard sources (⚠) |
+| github shorthand | `pkg@github:owner/repo#sha` | Listed in non-standard sources (⚠) |
+| tarball URL | `pkg@https://example.com/p.tgz` | Listed in non-standard sources (⚠) |
+
+Format reference: [`src/install/lockfile.zig`](https://github.com/oven-sh/bun/blob/main/src/install/lockfile.zig) in the Bun source.
+
 Dev dependencies are detected from the `devDependencies` field across all `workspaces` entries and excluded unless `--include-tests` is passed. Transitive packages that are pulled in exclusively by dev dependencies cannot be identified from the lock file format and may appear in the output.
 
 ### yarn.lock

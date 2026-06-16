@@ -34,13 +34,14 @@ import { partitionNpmPackages         } from './registryFilter.js';
 function parseDependencyFile(projectPath, options = {}) {
   const { includeTests = false } = options;
 
-  for (const { filename, parse, getNote, getWarning } of NPM_LOCK_FILES) {
+  for (const { filename, parse, getNote, getWarning, getDangerousDeps } of NPM_LOCK_FILES) {
     const lockPath = path.join(projectPath, filename);
     if (fs.existsSync(lockPath) && !fs.statSync(lockPath).isDirectory()) {
       try {
         const content = fs.readFileSync(lockPath, 'utf8');
         const { publicPkgs, privateCount, privatePkgs } = partitionNpmPackages(parse(content, includeTests));
-        return { deps: publicPkgs, source: filename, note: getNote(content), warning: getWarning(content), privateCount, privatePkgs, dangerousDeps: [] };
+        const dangerousDeps = getDangerousDeps ? getDangerousDeps(content, includeTests) : [];
+        return { deps: publicPkgs, source: filename, note: getNote(content), warning: getWarning(content), privateCount, privatePkgs, dangerousDeps };
       } catch (err) {
         throw new Error(`Failed to parse ${filename}: ${err.message}`);
       }
