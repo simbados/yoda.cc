@@ -12,7 +12,8 @@
  */
 
 import { parsePackageLock                      } from './lockParser.js';
-import { parsePnpmLock, getPnpmMajorVersion    } from './pnpmLockParser.js';
+import { parsePnpmLock, getPnpmMajorVersion,
+         parsePnpmDangerousDeps                } from './pnpmLockParser.js';
 import { parseBunLock, parseBunDangerousDeps   } from './bunLockParser.js';
 import { parseYarnLock, getYarnMajorVersion    } from './yarnLockParser.js';
 
@@ -49,10 +50,10 @@ export const NPM_LOCK_FILES = [
     filename:         'pnpm-lock.yaml',
     parse:            parsePnpmLock,
     getNote:    (content) => getPnpmMajorVersion(content) >= 9
-      ? 'pnpm-lock.yaml v9 does not flag packages as dev-only — all installed packages are listed, including test and dev dependencies.'
+      ? 'pnpm-lock.yaml v9 does not flag transitive packages as dev-only — dev classification is derived from direct devDependencies across every importer.'
       : null,
     getWarning:       () => null,
-    getDangerousDeps: () => [],
+    getDangerousDeps: parsePnpmDangerousDeps,
   },
   {
     filename:         'bun.lock',

@@ -162,7 +162,24 @@ Supports lockfile versions 5, 6, and 9:
 |---|---|---|
 | 5 | ≤6 | `dev: true` flag inside each entry |
 | 6 | 7/8 | `dev: true` flag inside each entry |
-| 9 | 9+ | `devDependencies` in the `importers:` section |
+| 9 | 9+ | `devDependencies` across every importer (see workspace handling below) |
+
+**depPath parsing (v6/v9)** follows pnpm's own [`@pnpm/deps.path`](https://github.com/pnpm/pnpm/blob/main/deps/path/src/index.ts) algorithm: `indexOf('@', 1)` for the name/version boundary (so npm aliases and `git+ssh://` URLs in the spec don't break splitting) and a backwards paren-counting walk for the outermost peer-deps and `(patch_hash=…)` suffix groups. Keys like `@tanstack/react-query@5.0.0(react@18.0.0)(react-dom@18.0.0)` are stripped correctly even with multiple peer groups, nested parens, or a patch-hash suffix.
+
+**Non-tarball resolutions** — pnpm's `Resolution` union allows variants other than the implicit `TarballResolution`:
+
+| `resolution.type` | Example | Handling |
+|---|---|---|
+| *(absent)* | `resolution: {tarball: https://registry.npmjs.org/…}` | Resolved against the public registry |
+| *(absent)* | `resolution: {tarball: https://other-host/…}` | Listed under "non-public registry packages" (ℹ) — skipped from resolution, never sent to `registry.npmjs.org` |
+| `directory` | `resolution: {directory: packages/local, type: directory}` | Listed in non-standard sources (⚠) |
+| `git` | `resolution: {commit: abc, repo: 'git+ssh://…', type: git}` | Listed in non-standard sources (⚠) |
+| `binary` | `resolution: {type: binary, url: …}` | Listed in non-standard sources (⚠) |
+| `custom:…` | `resolution: {type: custom:foo}` | Listed in non-standard sources (⚠) |
+
+Tarball URLs pointing to anywhere other than `registry.npmjs.org` are dropped before the resolver and surfaced grouped by hostname, so a corporate mirror, an internal CDN, or an attacker-controlled host all show up as ℹ rows for human review rather than being silently resolved. Entries with an explicit `resolution.type` are routed into the stronger ⚠ category to reflect the intentional non-registry source declaration.
+
+**Workspace / monorepo dev classification (v9)** — `importers:` records each `package.json` in the workspace separately. A package name is treated as dev-only **only when** it appears in `devDependencies` of at least one importer **and** never in `dependencies` or `optionalDependencies` of any importer. This avoids a false-positive seen in earlier versions where a name that was prod in one workspace and dev in another was wrongly excluded.
 
 ### bun.lock
 
