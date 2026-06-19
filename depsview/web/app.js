@@ -582,6 +582,7 @@ if (typeof document !== 'undefined') {
   const socketStorageNote = document.getElementById('socket-storage-note');
   const includeTestsCb    = document.getElementById('include-tests');
   const downloadStatsCb   = document.getElementById('download-stats');
+  const downloadStatsRow  = document.getElementById('download-stats-row');
   const submitBtn         = document.getElementById('submit-btn');
   const errorDiv          = document.getElementById('error');
   const progressDiv       = document.getElementById('progress');
@@ -601,6 +602,10 @@ if (typeof document !== 'undefined') {
   /**
    * Shows the URL input row for 'all' ecosystem and the package textarea for
    * specific ecosystems, updating the textarea placeholder accordingly.
+   * The "Show Python download statistics" checkbox row stays visible for the
+   * 'all' selection (Python may still be auto-detected) and for the explicit
+   * 'python' selection, and is hidden when the user has picked npm or Go where
+   * the Downloads/mo column does not apply.
    * @param {string} eco - selected ecosystem value
    */
   function applyEcosystem(eco) {
@@ -608,6 +613,7 @@ if (typeof document !== 'undefined') {
     urlRow.hidden = isSpecific;
     pkgRow.hidden = !isSpecific;
     if (isSpecific) pkgInput.placeholder = PKG_PLACEHOLDERS[eco] ?? '';
+    downloadStatsRow.hidden = isSpecific && eco !== 'python';
   }
 
   document.querySelectorAll('[name="ecosystem"]').forEach(radio => {
