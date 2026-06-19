@@ -122,10 +122,11 @@ Framework: Node.js built-in `node:test` + `node:assert/strict`. Run with `npm te
 - **Prefer async/await over Promise chains:** Use `async`/`await` syntax instead of `.then()`/`.catch()` for all asynchronous code. Reserve `.catch()` only when attaching a handler to a Promise you are not awaiting inline.
 
 # Agents
-Two project agents live in `.claude/agents/`. **Always run them sequentially — never in parallel:**
+Three project agents live in `.claude/agents/`. **Always run them sequentially — never in parallel:**
 
 1. **`test-writer`** — invoke first. When a new source file is created or new exported functions are added without test coverage. Pass the source file path. It reads the file, matches existing test style, writes the test file, and runs `npm test`. Wait for it to complete and confirm all tests pass before continuing.
 2. **`security-reviewer`** — invoke second, only after `test-writer` has completed successfully. Pass the changed file paths or let it diff against HEAD. It checks the project-specific attack surfaces (XSS via registry data, URL injection, prototype pollution, path traversal, ReDoS) and produces a structured PASS/FAIL report.
+3. **`architecture-reviewer`** — invoke third, only after `security-reviewer` has completed. Audits whether the `# Architecture` section of this CLAUDE.md still matches the code on disk after the change (module map, parser contract, browser-compat list, "how to add" steps, test layout). Edits CLAUDE.md in place when drift is detected. Skip for pure bug fixes that touch only function bodies.
 
 # Testing
 - **Every new function must be tested:** Use the `test-writer` agent for new source files. It is responsible for writing tests and verifying they pass.
@@ -137,4 +138,5 @@ Two project agents live in `.claude/agents/`. **Always run them sequentially —
 A task is only complete when ALL of the following have been done **in this exact order**:
 1. `test-writer` agent invoked for any new or changed source files — wait for completion, all tests must pass
 2. `security-reviewer` agent invoked — wait for completion, fix any findings before closing
-3. README updated to reflect the change
+3. `architecture-reviewer` agent invoked when the change adds/renames/removes a source file, alters a parser contract, introduces a new lock-file format or ecosystem, or changes the test layout — skip for pure bug fixes
+4. README updated to reflect the change
