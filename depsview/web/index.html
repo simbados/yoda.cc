@@ -15,6 +15,40 @@
   <meta name="twitter:description" content="Analyse Python, npm, and Go dependencies from any public GitHub repository. See release dates, supply chain scores, and package metadata.">
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="style.css">
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "depsview",
+  "alternateName": "Dependency Viewer",
+  "url": "https://deps.yoda.cc/",
+  "description": "Analyse Python, npm, and Go dependencies from any public GitHub repository. See release dates, supply chain security scores, and package metadata — all in your browser.",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "Any",
+  "browserRequirements": "Requires JavaScript",
+  "isAccessibleForFree": true,
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "author": {
+    "@type": "Person",
+    "name": "simbados",
+    "url": "https://simbados.com",
+    "sameAs": ["https://github.com/simbados"]
+  },
+  "sameAs": "https://github.com/simbados/yoda.cc/tree/main/depsview",
+  "featureList": [
+    "npm lock files: package-lock.json, pnpm-lock.yaml, yarn.lock, bun.lock",
+    "Python manifests: requirements.txt, pyproject.toml, setup.cfg, Pipfile",
+    "Go modules: go.mod, go.sum",
+    "Supply chain security scores via Socket.dev",
+    "Release-date freshness indicators",
+    "Browser-only analysis — data stays on your machine"
+  ]
+}
+  </script>
 </head>
 <body class="pg-tool">
   <main>

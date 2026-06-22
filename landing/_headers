@@ -1,5 +1,5 @@
 /*
-    Content-Security-Policy: default-src 'none'; style-src 'self'; img-src 'self'; frame-ancestors 'none'; form-action 'none';
+    Content-Security-Policy: default-src 'none'; script-src 'sha256-Dl1qybnWKBl0xZXhFHOPOkoyZ+BEQAOjmh/s+rMYeHg='; style-src 'self'; img-src 'self'; frame-ancestors 'none'; form-action 'none';
     X-Frame-Options: deny
     X-Content-Type-Options: nosniff
     Referrer-Policy: no-referrer
