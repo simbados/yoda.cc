@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Pre-commit hook: keep sitemap <lastmod> and JSON-LD CSP hashes in sync with
+# the HTML files staged for this commit. See scripts/sync-seo.js for details.
+#
+# Enable with: git config core.hooksPath .githooks
+set -e
+node "$(git rev-parse --show-toplevel)/scripts/sync-seo.js" --pre-commit
