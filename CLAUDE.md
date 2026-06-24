@@ -9,6 +9,8 @@ yoda/
   worker/      Cloudflare Worker CORS proxy used by both apps
   shared/      Shared CSS theme (style.css)
   landing/     Landing page that links the apps
+  scripts/     Repo-wide dev utilities (e.g. sync-seo.js — sitemap lastmod + JSON-LD CSP hash sync)
+  .githooks/   Repo-tracked git hooks (enable per clone with `git config core.hooksPath .githooks`)
 ```
 
 Each subproject is self-contained: its source, tests, README, and any subproject-specific rules live inside its own directory. **When you work on files under `depsview/`, also read `depsview/CLAUDE.md`** — it carries the depsview-specific architecture, parser contract, and lock-file conventions that don't apply elsewhere. The same pattern applies to any other subproject CLAUDE.md that appears in the future.
