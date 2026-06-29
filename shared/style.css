@@ -113,6 +113,21 @@ body {
   margin-bottom: 1.5rem;
 }
 
+.section-heading {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--text);
+  margin: -0.75rem 0 0.5rem;
+}
+
+.section-intro {
+  font-size: 0.95rem;
+  color: var(--muted);
+  line-height: 1.65;
+  max-width: 620px;
+  margin: 0 0 1.75rem;
+}
+
 .project-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
@@ -166,6 +181,16 @@ body {
   color: var(--muted);
   line-height: 1.65;
   flex: 1;
+}
+
+.card-formats {
+  font-family: ui-monospace, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.7rem;
+  color: var(--muted);
+  line-height: 1.7;
+  letter-spacing: 0.02em;
+  opacity: 0.8;
+  margin: 0;
 }
 
 .project-link {
@@ -372,6 +397,24 @@ code {
   color: var(--muted);
   margin: 1.25rem 0 0;
   line-height: 1.6;
+}
+
+.supported {
+  margin: 2rem 0 0;
+}
+
+.supported h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 0.4rem;
+}
+
+.supported p {
+  font-size: 0.875rem;
+  color: var(--muted);
+  line-height: 1.7;
+  margin: 0;
 }
 
 .note-warning {
