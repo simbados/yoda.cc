@@ -254,6 +254,21 @@ main { max-width: 980px; margin: 0 auto; }
 
 .pg-tool .header-top a:last-child { margin-left: auto; }
 
+/* When a crosslink is present, it takes the auto margin (pushed right) and the
+   GitHub icon sits directly beside it instead of being pushed on its own. */
+.pg-tool .header-top .header-crosslink + a:last-child { margin-left: 1.25rem; }
+
+.header-crosslink {
+  font-family: ui-monospace, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-decoration: none;
+  margin-left: auto;
+  transition: color 0.2s;
+}
+
+.header-crosslink:hover { color: var(--accent); }
+
 .header-logo {
   display: block;
   width: 32px;
