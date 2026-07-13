@@ -1,6 +1,6 @@
 /*
   # Block everything by default; allow only what the app actually needs.
-  Content-Security-Policy: default-src 'none'; script-src 'self' 'sha256-CqMtHwm6sZM4rQDjXuEFQ12AzpSJNannarQnaE94YgI='; style-src 'self'; connect-src 'self' https://api.github.com https://pypi.org https://registry.npmjs.org https://proxy.golang.org https://socket-proxy.yoda.cc; img-src 'self'; font-src 'none'; object-src 'none'; worker-src 'none'; manifest-src 'none'; form-action 'none'; frame-ancestors 'none'; base-uri 'self'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'none'; script-src 'self' 'sha256-CqMtHwm6sZM4rQDjXuEFQ12AzpSJNannarQnaE94YgI='; style-src 'self'; connect-src 'self' https://api.github.com https://pypi.org https://registry.npmjs.org https://proxy.golang.org https://crates.io https://socket-proxy.yoda.cc; img-src 'self'; font-src 'none'; object-src 'none'; worker-src 'none'; manifest-src 'none'; form-action 'none'; frame-ancestors 'none'; base-uri 'self'; upgrade-insecure-requests
 
   # Prevent MIME-type sniffing.
   X-Content-Type-Options: nosniff

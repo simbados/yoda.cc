@@ -16,7 +16,7 @@ import { sortedResults, ECOSYSTEM_ORDER, purlEcosystem } from './formatter.js';
 import { groupByDomain } from './nonStandardSources.js';
 
 /** Maps a depsview ecosystem label to the socket.dev URL slug for "(link)" anchors. */
-const SOCKET_URL_SLUG = { npm: 'npm', python: 'pypi', go: 'go' };
+const SOCKET_URL_SLUG = { npm: 'npm', python: 'pypi', go: 'go', rust: 'cargo' };
 
 /**
  * Escapes a string for safe insertion into HTML text content or attribute values
