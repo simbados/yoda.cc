@@ -16,10 +16,12 @@
 import { parseGithubUrl               } from './src/github/url.js';
 import { parseGithubDependencies,
          parseGithubNpmDependencies,
-         parseGithubGoDependencies    } from './src/github/parser.js';
+         parseGithubGoDependencies,
+         parseGithubRustDependencies  } from './src/github/parser.js';
 import { resolveDependencies          } from './src/python/depResolver.js';
 import { resolveDependencies as resolveNpm } from './src/npm/depResolver.js';
 import { resolveDependencies as resolveGo  } from './src/go/depResolver.js';
+import { resolveDependencies as resolveRust } from './src/rust/depResolver.js';
 import { setGithubToken               } from './src/github/client.js';
 import { listDirectory                } from './src/github/client.js';
 import { parseMultiPackageInput        } from './src/multiPackageParser.js';
@@ -28,7 +30,7 @@ import { groupByDomain                } from './src/output/nonStandardSources.js
 import { NPM_LOCK_FILENAMES           } from './src/npm/lockRegistry.js';
 
 /** Fixed rendering order for ecosystem sections. */
-export const ECOSYSTEM_ORDER = ['npm', 'python', 'go'];
+export const ECOSYSTEM_ORDER = ['npm', 'python', 'go', 'rust'];
 
 /**
  * Base URL of the Cloudflare Worker CORS proxy for socket.dev.
@@ -46,12 +48,12 @@ const PYPISTATS_PROXY_BASE = 'https://socket-proxy.yoda.cc/pypistats/packages';
 
 /**
  * Maps the internal ecosystem identifier to the PURL type expected by socket.dev.
- * Go modules use 'golang', Python packages use 'pypi'.
+ * Go modules use 'golang', Python packages use 'pypi', Rust crates use 'cargo'.
  */
-const ECOSYSTEM_PURL_TYPE   = { npm: 'npm', python: 'pypi', go: 'golang' };
+const ECOSYSTEM_PURL_TYPE   = { npm: 'npm', python: 'pypi', go: 'golang', rust: 'cargo' };
 
 /** Maps ecosystem to the socket.dev URL slug used in package detail links. */
-const SOCKET_URL_SLUG = { npm: 'npm', python: 'pypi', go: 'go' };
+const SOCKET_URL_SLUG = { npm: 'npm', python: 'pypi', go: 'go', rust: 'cargo' };
 
 // ── Pure utility functions (exported for testing) ─────────────────────────────
 
@@ -149,13 +151,14 @@ export function sortResults(resultsMap) {
 /**
  * Returns the set of ecosystems whose dependency files appear in a directory listing.
  * @param {Array<{ name: string, type: string }>} listing
- * @returns {Set<'npm'|'python'|'go'>}
+ * @returns {Set<'npm'|'python'|'go'|'rust'>}
  */
 export function detectEcosystems(listing) {
   const names = new Set(listing.map(e => e.name));
   const found = new Set();
   if ([...NPM_LOCK_FILENAMES].some(f => names.has(f)) || names.has('package.json')) found.add('npm');
   if (names.has('go.sum') || names.has('go.mod'))                                                 found.add('go');
+  if (names.has('Cargo.lock') || names.has('Cargo.toml'))                                         found.add('rust');
   if (names.has('pyproject.toml')   || names.has('requirements.txt') ||
       names.has('requirements_all.txt') ||
       names.has('setup.cfg')        || names.has('Pipfile') ||
@@ -174,6 +177,7 @@ export function detectEcosystem(listing) {
   const set = detectEcosystems(listing);
   if (set.has('npm'))    return 'npm';
   if (set.has('go'))     return 'go';
+  if (set.has('rust'))   return 'rust';
   if (set.has('python')) return 'python';
   return null;
 }
@@ -204,7 +208,7 @@ function addCell(row, text) {
  *
  * @param {HTMLElement} container
  * @param {object}      cfg
- * @param {'npm'|'python'|'go'} cfg.ecosystem
+ * @param {'npm'|'python'|'go'|'rust'} cfg.ecosystem
  * @param {boolean}     cfg.showHeader        - emit a section title above the table
  * @param {Array<object>} cfg.sorted          - already-sorted rows from sortResultsBy
  * @param {number}      cfg.directCount       - 0 when unknown (lock-file resolution)
@@ -405,7 +409,7 @@ function appendNonStandardSources(sectionEl, dangerousDeps, privatePkgs) {
  * Renders one section into an error banner. Used when a single ecosystem's
  * parse / resolve threw — the other sections still render normally.
  * @param {HTMLElement} container
- * @param {'npm'|'python'|'go'} ecosystem
+ * @param {'npm'|'python'|'go'|'rust'} ecosystem
  * @param {string} message
  * @param {boolean} showHeader
  */
@@ -492,7 +496,7 @@ function showWarningDialog(warning) {
  * Returns the section's data needed to render it: deps, resolved results,
  * direct dep names, source filename, and any note.
  *
- * @param {'npm'|'python'|'go'} ecosystem
+ * @param {'npm'|'python'|'go'|'rust'} ecosystem
  * @param {object|null} githubRef
  * @param {{ includeTests: boolean, onProgress: (msg: string) => void, packageInputs?: Array<{ name: string, version: string|null }>, downloadStats?: boolean }} opts
  * @returns {Promise<object>}
@@ -517,11 +521,14 @@ async function resolveEcosystem(ecosystem, githubRef, opts) {
   } else if (ecosystem === 'go') {
     ({ deps, source, privateCount, privatePkgs, dangerousDeps } = await parseGithubGoDependencies(githubRef));
     if (privateCount > 0) onProgress(`[go] Skipped ${privateCount} private module${privateCount === 1 ? '' : 's'} (not on public module proxy).\n`);
+  } else if (ecosystem === 'rust') {
+    ({ deps, source, privateCount, privatePkgs, dangerousDeps } = await parseGithubRustDependencies(githubRef));
+    if (privateCount > 0) onProgress(`[rust] Skipped ${privateCount} private crate${privateCount === 1 ? '' : 's'} (not on crates.io).\n`);
   } else {
     ({ deps, source, dangerousDeps } = await parseGithubDependencies(githubRef, { includeTests }));
   }
 
-  const isLockFile = NPM_LOCK_FILENAMES.has(source) || source === 'go.sum';
+  const isLockFile = NPM_LOCK_FILENAMES.has(source) || source === 'go.sum' || source === 'Cargo.lock';
   onProgress(`[${ecosystem}] Found ${deps.length} ${isLockFile ? 'installed' : 'direct'} dep${deps.length === 1 ? '' : 's'} in ${source}. Resolving…\n`);
 
   let results;
@@ -529,6 +536,8 @@ async function resolveEcosystem(ecosystem, githubRef, opts) {
     results = await resolveNpm(deps, { onProgress: (msg) => onProgress(`[npm] ${msg}\n`) });
   } else if (ecosystem === 'go') {
     results = await resolveGo(deps, { onProgress: (msg) => onProgress(`[go] ${msg}\n`) });
+  } else if (ecosystem === 'rust') {
+    results = await resolveRust(deps, { onProgress: (msg) => onProgress(`[rust] ${msg}\n`) });
   } else {
     results = await resolveDependencies(deps, {
       onProgress: (msg) => onProgress(`[python] ${msg}\n`),
@@ -552,6 +561,13 @@ async function resolveEcosystem(ecosystem, githubRef, opts) {
       const directNames = new Set(deps.filter(d => !d.indirect).map(d => d.name.toLowerCase()));
       directCount = [...results.values()].filter(r => directNames.has(r.name.toLowerCase())).length;
     } else if (source === 'package search') {
+      const directNames = new Set(deps.map(d => d.name.toLowerCase()));
+      directCount = [...results.values()].filter(r => directNames.has(r.name.toLowerCase())).length;
+    }
+  } else if (ecosystem === 'rust') {
+    // Cargo.lock enumerates the full closure without marking direct crates, so
+    // the split is only known from Cargo.toml or package-search input.
+    if (source === 'Cargo.toml' || source === 'package search') {
       const directNames = new Set(deps.map(d => d.name.toLowerCase()));
       directCount = [...results.values()].filter(r => directNames.has(r.name.toLowerCase())).length;
     }
@@ -597,6 +613,7 @@ if (typeof document !== 'undefined') {
     npm:    'eslint, eslint@9, @babel/core  or  https://github.com/owner/repo',
     python: 'requests, flask>=2.0, django==4.2  or  https://github.com/owner/repo',
     go:     'github.com/gin-gonic/gin, github.com/go-chi/chi  or  https://github.com/owner/repo',
+    rust:   'serde, tokio@1, clap@^4.5  or  https://github.com/owner/repo',
   };
 
   /**

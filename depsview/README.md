@@ -1,10 +1,10 @@
 # depsview
 
-Lists all dependencies and transitive dependencies of a Python, npm, or Go project. For each package it shows the resolved version, release dates, and total number of published versions. All data is fetched live — no local Python, Node.js, or Go installation required.
+Lists all dependencies and transitive dependencies of a Python, npm, Go, or Rust project. For each package it shows the resolved version, release dates, and total number of published versions. All data is fetched live — no local Python, Node.js, Go, or Rust installation required.
 
 Built with [Claude Code](https://claude.ai/code).
 
-**Data sources:** [PyPI](https://pypi.org/) for Python packages, [registry.npmjs.org](https://registry.npmjs.org) for npm packages, [proxy.golang.org](https://proxy.golang.org/) for Go modules, [api.github.com](https://docs.github.com/en/rest) for GitHub URL support, [pypistats.org](https://pypistats.org/) for Python download statistics (optional), [socket.dev](https://socket.dev/) for supply chain security scores (optional).
+**Data sources:** [PyPI](https://pypi.org/) for Python packages, [registry.npmjs.org](https://registry.npmjs.org) for npm packages, [proxy.golang.org](https://proxy.golang.org/) for Go modules, [crates.io](https://crates.io/) for Rust crates, [api.github.com](https://docs.github.com/en/rest) for GitHub URL support, [pypistats.org](https://pypistats.org/) for Python download statistics (optional), [socket.dev](https://socket.dev/) for supply chain security scores (optional).
 
 ## Requirements
 
@@ -14,10 +14,10 @@ Node.js 18 or later. No third-party dependencies.
 
 ```bash
 node src/main.js <path-to-project|github-url> [options]
-node src/main.js --package|-p <name> --npm|--python|--go
+node src/main.js --package|-p <name> --npm|--python|--go|--rust
 ```
 
-Every ecosystem detected at the project root is resolved and rendered as its own section, in the fixed order **npm → python → go**. Pass any combination of `--npm`, `--python`, `--go` to *filter* — with no flags all detected ecosystems are included.
+Every ecosystem detected at the project root is resolved and rendered as its own section, in the fixed order **npm → python → go → rust**. Pass any combination of `--npm`, `--python`, `--go`, `--rust` to *filter* — with no flags all detected ecosystems are included.
 
 ```bash
 # Auto-detect every ecosystem present
@@ -36,6 +36,8 @@ node src/main.js -p requests --python
 node src/main.js -p "requests>=2.0" --python
 node src/main.js -p github.com/gin-gonic/gin --go
 node src/main.js -p github.com/gin-gonic/gin@v1.9.1 --go
+node src/main.js -p serde --rust
+node src/main.js -p tokio@1 --rust
 ```
 
 **Example output (npm):**
@@ -125,8 +127,9 @@ When `--socket-key` / `--socket-org` are supplied, a **single** batched request 
 | `--npm` | Restrict the run to npm sections |
 | `--python` | Restrict the run to Python sections |
 | `--go` | Restrict the run to Go sections |
-| `--package <name>` / `-p <name>` | Resolve a single package by name instead of reading dep files. Requires exactly one ecosystem flag. Accepts `name`, `name@version`, PEP 440 specifiers for Python, and `module@version` for Go. Transitive dependencies are followed for all three ecosystems. |
-| `--include-tests` | Include dev/test dependencies (npm / Python only) |
+| `--rust` | Restrict the run to Rust sections |
+| `--package <name>` / `-p <name>` | Resolve a single package by name instead of reading dep files. Requires exactly one ecosystem flag. Accepts `name`, `name@version`, PEP 440 specifiers for Python, `module@version` for Go, and Cargo requirements (`crate@^1.2`) for Rust. Transitive dependencies are followed for all four ecosystems. |
+| `--include-tests` | Include dev/test dependencies (npm / Python / Rust `[dev-dependencies]`, Cargo.toml source only) |
 | `--json` | Machine-readable JSON output |
 | `--download-stats` / `--ds` | Fetch Python download counts from pypistats.org (Python only) |
 | `--socket-key=<key>` | Socket.dev API key — enables the Supply Chain column |
@@ -316,6 +319,38 @@ The supply chain score (with `--socket-key` / `--socket-org`) works for Go modul
 
 Modules whose path hostname is not a known public host are **automatically skipped** — they cannot be resolved via `proxy.golang.org`. Public hosts include `github.com`, `golang.org`, `google.golang.org`, `go.uber.org`, and many others. Internal or corporate module paths (e.g. `corp.internal/pkg`) are excluded and listed with their module path, grouped by domain, in the non-standard sources block.
 
+## Rust support
+
+Lock files are preferred over the manifest. The priority order is:
+
+1. `Cargo.lock` — full transitive closure with exact pinned versions
+2. `Cargo.toml` (fallback) — declared dependencies, resolved via a recursive crates.io crawl
+
+### Cargo.lock
+
+When `Cargo.lock` is present, depsview reads every `[[package]]` entry and resolves crate metadata directly for each pinned version — no recursive crawl. Workspace members and the project's own crate (entries with no `source` field) are dropped because they are not resolvable on crates.io. Both the legacy git index source (`registry+https://github.com/rust-lang/crates.io-index`) and the sparse index source (`sparse+https://index.crates.io/`, Cargo 1.70+) are recognised as public crates.io packages.
+
+When both `Cargo.lock` and `Cargo.toml` are present, the manifest is read alongside to determine which crates are direct dependencies for the footer count.
+
+### Cargo.toml fallback
+
+When only `Cargo.toml` is present, the declared dependencies are resolved recursively against crates.io. `[dependencies]` and `[build-dependencies]` are always included; `[dev-dependencies]` is included only with `--include-tests`. `[target.<cfg>.dependencies]` tables and `[workspace.dependencies]` are honoured. Renamed dependencies (`foo = { package = "real-crate", version = "1" }`) resolve the on-registry crate name from the `package` key, and `workspace = true` inherited entries are skipped (their version lives in the workspace root).
+
+Version requirements follow Cargo's SemVer rules — a bare `"1.2.3"` is a **caret** requirement (`^1.2.3`), comma-separated comparators are AND-joined, and `~`, `*`, and wildcard forms are supported.
+
+### Metadata
+
+For each crate, depsview queries the [crates.io JSON API](https://crates.io/data-access):
+
+- `/api/v1/crates/{name}` for the crate's version list, release dates, and total release count
+- `/api/v1/crates/{name}/{version}/dependencies` for transitive dependency discovery (`normal` + `build` kinds; package-search and `Cargo.toml` modes only)
+
+The "First Release" column is reported for Rust crates. The "Downloads/mo" column does not apply. The supply chain score (with `--socket-key` / `--socket-org`) works for Rust crates and is fetched using the `pkg:cargo/...` PURL type.
+
+### Non-registry and private crates
+
+Dependencies declared in `Cargo.toml` with a `git = …`, `path = …`, or alternative `registry = …` key are flagged as non-registry specs (⚠) in the non-standard sources block. In `Cargo.lock`, crates whose `source` points at a git URL or a non-crates.io registry are **automatically skipped** and listed with their source, grouped by domain, in the non-standard sources block.
+
 ## Non-standard sources
 
 When any non-standard package sources are detected, a collapsible **non-standard sources** block appears below the dependency table (web UI, HTML report, and CLI). It contains two categories:
@@ -337,7 +372,7 @@ node src/main.js https://github.com/owner/repo/tree/main
 node src/main.js https://github.com/owner/repo/tree/main/subfolder
 ```
 
-Ecosystem is auto-detected from the root directory listing. Python projects are traversed up to two levels deep; npm and Go projects are read from the specified directory only.
+Ecosystem is auto-detected from the root directory listing. Python projects are traversed up to two levels deep; npm, Go, and Rust projects are read from the specified directory only.
 
 **Authentication:** the GitHub API allows 60 unauthenticated requests/hour. Set `GITHUB_TOKEN` for private repos or to raise the limit to 5 000/hour:
 

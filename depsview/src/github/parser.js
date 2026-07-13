@@ -23,8 +23,10 @@ import {
 import { normalizePackageName } from '../python/pypiClient.js';
 import { isTestDirectory, isTestRequirementsFile } from '../python/testFilter.js';
 import { parseGoSum, parseGoMod, parseGoModReplaces } from '../go/parserCore.js';
+import { parseCargoLock, parseCargoToml } from '../rust/parserCore.js';
 import { partitionNpmPackages } from '../npm/registryFilter.js';
 import { partitionGoModules    } from '../go/moduleFilter.js';
+import { partitionCargoPackages } from '../rust/crateFilter.js';
 import { parsePep508UrlRequirement } from '../python/parserCore.js';
 
 /** Recognised dependency filenames, checked case-sensitively against the repo listing. */
@@ -360,4 +362,59 @@ async function parseGithubGoDependencies({ owner, repo, ref, subpath }) {
   return { deps: publicMods, source: preferred, privateCount, privatePkgs: privateMods, dangerousDeps };
 }
 
-export { parseGithubDependencies, parseGithubNpmDependencies, parseGithubGoDependencies, resolvePath, mergeDeps };
+/**
+ * Parses Rust dependencies from a GitHub repository.
+ * Checks the starting directory for Cargo.lock first (preferred, full transitive
+ * closure with exact versions), then falls back to Cargo.toml. No directory
+ * traversal is performed; pass a subpath to point at a nested crate root.
+ *
+ * When Cargo.lock is the source, `dangerousDeps` is empty because detecting
+ * non-registry specs would require a second fetch of Cargo.toml; those specs
+ * are only surfaced when Cargo.toml is the primary source (mirrors how Go
+ * only reports go.mod `replace` directives when go.mod is primary).
+ *
+ * @param {{ owner: string, repo: string, ref: string, subpath: string }} githubRef
+ * @returns {Promise<{
+ *   deps: Array<{ name: string, version?: string, source?: string|null, versionSpec?: string|null }>,
+ *   source: string,
+ *   privateCount: number,
+ *   privatePkgs: Array<{ name: string, url: string }>,
+ *   dangerousDeps: Array<{ name: string, spec: string, reason: string }>
+ * }>}
+ */
+async function parseGithubRustDependencies({ owner, repo, ref, subpath }) {
+  const listing = await listDirectory(owner, repo, subpath, ref);
+  if (!listing) {
+    const dir = subpath || '/';
+    throw new Error(`Directory not found: ${dir} in ${owner}/${repo} at ref "${ref}"`);
+  }
+
+  const fileNames = new Set(
+    listing.filter(e => e.type === 'file').map(e => e.name)
+  );
+
+  const preferred = fileNames.has('Cargo.lock') ? 'Cargo.lock'
+    : fileNames.has('Cargo.toml')               ? 'Cargo.toml'
+    : null;
+
+  if (!preferred) {
+    const location = subpath ? `${owner}/${repo}/${subpath}` : `${owner}/${repo}`;
+    throw new Error(`No Rust dependency file found in ${location} (ref: ${ref}). Looked for: Cargo.lock, Cargo.toml`);
+  }
+
+  const filePath = subpath ? `${subpath}/${preferred}` : preferred;
+  const content  = await fetchFileContent(owner, repo, filePath, ref);
+  if (!content) {
+    throw new Error(`Failed to fetch ${filePath} from ${owner}/${repo}`);
+  }
+
+  if (preferred === 'Cargo.lock') {
+    const { publicPkgs, privateCount, privatePkgs } = partitionCargoPackages(parseCargoLock(content));
+    return { deps: publicPkgs, source: 'Cargo.lock', privateCount, privatePkgs, dangerousDeps: [] };
+  }
+
+  const { deps, dangerousDeps } = parseCargoToml(content);
+  return { deps, source: 'Cargo.toml', privateCount: 0, privatePkgs: [], dangerousDeps };
+}
+
+export { parseGithubDependencies, parseGithubNpmDependencies, parseGithubGoDependencies, parseGithubRustDependencies, resolvePath, mergeDeps };

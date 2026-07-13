@@ -830,7 +830,7 @@ describe('formatMulti — multi-section text output', () => {
 });
 
 describe('ECOSYSTEM_ORDER', () => {
-  test('is the fixed npm → python → go sequence', () => {
-    assert.deepEqual(ECOSYSTEM_ORDER, ['npm', 'python', 'go']);
+  test('is the fixed npm → python → go → rust sequence', () => {
+    assert.deepEqual(ECOSYSTEM_ORDER, ['npm', 'python', 'go', 'rust']);
   });
 });

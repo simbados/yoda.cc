@@ -1,0 +1,19 @@
+[package]
+name = "manifest-only"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = "1.0"
+rand = { version = "0.8" }
+local-lib = { path = "../local-lib" }
+patched = { git = "https://github.com/example/patched" }
+
+[build-dependencies]
+cc = "1.0"
+
+[dev-dependencies]
+criterion = "0.5"
+
+[target.'cfg(unix)'.dependencies]
+nix = "0.27"

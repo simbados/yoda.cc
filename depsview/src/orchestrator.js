@@ -30,8 +30,14 @@ import { parseDependencyFile    as parseGoFile,
 import { resolveDependencies    as resolveGo } from './go/depResolver.js';
 import { parseGoMod                       } from './go/parserCore.js';
 
+import { parseDependencyFile    as parseRustFile,
+         readDirectNamesFromCargoToml    } from './rust/parser.js';
+import { resolveDependencies    as resolveRust } from './rust/depResolver.js';
+import { normalizeCrateName, parseCargoToml    } from './rust/parserCore.js';
+
 import { parseGithubNpmDependencies,
          parseGithubGoDependencies,
+         parseGithubRustDependencies,
          parseGithubDependencies         } from './github/parser.js';
 import { fetchFileContent                } from './github/client.js';
 
@@ -64,6 +70,25 @@ async function readDirectGoNamesFromGithub({ owner, repo, ref, subpath }) {
 }
 
 /**
+ * Pulls Cargo.toml from a GitHub repo subpath and returns the set of declared
+ * (direct) crate names. Used to populate `directNames` when the primary source
+ * is Cargo.lock (which enumerates the full transitive closure without marking
+ * which crates are direct).
+ * @param {{ owner: string, repo: string, ref: string, subpath: string }} githubRef
+ * @returns {Promise<Set<string>>}
+ */
+async function readDirectRustNamesFromGithub({ owner, repo, ref, subpath }) {
+  const filePath = subpath ? `${subpath}/Cargo.toml` : 'Cargo.toml';
+  const content = await fetchFileContent(owner, repo, filePath, ref);
+  if (!content) return new Set();
+  try {
+    return new Set(parseCargoToml(content).deps.map(d => normalizeCrateName(d.name)));
+  } catch {
+    return new Set();
+  }
+}
+
+/**
  * Parses the appropriate dependency file(s) for one ecosystem.
  * Returns the same shape regardless of source (`{ deps, source, note? }`).
  *
@@ -72,7 +97,7 @@ async function readDirectGoNamesFromGithub({ owner, repo, ref, subpath }) {
  * The dep object is shaped for each resolver: npm/python receive `versionSpec`,
  * go receives `version`.
  *
- * @param {'npm'|'python'|'go'} ecosystem
+ * @param {'npm'|'python'|'go'|'rust'} ecosystem
  * @param {object} ctx              - { isGithub, githubRef, absolutePath } or { isPackage, packageDep }
  * @param {object} opts             - { includeTests }
  * @returns {Promise<{ deps: Array, source: string, note?: string }>}
@@ -99,6 +124,11 @@ async function parseSection(ecosystem, ctx, opts) {
       ? await parseGithubGoDependencies(githubRef)
       : parseGoFile(absolutePath);
   }
+  if (ecosystem === 'rust') {
+    return isGithub
+      ? await parseGithubRustDependencies(githubRef)
+      : parseRustFile(absolutePath, { includeTests });
+  }
   // python
   return isGithub
     ? await parseGithubDependencies(githubRef, { includeTests })
@@ -107,7 +137,7 @@ async function parseSection(ecosystem, ctx, opts) {
 
 /**
  * Resolves an array of parsed deps to a results Map for one ecosystem.
- * @param {'npm'|'python'|'go'} ecosystem
+ * @param {'npm'|'python'|'go'|'rust'} ecosystem
  * @param {Array} deps
  * @param {{ downloadStats: boolean, onProgress?: function }} opts
  * @returns {Promise<Map<string, object>>}
@@ -116,6 +146,7 @@ async function resolveSectionDeps(ecosystem, deps, opts) {
   const { downloadStats, onProgress } = opts;
   if (ecosystem === 'npm')    return resolveNpm(deps,    { onProgress });
   if (ecosystem === 'go')     return resolveGo(deps,     { onProgress });
+  if (ecosystem === 'rust')   return resolveRust(deps,   { onProgress });
   return resolvePython(deps, { onProgress, downloadStats });
 }
 
@@ -127,7 +158,7 @@ async function resolveSectionDeps(ecosystem, deps, opts) {
  * In package-search mode (`ctx.isPackage`), only the searched package itself
  * is direct; all transitively resolved packages are considered indirect.
  *
- * @param {'npm'|'python'|'go'} ecosystem
+ * @param {'npm'|'python'|'go'|'rust'} ecosystem
  * @param {Array}  deps
  * @param {string} source            - dep file name returned by the parser
  * @param {object} ctx               - { isGithub, githubRef, absolutePath } or { isPackage, packageDep }
@@ -138,6 +169,7 @@ async function directNamesForSection(ecosystem, deps, source, ctx, opts) {
   if (ctx.isPackage) {
     if (ecosystem === 'go')     return new Set([formatterNorm(ctx.packageDep.name)]);
     if (ecosystem === 'npm')    return new Set([normalizeNpm(ctx.packageDep.name)]);
+    if (ecosystem === 'rust')   return new Set([normalizeCrateName(ctx.packageDep.name)]);
     return new Set([normalizePython(ctx.packageDep.name)]);
   }
 
@@ -160,6 +192,16 @@ async function directNamesForSection(ecosystem, deps, source, ctx, opts) {
     return new Set(deps.filter(d => !d.indirect).map(d => formatterNorm(d.name)));
   }
 
+  if (ecosystem === 'rust') {
+    if (source === 'Cargo.lock') {
+      const raw = isGithub
+        ? await readDirectRustNamesFromGithub(githubRef)
+        : readDirectNamesFromCargoToml(absolutePath, includeTests);
+      return new Set([...raw].map(formatterNorm));
+    }
+    return new Set(deps.map(d => formatterNorm(d.name)));
+  }
+
   return new Set(deps.map(d => normalizePython(d.name)));
 }
 
@@ -168,7 +210,7 @@ async function directNamesForSection(ecosystem, deps, source, ctx, opts) {
  * along the way and returning it on the section so the rest of the pipeline
  * can continue.
  *
- * @param {'npm'|'python'|'go'} ecosystem
+ * @param {'npm'|'python'|'go'|'rust'} ecosystem
  * @param {object} ctx   - { isGithub, githubRef, absolutePath }
  * @param {object} opts  - { includeTests, downloadStats, onProgress }
  * @returns {Promise<object>} section
@@ -202,11 +244,11 @@ async function buildSection(ecosystem, ctx, opts) {
  * @param {object|null} ctx.githubRef
  * @param {string|null} ctx.absolutePath
  * @param {object} opts
- * @param {Set<'npm'|'python'|'go'>} opts.ecosystems
+ * @param {Set<'npm'|'python'|'go'|'rust'>} opts.ecosystems
  * @param {boolean}                  opts.includeTests
  * @param {boolean}                  opts.downloadStats
  * @param {function}                 [opts.onProgress]
- * @returns {Promise<Map<'npm'|'python'|'go', object>>} sections
+ * @returns {Promise<Map<'npm'|'python'|'go'|'rust', object>>} sections
  */
 async function orchestrate(ctx, opts) {
   const { ecosystems, includeTests, downloadStats, onProgress, onWarning } = opts;
@@ -225,14 +267,14 @@ async function orchestrate(ctx, opts) {
  * the socket.dev client (`{ name, version, ecosystem }` where ecosystem is the
  * PURL type — `npm`, `pypi`, `golang`).
  * Excludes packages flagged with an error so failed lookups are not retried via socket.
- * @param {Map<'npm'|'python'|'go', object>} sections
+ * @param {Map<'npm'|'python'|'go'|'rust', object>} sections
  * @returns {Array<{ name: string, version: string, ecosystem: 'npm'|'pypi'|'golang' }>}
  */
 function packagesForSocket(sections) {
   const all = [];
   for (const [ecosystem, section] of sections) {
     if (section.error || !section.results) continue;
-    const purl = ecosystem === 'python' ? 'pypi' : ecosystem === 'go' ? 'golang' : 'npm';
+    const purl = ecosystem === 'python' ? 'pypi' : ecosystem === 'go' ? 'golang' : ecosystem === 'rust' ? 'cargo' : 'npm';
     for (const r of section.results.values()) {
       if (r.error) continue;
       all.push({ name: r.name, version: r.version, ecosystem: purl });

@@ -462,7 +462,7 @@ describe('detectEcosystems', () => {
 });
 
 describe('ECOSYSTEM_ORDER', () => {
-  it('is the fixed npm → python → go sequence', () => {
-    assert.deepEqual(ECOSYSTEM_ORDER, ['npm', 'python', 'go']);
+  it('is the fixed npm → python → go → rust sequence', () => {
+    assert.deepEqual(ECOSYSTEM_ORDER, ['npm', 'python', 'go', 'rust']);
   });
 });

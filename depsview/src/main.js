@@ -2,15 +2,16 @@
 /**
  * depsview — CLI entry point.
  *
- * Supports Python, npm, and Go projects. Auto-detects every ecosystem present
- * in the project directory or GitHub URL and renders one section per ecosystem
- * (npm → python → go). Pass `--npm`, `--python`, and/or `--go` to filter.
+ * Supports Python, npm, Go, and Rust projects. Auto-detects every ecosystem
+ * present in the project directory or GitHub URL and renders one section per
+ * ecosystem (npm → python → go → rust). Pass `--npm`, `--python`, `--go`,
+ * and/or `--rust` to filter.
  *
  * Usage:
- *   node src/main.js <path-or-github-url> [--npm] [--python] [--go]
+ *   node src/main.js <path-or-github-url> [--npm] [--python] [--go] [--rust]
  *                    [--json] [--debug] [--include-tests] [--download-stats|--ds]
  *                    [--socket-key=<key>] [--socket-org=<slug>] [--report[=<file>]]
- *   node src/main.js --package|-p <name> --npm|--python|--go
+ *   node src/main.js --package|-p <name> --npm|--python|--go|--rust
  */
 
 import fs       from 'node:fs';
@@ -31,6 +32,8 @@ import { parsePackageInput               } from './packageInput.js';
 const NPM_FILES    = new Set([...NPM_LOCK_FILENAMES, 'package.json']);
 /** Go-specific filenames checked during ecosystem detection. */
 const GO_FILES     = new Set(['go.sum', 'go.mod']);
+/** Rust-specific filenames checked during ecosystem detection. */
+const RUST_FILES   = new Set(['Cargo.lock', 'Cargo.toml']);
 /** Python-specific filenames checked during ecosystem detection. */
 const PYTHON_FILES = new Set(['pyproject.toml', 'requirements.txt', 'requirements_all.txt', 'setup.cfg', 'Pipfile', 'manifest.json']);
 
@@ -54,7 +57,7 @@ const PYTHON_FILES = new Set(['pyproject.toml', 'requirements.txt', 'requirement
  *   debug: boolean,
  *   includeTests: boolean,
  *   downloadStats: boolean,
- *   requestedEcosystems: Set<'npm'|'python'|'go'>,
+ *   requestedEcosystems: Set<'npm'|'python'|'go'|'rust'>,
  *   socketKey: string|null,
  *   socketOrg: string|null,
  *   reportPath: string|null,
@@ -71,6 +74,7 @@ function parseArgs() {
   if (args.includes('--npm'))    requestedEcosystems.add('npm');
   if (args.includes('--python')) requestedEcosystems.add('python');
   if (args.includes('--go'))     requestedEcosystems.add('go');
+  if (args.includes('--rust'))   requestedEcosystems.add('rust');
 
   // --package <name> or -p <name> or --package=<name> or -p=<name>
   let packageName = null;
@@ -108,15 +112,16 @@ function parseArgs() {
       : reportArg.slice('--report='.length);
 
   if (!packageName && positional.length === 0) {
-    console.error('Usage: depsview <path-to-project|github-url> [--npm] [--python] [--go] [--json] [--debug] [--include-tests]');
+    console.error('Usage: depsview <path-to-project|github-url> [--npm] [--python] [--go] [--rust] [--json] [--debug] [--include-tests]');
     console.error('       [--download-stats|--ds] [--socket-key=<key>] [--socket-org=<slug>] [--report[=<file>]]');
-    console.error('       depsview --package|-p <name> --npm|--python|--go');
+    console.error('       depsview --package|-p <name> --npm|--python|--go|--rust');
     console.error('');
     console.error('Ecosystem flags act as filters; with none, every detected ecosystem is included.');
     console.error('--package / -p: resolve a single package by name (requires exactly one ecosystem flag).');
     console.error('  npm examples:    eslint   eslint@8   @babel/core@7');
     console.error('  python examples: requests   requests>=2.0   requests==2.31.0');
     console.error('  go examples:     github.com/gin-gonic/gin   github.com/gin-gonic/gin@v1.9.1');
+    console.error('  rust examples:   serde   tokio@1   clap@^4.5');
     process.exit(1);
   }
 
@@ -137,12 +142,13 @@ function parseArgs() {
 /**
  * Returns the set of ecosystems whose dep files are present in a local directory.
  * @param {string} dirPath
- * @returns {Set<'npm'|'python'|'go'>}
+ * @returns {Set<'npm'|'python'|'go'|'rust'>}
  */
 function detectLocalEcosystems(dirPath) {
   const found = new Set();
   for (const f of NPM_FILES)    { if (fs.existsSync(path.join(dirPath, f))) { found.add('npm');    break; } }
   for (const f of GO_FILES)     { if (fs.existsSync(path.join(dirPath, f))) { found.add('go');     break; } }
+  for (const f of RUST_FILES)   { if (fs.existsSync(path.join(dirPath, f))) { found.add('rust');   break; } }
   for (const f of PYTHON_FILES) { if (fs.existsSync(path.join(dirPath, f))) { found.add('python'); break; } }
   return found;
 }
@@ -150,13 +156,14 @@ function detectLocalEcosystems(dirPath) {
 /**
  * Returns the set of ecosystems whose dep files appear in a GitHub directory listing.
  * @param {Array<{ name: string, type: string }>} listing
- * @returns {Set<'npm'|'python'|'go'>}
+ * @returns {Set<'npm'|'python'|'go'|'rust'>}
  */
 function detectGithubEcosystems(listing) {
   const names = new Set(listing.map(e => e.name));
   const found = new Set();
   for (const f of NPM_FILES)    { if (names.has(f)) { found.add('npm');    break; } }
   for (const f of GO_FILES)     { if (names.has(f)) { found.add('go');     break; } }
+  for (const f of RUST_FILES)   { if (names.has(f)) { found.add('rust');   break; } }
   for (const f of PYTHON_FILES) { if (names.has(f)) { found.add('python'); break; } }
   return found;
 }
@@ -168,9 +175,9 @@ function detectGithubEcosystems(listing) {
  * we still try Python so that HA-style nested manifest.json files (which can
  * only be discovered via the depth-2 GitHub traversal) get a chance.
  *
- * @param {Set<'npm'|'python'|'go'>} requested
- * @param {Set<'npm'|'python'|'go'>} detected
- * @returns {Set<'npm'|'python'|'go'>}
+ * @param {Set<'npm'|'python'|'go'|'rust'>} requested
+ * @param {Set<'npm'|'python'|'go'|'rust'>} detected
+ * @returns {Set<'npm'|'python'|'go'|'rust'>}
  */
 function resolveEcosystems(requested, detected) {
   if (requested.size > 0) return requested;

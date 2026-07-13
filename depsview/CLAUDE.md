@@ -1,8 +1,8 @@
 # Project Overview
 
-depsview lists the dependencies and transitive dependencies of a Python, npm, or Go project. It runs as a CLI and as a browser-only web UI. All metadata is fetched live from public registries — no local language toolchain is required.
+depsview lists the dependencies and transitive dependencies of a Python, npm, Go, or Rust project. It runs as a CLI and as a browser-only web UI. All metadata is fetched live from public registries — no local language toolchain is required.
 
-External data sources: `pypi.org`, `pypistats.org` (optional Python download stats), `registry.npmjs.org`, `proxy.golang.org`, `api.github.com`, `socket.dev` (optional supply-chain scores).
+External data sources: `pypi.org`, `pypistats.org` (optional Python download stats), `registry.npmjs.org`, `proxy.golang.org`, `crates.io`, `api.github.com`, `socket.dev` (optional supply-chain scores).
 
 Cross-cutting rules (no third-party deps, plan-first, mandatory docstrings, coding style, the three project agents, Definition of Done) live in `yoda/CLAUDE.md` and apply here.
 
@@ -37,6 +37,14 @@ src/
     parser.js               Node.js filesystem wrapper
     depResolver.js          Fetches metadata from proxy.golang.org
 
+  rust/
+    parserCore.js           Pure string parsers for Cargo.toml and Cargo.lock (minimal TOML) — browser-safe
+    versionResolver.js      Cargo SemVer resolver (caret-by-default, comma-AND) — browser-safe
+    crateFilter.js          Splits packages into public (crates.io index) vs private by source — browser-safe
+    parser.js               Node.js filesystem wrapper; prefers Cargo.lock, falls back to Cargo.toml
+    cratesClient.js         crates.io JSON API client (crate info, version metadata, transitive deps)
+    depResolver.js          Resolves via crates.io in lockfile or manifest mode
+
   github/
     client.js               GitHub Contents API client (listDirectory, fetchFileContent)
     parser.js               Web/GitHub equivalents of all ecosystem parsers — fetches files via API
@@ -62,11 +70,12 @@ web/
 CLI:  main.js → orchestrator.js → src/npm/parser.js       (reads local filesystem)
                                  → src/python/parser.js
                                  → src/go/parser.js
+                                 → src/rust/parser.js
 
 Web:  web/app.js            → src/github/parser.js         (fetches via GitHub API)
 ```
 
-Both paths use the **same** parser cores (`parserCore.js`, `lockParser.js`, etc.) and resolver modules. `src/github/parser.js` is the web equivalent of the three `src/*/parser.js` files combined.
+Both paths use the **same** parser cores (`parserCore.js`, `lockParser.js`, etc.) and resolver modules. `src/github/parser.js` is the web equivalent of the four `src/*/parser.js` files combined.
 
 ## Parser contract
 
@@ -84,7 +93,7 @@ where `deps` contains only public-registry packages (private ones are in `privat
 
 ## Browser-compatibility rule
 
-Files ending in `parserCore.js` and all individual lock parser files (`lockParser.js`, `pnpmLockParser.js`, `bunLockParser.js`, `yarnLockParser.js`, `lockRegistry.js`) **must not import Node.js built-ins** (`fs`, `path`, etc.). They are loaded directly in the browser via the `web/src` symlink.
+Files ending in `parserCore.js`, all individual lock parser files (`lockParser.js`, `pnpmLockParser.js`, `bunLockParser.js`, `yarnLockParser.js`, `lockRegistry.js`), and the Rust browser-loaded helpers (`rust/versionResolver.js`, `rust/crateFilter.js`) **must not import Node.js built-ins** (`fs`, `path`, etc.). They are loaded directly in the browser via the `web/src` symlink. The `parser.js` files (including `rust/parser.js`) are the Node-only fs wrappers and are never loaded in the browser.
 
 ## How to add a new npm lock file format
 
@@ -94,11 +103,12 @@ Files ending in `parserCore.js` and all individual lock parser files (`lockParse
 
 ## How to add a new ecosystem
 
-1. Create `src/{eco}/parserCore.js` (pure string parser), `src/{eco}/parser.js` (fs wrapper), `src/{eco}/depResolver.js`.
-2. Add web support in `src/github/parser.js` (new `parseGithub{Eco}Dependencies` function).
-3. Register in `src/orchestrator.js` (import + add to pipeline).
-4. Register in `web/app.js` (detectEcosystems, ECOSYSTEM_ORDER, section rendering).
-5. Register in `src/main.js` (ecosystem flag + `{ECO}_FILES` set).
+1. Create `src/{eco}/parserCore.js` (pure string parser), `src/{eco}/parser.js` (fs wrapper), `src/{eco}/depResolver.js`. Add any registry-client or resolver helpers the ecosystem needs (e.g. Rust adds `cratesClient.js`, `versionResolver.js`, `crateFilter.js`); browser-loaded helpers must not import `node:*` and go in the browser-compatibility list.
+2. Add web support in `src/github/parser.js` (new `parseGithub{Eco}Dependencies` function + export).
+3. Register in `src/orchestrator.js` (import + wire into parseSection / resolveSectionDeps / directNamesForSection / packagesForSocket, including the PURL type).
+4. Register in `web/app.js` (detectEcosystems, ECOSYSTEM_ORDER, ECOSYSTEM_PURL_TYPE, SOCKET_URL_SLUG, section rendering) and add the radio in `web/index.html`.
+5. Register in `src/main.js` (ecosystem flag + `{ECO}_FILES` set + detection).
+6. Register in `src/output/formatter.js` (ECOSYSTEM_ORDER + PURL mapping) and `src/packageInput.js` (`parse{Eco}` for `--package` input).
 
 ## Test layout
 
@@ -107,7 +117,9 @@ test/
   npm/      mirrors src/npm/   — one .test.js per source file
   python/   mirrors src/python/
   go/       mirrors src/go/
+  rust/     mirrors src/rust/
   fixtures/ minimal real-world lock files used by parser tests
+            (cargo-lock, cargo-toml, cargo-private for Rust)
 ```
 
 Framework: Node.js built-in `node:test` + `node:assert/strict`. Run with `npm test`.

@@ -24,18 +24,19 @@ const ANSI_GREEN  = '\x1b[32m';
 const ANSI_RESET  = '\x1b[0m';
 
 /** Ecosystems are always rendered in this fixed order. */
-const ECOSYSTEM_ORDER = ['npm', 'python', 'go'];
+const ECOSYSTEM_ORDER = ['npm', 'python', 'go', 'rust'];
 
 /**
  * Maps a depsview ecosystem label to the corresponding socket.dev PURL type.
  * Used only for looking up supply chain scores by the canonical map key
  * (`${purl}:${name.toLowerCase()}@${version}`).
- * @param {'npm'|'python'|'go'} ecosystem
- * @returns {'npm'|'pypi'|'golang'}
+ * @param {'npm'|'python'|'go'|'rust'|'rust'} ecosystem
+ * @returns {'npm'|'pypi'|'golang'|'cargo'}
  */
 function purlEcosystem(ecosystem) {
   return ecosystem === 'python' ? 'pypi'
        : ecosystem === 'go'     ? 'golang'
+       : ecosystem === 'rust'   ? 'cargo'
        : 'npm';
 }
 
@@ -97,7 +98,7 @@ function socketScoreDisplay(score) {
  *
  * @param {Map<string, object>} results - per-ecosystem resolved package map
  * @param {Map<string, number>} [socketScores] - shared scores Map
- * @param {{ ecosystem?: 'npm'|'python'|'go' }} [opts]
+ * @param {{ ecosystem?: 'npm'|'python'|'go'|'rust' }} [opts]
  * @returns {Array<object>}
  */
 function sortedResults(results, socketScores = new Map(), opts = {}) {
@@ -184,7 +185,7 @@ function printNonStandardSources(dangerousDeps, privatePkgs) {
  * @param {Map<string, object>} results
  * @param {Set<string>} directNames - normalised direct dep names for the footer
  * @param {object} [opts]
- * @param {'npm'|'python'|'go'}      [opts.ecosystem]           - used for socket key lookup & defaults
+ * @param {'npm'|'python'|'go'|'rust'}      [opts.ecosystem]           - used for socket key lookup & defaults
  * @param {boolean}                  [opts.downloadStats=false] - show Downloads/mo column
  * @param {Map<string,number>|null}  [opts.socketScores=null]   - shared supply chain scores
  * @param {string|null}              [opts.source=null]         - dep file name(s) shown in footer
@@ -301,7 +302,7 @@ function formatTable(results, directNames, opts = {}) {
  * order npm → python → go, with a per-section heading when at least two
  * ecosystems are present. Empty/missing ecosystems are skipped.
  *
- * @param {Map<'npm'|'python'|'go', { source, results, directNames, note? }>} sections
+ * @param {Map<'npm'|'python'|'go'|'rust', { source, results, directNames, note? }>} sections
  * @param {object} [opts]
  * @param {boolean}                 [opts.downloadStats=false]
  * @param {Map<string,number>|null} [opts.socketScores=null]
@@ -340,7 +341,7 @@ function formatMulti(sections, opts = {}) {
  *   - supplyChainScore     — any ecosystem, when `socketScores` is provided
  *   - error                — when resolution failed for that package
  *
- * @param {Map<'npm'|'python'|'go', { results }>} sections
+ * @param {Map<'npm'|'python'|'go'|'rust', { results }>} sections
  * @param {object} [opts]
  * @param {boolean}                 [opts.downloadStats=false]
  * @param {Map<string,number>|null} [opts.socketScores=null]

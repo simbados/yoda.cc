@@ -48,19 +48,36 @@ function parseGo(input) {
 }
 
 /**
+ * Parses a raw Rust crate identifier into { name, version }.
+ * The version requirement is separated from the crate name by "@" (e.g.
+ * "tokio@1.35", "clap@^4"). The version part may be any Cargo version
+ * requirement, which the resolver interprets with Cargo SemVer rules.
+ * Returns version 'latest' when no version is specified.
+ * @param {string} input - trimmed user input, e.g. "serde", "tokio@1", "clap@^4.5"
+ * @returns {{ name: string, version: string }}
+ */
+function parseRust(input) {
+  const atIdx = input.indexOf('@');
+  if (atIdx === -1) return { name: input, version: 'latest' };
+  const version = input.slice(atIdx + 1);
+  return { name: input.slice(0, atIdx), version: version || 'latest' };
+}
+
+/**
  * Parses a raw user-supplied package identifier into { name, version } for the given ecosystem.
- * Delegates to the ecosystem-specific parser (parseNpm, parsePython, parseGo).
+ * Delegates to the ecosystem-specific parser (parseNpm, parsePython, parseGo, parseRust).
  *
- * For npm and go, version is 'latest' when not specified.
+ * For npm, go, and rust, version is 'latest' when not specified.
  * For python, version is null when no PEP 440 specifier is present (resolves to latest stable).
  *
  * @param {string} raw - raw user input, e.g. "eslint@8", "requests>=2.0", "github.com/gin-gonic/gin@latest"
- * @param {'npm'|'python'|'go'} ecosystem
+ * @param {'npm'|'python'|'go'|'rust'} ecosystem
  * @returns {{ name: string, version: string|null }}
  */
 export function parsePackageInput(raw, ecosystem) {
   const input = raw.trim();
   if (ecosystem === 'npm')    return parseNpm(input);
   if (ecosystem === 'go')     return parseGo(input);
+  if (ecosystem === 'rust')   return parseRust(input);
   return parsePython(input);
 }
