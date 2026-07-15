@@ -227,7 +227,10 @@ function renderSection(ecosystem, section, showHeader, socketScores, downloadSta
   const total = rows.length;
 
   const showFirst  = ecosystem !== 'go';
-  const showDl     = downloadStats && ecosystem === 'python';
+  // Rust always shows downloads (crates.io's 90-day figure comes free with the
+  // crate record); Python only when --download-stats was passed.
+  const showDl     = ecosystem === 'rust' || (downloadStats && ecosystem === 'python');
+  const dlLabel    = ecosystem === 'rust' ? 'Downloads (90d)' : 'Downloads/mo';
   const showSocket = socketScores != null;
   const socketSlug = SOCKET_URL_SLUG[ecosystem] ?? null;
 
@@ -246,7 +249,7 @@ function renderSection(ecosystem, section, showHeader, socketScores, downloadSta
   const colDefs = [['Package', 'name'], ['Version', 'version'], ['Released', 'released']];
   if (showFirst)  colDefs.push(['First Release', 'firstReleased']);
   colDefs.push(['Releases', 'releases']);
-  if (showDl)     colDefs.push(['Downloads/mo', 'downloadsLastMonth']);
+  if (showDl)     colDefs.push([dlLabel, 'downloadsLastMonth']);
   if (showSocket) colDefs.push(['Supply Chain', 'supplyChain']);
 
   const headerCellsHtml = colDefs.map(([label, col]) =>

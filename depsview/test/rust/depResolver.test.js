@@ -48,6 +48,38 @@ describe('rust resolveDependencies', () => {
     assert.equal(r.error, undefined);
   });
 
+  it('populates downloadsLastMonth from the crate recent_downloads on the success path', async () => {
+    globalThis.fetch = async () => mockResponse(200, {
+      crate: { id: 'serde', name: 'serde', recent_downloads: 233815725 },
+      versions: [
+        { num: '1.0.197', created_at: '2024-02-01T00:00:00Z', yanked: false },
+      ],
+    });
+
+    const results = await resolveDependencies([{ name: 'serde', version: '1.0.197' }]);
+    const r = results.get('serde@1.0.197');
+    assert.equal(r.downloadsLastMonth, 233815725);
+    assert.equal(r.error, undefined);
+  });
+
+  it('populates downloadsLastMonth on the no-version-match path', async () => {
+    globalThis.fetch = async (url) => {
+      if (String(url).endsWith('/dependencies')) return mockResponse(200, { dependencies: [] });
+      return mockResponse(200, {
+        crate: { id: 'serde', name: 'serde', recent_downloads: 42 },
+        versions: [
+          { num: '1.0.0', created_at: '2017-04-20T00:00:00Z', yanked: false },
+        ],
+      });
+    };
+
+    const results = await resolveDependencies([{ name: 'serde', versionSpec: '99.0.0' }]);
+    const r = results.get('serde');
+    assert.equal(r.version, 'not found');
+    assert.ok(r.error.includes('No version matching'));
+    assert.equal(r.downloadsLastMonth, 42);
+  });
+
   it('records an error entry when the crate is not found', async () => {
     globalThis.fetch = async () => mockResponse(404, {});
 
@@ -56,5 +88,6 @@ describe('rust resolveDependencies', () => {
     assert.equal(r.error, 'Crate not found on crates.io');
     assert.equal(r.releaseDate, 'unknown');
     assert.equal(r.releaseCount, 0);
+    assert.equal(r.downloadsLastMonth, null);
   });
 });

@@ -57,7 +57,7 @@ function encodedCrateName(name) {
  *
  * @param {string} name
  * @returns {Promise<{
- *   crate: { id: string, name: string, repository?: string, max_stable_version?: string, newest_version?: string, max_version?: string, updated_at?: string },
+ *   crate: { id: string, name: string, repository?: string, max_stable_version?: string, newest_version?: string, max_version?: string, updated_at?: string, recent_downloads?: number },
  *   versions: Array<{ num: string, created_at?: string, yanked?: boolean }>
  * }|null>}
  */
@@ -155,6 +155,29 @@ export function getFirstReleaseDate(versions) {
 export function getReleaseCount(versions) {
   if (!Array.isArray(versions)) return 0;
   return versions.filter(v => !v.yanked).length;
+}
+
+/**
+ * Returns a crate's recent download count as reported by crates.io.
+ *
+ * crates.io's `recent_downloads` field counts downloads over the **last 90
+ * days** (introduced by RFC 1824), which is distinct from the all-time
+ * `downloads` field. The value comes free with the crate record fetched by
+ * `fetchCrateInfo`, so surfacing it costs no extra request.
+ *
+ * Returns a non-negative integer, or `null` when the field is missing or not a
+ * finite non-negative number — e.g. a brand-new crate that has no recent
+ * download aggregate yet. Mirrors the `null`-means-unavailable convention used
+ * by the Python download-stats path so the shared formatter renders a dash.
+ *
+ * @param {{ recent_downloads?: number }} crate - the `crate` object from fetchCrateInfo
+ * @returns {number|null}
+ */
+export function getRecentDownloads(crate) {
+  if (!crate || typeof crate !== 'object') return null;
+  const value = crate.recent_downloads;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return null;
+  return Math.floor(value);
 }
 
 /**

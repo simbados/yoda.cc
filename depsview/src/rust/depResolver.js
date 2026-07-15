@@ -31,6 +31,7 @@ import {
   getReleaseDate,
   getFirstReleaseDate,
   getReleaseCount,
+  getRecentDownloads,
   getVersionList,
 } from './cratesClient.js';
 
@@ -104,6 +105,11 @@ export async function resolveDependencies(directDeps, opts = {}) {
           return;
         }
 
+        // recent_downloads is a crate-level (last-90-days) figure that comes
+        // with the crate record, so it is available on every successful fetch
+        // regardless of which version we ultimately resolve.
+        const recentDownloads = getRecentDownloads(crateData.crate);
+
         // Determine the version to surface and (in manifest mode) recurse into.
         let resolvedVersion = version;
         if (!exact) {
@@ -118,7 +124,7 @@ export async function resolveDependencies(directDeps, opts = {}) {
               releaseDate:        'unknown',
               firstReleaseDate:   getFirstReleaseDate(crateData.versions),
               releaseCount:       getReleaseCount(crateData.versions),
-              downloadsLastMonth: null,
+              downloadsLastMonth: recentDownloads,
               link:               `https://crates.io/crates/${crateData.crate.name}`,
               error:              `No version matching "${specLabel}" found on crates.io`,
             });
@@ -141,7 +147,7 @@ export async function resolveDependencies(directDeps, opts = {}) {
             releaseDate,
             firstReleaseDate,
             releaseCount,
-            downloadsLastMonth: null,
+            downloadsLastMonth: recentDownloads,
             link,
           });
           onProgress?.(`  ${resolvedName} ${resolvedVersion}`);

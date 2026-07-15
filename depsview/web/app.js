@@ -218,7 +218,7 @@ function addCell(row, text) {
  * @param {string|null} cfg.sortDir           - 'asc' or 'desc'
  * @param {boolean}     [cfg.showSupplyChain]  - when true, render a Supply Chain % column
  * @param {string|null} [cfg.socketSlug]       - socket.dev URL slug ('npm'|'pypi'|'go'); adds (link) anchors in score cells
- * @param {boolean}     [cfg.showDownloads]    - when true, render a Downloads/mo column
+ * @param {boolean}     [cfg.showDownloads]    - when true, render a downloads column (label depends on ecosystem)
  * @returns {HTMLElement} the section element
  */
 function renderSection(container, cfg) {
@@ -278,7 +278,7 @@ function renderSection(container, cfg) {
   ];
   if (showFirst) COL_DEFS.push(['First Release', 'firstReleaseDate']);
   COL_DEFS.push(['Releases', 'releaseCount']);
-  if (cfg.showDownloads)   COL_DEFS.push(['Downloads/mo', 'downloadsLastMonth']);
+  if (cfg.showDownloads)   COL_DEFS.push([cfg.ecosystem === 'rust' ? 'Downloads (90d)' : 'Downloads/mo', 'downloadsLastMonth']);
   if (cfg.showSupplyChain) COL_DEFS.push(['Supply Chain', 'supplyChain']);
 
   for (const [label, col] of COL_DEFS) {
@@ -621,8 +621,10 @@ if (typeof document !== 'undefined') {
    * specific ecosystems, updating the textarea placeholder accordingly.
    * The "Show Python download statistics" checkbox row stays visible for the
    * 'all' selection (Python may still be auto-detected) and for the explicit
-   * 'python' selection, and is hidden when the user has picked npm or Go where
-   * the Downloads/mo column does not apply.
+   * 'python' selection, and is hidden for npm, Go, and Rust. The checkbox is
+   * Python-specific because it toggles the opt-in pypistats fetch; Rust shows a
+   * downloads column too, but it comes free with the crate record so it needs
+   * no toggle.
    * @param {string} eco - selected ecosystem value
    */
   function applyEcosystem(eco) {
@@ -895,7 +897,7 @@ if (typeof document !== 'undefined') {
             privateCount:    section.privateCount ?? 0,
             sortCol,
             sortDir,
-            showDownloads:   section.downloadStats && section.ecosystem === 'python',
+            showDownloads:   section.ecosystem === 'rust' || (section.downloadStats && section.ecosystem === 'python'),
             showSupplyChain,
             socketSlug:      showSupplyChain ? (SOCKET_URL_SLUG[section.ecosystem] ?? null) : null,
           });

@@ -176,7 +176,9 @@ function printNonStandardSources(dangerousDeps, privatePkgs) {
  *
  * Column visibility:
  *   - First Release: shown unless `firstRelease: false` (Go modules hide this).
- *   - Downloads/mo:  shown only when `downloadStats: true` (Python only).
+ *   - Downloads:     shown when `downloadStats: true`. The column heading is set
+ *                    by `downloadsLabel` (Python: "Downloads/mo"; Rust:
+ *                    "Downloads (90d)" — crates.io's 90-day figure).
  *   - Supply Chain:  shown when `socketScores` is provided (any ecosystem).
  *
  * When `printHeader` is true (multi-ecosystem output), a section heading is
@@ -186,7 +188,8 @@ function printNonStandardSources(dangerousDeps, privatePkgs) {
  * @param {Set<string>} directNames - normalised direct dep names for the footer
  * @param {object} [opts]
  * @param {'npm'|'python'|'go'|'rust'}      [opts.ecosystem]           - used for socket key lookup & defaults
- * @param {boolean}                  [opts.downloadStats=false] - show Downloads/mo column
+ * @param {boolean}                  [opts.downloadStats=false] - show the downloads column
+ * @param {string}                   [opts.downloadsLabel='Downloads/mo'] - downloads column heading
  * @param {Map<string,number>|null}  [opts.socketScores=null]   - shared supply chain scores
  * @param {string|null}              [opts.source=null]         - dep file name(s) shown in footer
  * @param {string|null}              [opts.note=null]           - per-section warning shown after header
@@ -197,6 +200,7 @@ function formatTable(results, directNames, opts = {}) {
   const {
     ecosystem      = null,
     downloadStats  = false,
+    downloadsLabel = 'Downloads/mo',
     socketScores   = null,
     source         = null,
     note           = null,
@@ -233,7 +237,7 @@ function formatTable(results, directNames, opts = {}) {
     : 0;
   const colPop    = Math.max(8,  ...rows.map(r => String(r.releases).length)) + 2;
   const colDl     = downloadStats
-    ? Math.max(12, ...rows.map(r => formatDownloads(r.downloadsLastMonth).length)) + 2
+    ? Math.max(downloadsLabel.length, ...rows.map(r => formatDownloads(r.downloadsLastMonth).length)) + 2
     : 0;
   const colSocket = showSocket
     ? Math.max(12, ...rows.map(r => socketScoreDisplay(r.supplyChain).text.length)) + 2
@@ -247,7 +251,7 @@ function formatTable(results, directNames, opts = {}) {
     pad('Package', colName) + pad('Version', colVer) + pad('Released', colRel) +
     (showFirst ? pad('First Release', colFirst) : '') +
     pad('Releases', colPop) +
-    (downloadStats ? pad('Downloads/mo', colDl) : '') +
+    (downloadStats ? pad(downloadsLabel, colDl) : '') +
     (showSocket    ? pad('Supply Chain', colSocket) : '') +
     pad('Link', colLink)
   );
@@ -316,8 +320,11 @@ function formatMulti(sections, opts = {}) {
     const { results, directNames, source, note, privateCount = 0, privatePkgs = [], dangerousDeps = [] } = sections.get(ecosystem);
     formatTable(results, directNames, {
       ecosystem,
-      // Per-ecosystem column rules:
-      downloadStats: downloadStats && ecosystem === 'python',
+      // Per-ecosystem column rules. Rust always shows downloads (crates.io's
+      // 90-day figure comes free with the crate record); Python shows them only
+      // when the user opted in with --download-stats (pypistats is rate-limited).
+      downloadStats: ecosystem === 'rust' || (downloadStats && ecosystem === 'python'),
+      downloadsLabel: ecosystem === 'rust' ? 'Downloads (90d)' : 'Downloads/mo',
       socketScores,
       source,
       note,
@@ -337,7 +344,8 @@ function formatMulti(sections, opts = {}) {
  *
  * Each row contains name, version, released, releases, link and (per-ecosystem):
  *   - firstReleased        — npm/python only
- *   - downloadsLastMonth   — python only, when `downloadStats: true`
+ *   - downloadsLastMonth   — Rust always (crates.io 90-day count); Python when
+ *                            `downloadStats: true` (pypistats monthly count)
  *   - supplyChainScore     — any ecosystem, when `socketScores` is provided
  *   - error                — when resolution failed for that package
  *
@@ -354,7 +362,7 @@ function formatJson(sections, opts = {}) {
     if (!sections.has(ecosystem)) continue;
     const { results } = sections.get(ecosystem);
     const includeFirst    = ecosystem !== 'go';
-    const includeDownloads = downloadStats && ecosystem === 'python';
+    const includeDownloads = ecosystem === 'rust' || (downloadStats && ecosystem === 'python');
 
     out[ecosystem] = sortedResults(results, socketScores ?? new Map(), { ecosystem }).map(r => {
       const obj = { name: r.name, version: r.version, released: r.released, releases: r.releases, link: r.link };

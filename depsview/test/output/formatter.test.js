@@ -829,6 +829,98 @@ describe('formatMulti — multi-section text output', () => {
   });
 });
 
+// ── Rust downloads column — formatTable ───────────────────────────────────────
+
+describe('formatTable — rust downloadsLabel', () => {
+  /**
+   * The downloadsLabel opt overrides the default "Downloads/mo" heading so Rust
+   * can show crates.io's 90-day figure under a distinct column name.
+   */
+  test('uses the custom downloadsLabel as the column header', () => {
+    const results = makeResults([
+      { name: 'serde', version: '1.0.197', released: '2024-02-01', downloadsLastMonth: 233815725 },
+    ]);
+    const output = captureConsole(() => formatTable(results, new Set(), {
+      ecosystem: 'rust',
+      downloadStats: true,
+      downloadsLabel: 'Downloads (90d)',
+    }));
+    assert.ok(output.includes('Downloads (90d)'), `Expected "Downloads (90d)" header in:\n${output}`);
+    assert.ok(!output.includes('Downloads/mo'), 'default label must not appear when downloadsLabel is set');
+  });
+
+  /**
+   * The formatted 90-day count must appear in the data row.
+   */
+  test('renders the 90-day download count in the row', () => {
+    const results = makeResults([
+      { name: 'serde', version: '1.0.197', released: '2024-02-01', downloadsLastMonth: 233815725 },
+    ]);
+    const output = captureConsole(() => formatTable(results, new Set(), {
+      ecosystem: 'rust',
+      downloadStats: true,
+      downloadsLabel: 'Downloads (90d)',
+    }));
+    assert.ok(output.includes('233,815,725'), `Expected formatted count in:\n${output}`);
+  });
+});
+
+// ── Rust downloads column — formatMulti / formatJson ──────────────────────────
+
+describe('rust downloads via formatMulti', () => {
+  /**
+   * Rust always shows a downloads column even when downloadStats is false,
+   * labelled with crates.io's 90-day heading.
+   */
+  test('rust section always renders the Downloads (90d) column without downloadStats', () => {
+    const sections = new Map([
+      ['rust', { results: makeResults([{ name: 'serde', version: '1.0.197', released: '2024-02-01', downloadsLastMonth: 233815725 }]), directNames: new Set() }],
+    ]);
+    const output = captureConsole(() => formatMulti(sections, { downloadStats: false }));
+    assert.ok(output.includes('Downloads (90d)'), `Expected rust downloads header in:\n${output}`);
+    assert.ok(output.includes('233,815,725'), `Expected rust download count in:\n${output}`);
+  });
+
+  /**
+   * The Python heading must never leak into the Rust section.
+   */
+  test('rust section does not use the Downloads/mo label', () => {
+    const sections = new Map([
+      ['rust', { results: makeResults([{ name: 'serde', version: '1.0.197', released: '2024-02-01', downloadsLastMonth: 1 }]), directNames: new Set() }],
+    ]);
+    const output = captureConsole(() => formatMulti(sections, { downloadStats: false }));
+    assert.ok(!output.includes('Downloads/mo'), 'rust must not use the Downloads/mo label');
+  });
+});
+
+describe('formatJson — rust downloadsLastMonth', () => {
+  /**
+   * Rust JSON always includes downloadsLastMonth regardless of the downloadStats flag.
+   */
+  test('rust section includes downloadsLastMonth without downloadStats', () => {
+    const sections = new Map([
+      ['rust', { results: makeResults([{ name: 'serde', version: '1.0.197', released: '2024-02-01', downloadsLastMonth: 233815725 }]), directNames: new Set() }],
+    ]);
+    const output = captureConsole(() => formatJson(sections, { downloadStats: false }));
+    const obj = JSON.parse(output);
+    assert.ok('downloadsLastMonth' in obj.rust[0], 'downloadsLastMonth must be present for rust');
+    assert.equal(obj.rust[0].downloadsLastMonth, 233815725);
+  });
+
+  /**
+   * A null recent-downloads value is preserved as null (not omitted) for rust.
+   */
+  test('rust section keeps a null downloadsLastMonth', () => {
+    const sections = new Map([
+      ['rust', { results: makeResults([{ name: 'serde', version: '1.0.197', released: '2024-02-01', downloadsLastMonth: null }]), directNames: new Set() }],
+    ]);
+    const output = captureConsole(() => formatJson(sections, { downloadStats: false }));
+    const obj = JSON.parse(output);
+    assert.ok('downloadsLastMonth' in obj.rust[0]);
+    assert.equal(obj.rust[0].downloadsLastMonth, null);
+  });
+});
+
 describe('ECOSYSTEM_ORDER', () => {
   test('is the fixed npm → python → go → rust sequence', () => {
     assert.deepEqual(ECOSYSTEM_ORDER, ['npm', 'python', 'go', 'rust']);

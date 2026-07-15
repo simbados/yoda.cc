@@ -342,10 +342,10 @@ Version requirements follow Cargo's SemVer rules — a bare `"1.2.3"` is a **car
 
 For each crate, depsview queries the [crates.io JSON API](https://crates.io/data-access):
 
-- `/api/v1/crates/{name}` for the crate's version list, release dates, and total release count
+- `/api/v1/crates/{name}` for the crate's version list, release dates, total release count, and recent download count
 - `/api/v1/crates/{name}/{version}/dependencies` for transitive dependency discovery (`normal` + `build` kinds; package-search and `Cargo.toml` modes only)
 
-The "First Release" column is reported for Rust crates. The "Downloads/mo" column does not apply. The supply chain score (with `--socket-key` / `--socket-org`) works for Rust crates and is fetched using the `pkg:cargo/...` PURL type.
+The "First Release" column is reported for Rust crates. A **"Downloads (90d)"** column is shown for Rust crates from crates.io's `recent_downloads` field (downloads over the last 90 days, not a calendar month). It is displayed **always** — no flag is required, because the count comes free with the crate record already fetched above and needs no extra request (unlike Python, where `--download-stats` gates an opt-in pypistats call). The supply chain score (with `--socket-key` / `--socket-org`) works for Rust crates and is fetched using the `pkg:cargo/...` PURL type.
 
 ### Non-registry and private crates
 
@@ -389,7 +389,8 @@ GITHUB_TOKEN=ghp_... node src/main.js https://github.com/owner/private-repo
 | Released | Date the resolved version was published |
 | First Release | Date the package first appeared on its registry |
 | Releases | Total number of published versions |
-| Downloads/mo | Python only, with `--download-stats` |
+| Downloads/mo | Python only, with `--download-stats` (monthly count from pypistats) |
+| Downloads (90d) | Rust only, always shown (last-90-days count from crates.io) |
 | Supply Chain | Score 0–100 % from socket.dev (requires `--socket-key` + `--socket-org`) |
 | Link | Registry page URL (CLI only) |
 
@@ -442,7 +443,7 @@ Output is a top-level object keyed by ecosystem (always in the fixed order `npm`
 
 Per-ecosystem field rules:
 - `firstReleased` is **omitted for Go entries** (the Go module proxy does not expose a cheap first-release timestamp).
-- `downloadsLastMonth` is included **only for Python entries when `--download-stats` is passed**.
+- `downloadsLastMonth` is included for **Rust entries always** (crates.io `recent_downloads`, a last-90-days count) and for **Python entries when `--download-stats` is passed** (pypistats monthly count). The JSON key is shared, but the counting window differs per ecosystem as noted; `null` when unavailable.
 - `supplyChainScore` is included on every entry when socket.dev credentials are provided.
 
 When `--socket-key` and `--socket-org` are provided, each entry additionally contains:
@@ -496,6 +497,8 @@ go run server.go -dir ./web   # serve a different directory
 The web UI supports the same GitHub URL formats as the CLI. It links each package to its registry page (PyPI or npmjs.com).
 
 **Python download statistics** — pypistats.org does not emit CORS headers, so the browser cannot call it directly. Tick **Show Python download statistics** before analysing; requests are routed through the same Cloudflare Worker proxy (`socket-proxy.yoda.cc`) used for socket.dev, which adds CORS headers and forwards the response unchanged. The Downloads/mo column appears in the Python section only when this option is enabled.
+
+**Rust download counts** — the Rust "Downloads (90d)" column appears automatically with no checkbox. crates.io emits CORS headers and the count arrives with the crate record depsview already fetches, so no proxy or opt-in is needed.
 
 ### Ecosystem filter
 

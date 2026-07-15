@@ -6,6 +6,7 @@ import {
   getReleaseDate,
   getFirstReleaseDate,
   getReleaseCount,
+  getRecentDownloads,
   getVersionList,
 } from '../../src/rust/cratesClient.js';
 
@@ -77,6 +78,52 @@ describe('getReleaseCount', () => {
 
   it('returns 0 when versions is not an array', () => {
     assert.equal(getReleaseCount(null), 0);
+  });
+});
+
+// ── getRecentDownloads ────────────────────────────────────────────────────────
+
+describe('getRecentDownloads', () => {
+  it('returns the recent_downloads count as-is for a non-negative integer', () => {
+    assert.equal(getRecentDownloads({ recent_downloads: 233815725 }), 233815725);
+  });
+
+  it('returns null when recent_downloads is missing', () => {
+    assert.equal(getRecentDownloads({}), null);
+  });
+
+  it('returns null when recent_downloads is null', () => {
+    assert.equal(getRecentDownloads({ recent_downloads: null }), null);
+  });
+
+  it('returns null when recent_downloads is negative', () => {
+    assert.equal(getRecentDownloads({ recent_downloads: -5 }), null);
+  });
+
+  it('floors a floating-point recent_downloads value', () => {
+    assert.equal(getRecentDownloads({ recent_downloads: 12.9 }), 12);
+  });
+
+  it('returns null when crate is null', () => {
+    assert.equal(getRecentDownloads(null), null);
+  });
+
+  it('returns null when crate is a non-object', () => {
+    assert.equal(getRecentDownloads('serde'), null);
+    assert.equal(getRecentDownloads(42), null);
+    assert.equal(getRecentDownloads(undefined), null);
+  });
+
+  it('returns null when recent_downloads is NaN', () => {
+    assert.equal(getRecentDownloads({ recent_downloads: NaN }), null);
+  });
+
+  it('returns null when recent_downloads is Infinity', () => {
+    assert.equal(getRecentDownloads({ recent_downloads: Infinity }), null);
+  });
+
+  it('returns 0 when recent_downloads is exactly 0', () => {
+    assert.equal(getRecentDownloads({ recent_downloads: 0 }), 0);
   });
 });
 
