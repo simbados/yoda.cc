@@ -4,7 +4,7 @@ Lists all dependencies and transitive dependencies of a Python, npm, Go, or Rust
 
 Built with [Claude Code](https://claude.ai/code).
 
-**Data sources:** [PyPI](https://pypi.org/) for Python packages, [registry.npmjs.org](https://registry.npmjs.org) for npm packages, [proxy.golang.org](https://proxy.golang.org/) for Go modules, [crates.io](https://crates.io/) for Rust crates, [api.github.com](https://docs.github.com/en/rest) for GitHub URL support, [pypistats.org](https://pypistats.org/) for Python download statistics (optional), [socket.dev](https://socket.dev/) for supply chain security scores (optional).
+**Data sources:** [PyPI](https://pypi.org/) for Python packages, [registry.npmjs.org](https://registry.npmjs.org) for npm packages, [api.npmjs.org](https://github.com/npm/registry/blob/main/docs/download-counts.md) for npm download counts, [proxy.golang.org](https://proxy.golang.org/) for Go modules, [crates.io](https://crates.io/) for Rust crates, [api.github.com](https://docs.github.com/en/rest) for GitHub URL support, [pypistats.org](https://pypistats.org/) for Python download statistics (optional), [socket.dev](https://socket.dev/) for supply chain security scores (optional).
 
 ## Requirements
 
@@ -239,6 +239,10 @@ Both the CLI and the web/GitHub code paths read from the registry automatically 
 
 When no lock file is found, depsview reads `package.json` and recursively resolves all transitive dependencies from the npm registry, following each package's `dependencies` field.
 
+### Download counts
+
+A **"Downloads/mo"** column is shown for npm packages (npm, pnpm, bun, and yarn projects all use the same resolver). The figure is the last-month download count from the [npm downloads API](https://github.com/npm/registry/blob/main/docs/download-counts.md) (`api.npmjs.org`). It is displayed **always** — no flag is required. Unlike Python's `--download-stats` opt-in, the fetch is cheap: unscoped packages are batched through the bulk endpoint (up to 128 names per request) and only scoped packages (`@scope/name`) cost one request each, so an entire tree resolves in a handful of extra calls. Packages that fail to resolve show `—`. `api.npmjs.org` emits CORS headers, so the web UI fetches the counts directly with no proxy.
+
 ### Scoped packages
 
 Scoped package names (e.g. `@babel/core`, `@types/node`) are fully supported throughout.
@@ -389,7 +393,7 @@ GITHUB_TOKEN=ghp_... node src/main.js https://github.com/owner/private-repo
 | Released | Date the resolved version was published |
 | First Release | Date the package first appeared on its registry |
 | Releases | Total number of published versions |
-| Downloads/mo | Python only, with `--download-stats` (monthly count from pypistats) |
+| Downloads/mo | npm: always shown (last-month count from api.npmjs.org). Python: only with `--download-stats` (monthly count from pypistats) |
 | Downloads (90d) | Rust only, always shown (last-90-days count from crates.io) |
 | Supply Chain | Score 0–100 % from socket.dev (requires `--socket-key` + `--socket-org`) |
 | Link | Registry page URL (CLI only) |
@@ -443,7 +447,7 @@ Output is a top-level object keyed by ecosystem (always in the fixed order `npm`
 
 Per-ecosystem field rules:
 - `firstReleased` is **omitted for Go entries** (the Go module proxy does not expose a cheap first-release timestamp).
-- `downloadsLastMonth` is included for **Rust entries always** (crates.io `recent_downloads`, a last-90-days count) and for **Python entries when `--download-stats` is passed** (pypistats monthly count). The JSON key is shared, but the counting window differs per ecosystem as noted; `null` when unavailable.
+- `downloadsLastMonth` is included for **npm entries always** (api.npmjs.org last-month count), for **Rust entries always** (crates.io `recent_downloads`, a last-90-days count), and for **Python entries when `--download-stats` is passed** (pypistats monthly count). The JSON key is shared, but the counting window differs per ecosystem as noted; `null` when unavailable.
 - `supplyChainScore` is included on every entry when socket.dev credentials are provided.
 
 When `--socket-key` and `--socket-org` are provided, each entry additionally contains:
@@ -497,6 +501,8 @@ go run server.go -dir ./web   # serve a different directory
 The web UI supports the same GitHub URL formats as the CLI. It links each package to its registry page (PyPI or npmjs.com).
 
 **Python download statistics** — pypistats.org does not emit CORS headers, so the browser cannot call it directly. Tick **Show Python download statistics** before analysing; requests are routed through the same Cloudflare Worker proxy (`socket-proxy.yoda.cc`) used for socket.dev, which adds CORS headers and forwards the response unchanged. The Downloads/mo column appears in the Python section only when this option is enabled.
+
+**npm download counts** — the npm "Downloads/mo" column appears automatically with no checkbox. `api.npmjs.org` emits CORS headers, so the browser fetches the counts directly (bulk for unscoped packages, one request per scoped package); no proxy or opt-in is needed.
 
 **Rust download counts** — the Rust "Downloads (90d)" column appears automatically with no checkbox. crates.io emits CORS headers and the count arrives with the crate record depsview already fetches, so no proxy or opt-in is needed.
 

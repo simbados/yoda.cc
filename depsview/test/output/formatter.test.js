@@ -777,15 +777,28 @@ describe('formatJson — grouped multi-section output', () => {
     assert.ok(!('firstReleased' in obj.go[0]));
   });
 
-  test('downloadsLastMonth is included only for python sections when downloadStats is true', () => {
+  test('downloadsLastMonth: python opt-in, npm always, go never', () => {
     const sections = new Map([
       ['python', { results: makeResults([{ name: 'requests', version: '2.31.0', released: '2023-05-22', downloadsLastMonth: 100 }]), directNames: new Set() }],
-      ['npm',    { results: makeResults([{ name: 'express',  version: '4.19.2', released: '2024-03-25' }]), directNames: new Set() }],
+      ['npm',    { results: makeResults([{ name: 'express',  version: '4.19.2', released: '2024-03-25', downloadsLastMonth: 200 }]), directNames: new Set() }],
+      ['go',     { results: makeResults([{ name: 'github.com/gin-gonic/gin', version: 'v1.9.1', released: '2023-06-01' }]), directNames: new Set() }],
     ]);
     const output = captureConsole(() => formatJson(sections, { downloadStats: true }));
     const obj = JSON.parse(output);
     assert.ok('downloadsLastMonth' in obj.python[0]);
-    assert.ok(!('downloadsLastMonth' in obj.npm[0]));
+    assert.ok('downloadsLastMonth' in obj.npm[0]);
+    assert.ok(!('downloadsLastMonth' in obj.go[0]));
+  });
+
+  test('npm downloadsLastMonth is included even when downloadStats is false', () => {
+    const sections = new Map([
+      ['npm',    { results: makeResults([{ name: 'express',  version: '4.19.2', released: '2024-03-25', downloadsLastMonth: 200 }]), directNames: new Set() }],
+      ['python', { results: makeResults([{ name: 'requests', version: '2.31.0', released: '2023-05-22', downloadsLastMonth: 100 }]), directNames: new Set() }],
+    ]);
+    const output = captureConsole(() => formatJson(sections));
+    const obj = JSON.parse(output);
+    assert.ok('downloadsLastMonth' in obj.npm[0]);
+    assert.ok(!('downloadsLastMonth' in obj.python[0]));
   });
 
   test('skips ecosystems not present in the sections map', () => {

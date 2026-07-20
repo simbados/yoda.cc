@@ -227,9 +227,10 @@ function renderSection(ecosystem, section, showHeader, socketScores, downloadSta
   const total = rows.length;
 
   const showFirst  = ecosystem !== 'go';
-  // Rust always shows downloads (crates.io's 90-day figure comes free with the
-  // crate record); Python only when --download-stats was passed.
-  const showDl     = ecosystem === 'rust' || (downloadStats && ecosystem === 'python');
+  // Rust (crates.io 90-day figure) and npm (api.npmjs.org last-month figure)
+  // always show downloads via cheap bulk fetches; Python only when
+  // --download-stats was passed.
+  const showDl     = ecosystem === 'rust' || ecosystem === 'npm' || (downloadStats && ecosystem === 'python');
   const dlLabel    = ecosystem === 'rust' ? 'Downloads (90d)' : 'Downloads/mo';
   const showSocket = socketScores != null;
   const socketSlug = SOCKET_URL_SLUG[ecosystem] ?? null;

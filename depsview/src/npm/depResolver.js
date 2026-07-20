@@ -13,6 +13,7 @@
  */
 
 import { fetchPackageInfo, getVersionList, getReleaseDate, getFirstReleaseDate, getReleaseCount } from './npmClient.js';
+import { fetchDownloadCounts } from './npmStatsClient.js';
 import { resolveVersion } from './versionResolver.js';
 import { isNonRegistrySpec } from './parserCore.js';
 import { Semaphore } from '../util/semaphore.js';
@@ -191,19 +192,56 @@ async function resolveFromRanges(directDeps, opts) {
 }
 
 /**
+ * Post-resolution pass: fills in `downloadsLastMonth` for every successfully
+ * resolved package from api.npmjs.org.
+ *
+ * Runs after resolution so all package names are known upfront and can be
+ * batched into the downloads API's bulk endpoint (unscoped packages, 128 per
+ * request) with scoped names fetched individually. Download counts live on a
+ * separate endpoint from the registry document, so this is always an extra pass;
+ * it is cheap enough (a handful of requests for a whole tree) to run by default.
+ * Packages that failed to resolve (they carry an `error`) are skipped, since a
+ * missing package has no meaningful download figure.
+ *
+ * @param {Map<string, object>} results - resolved packages, mutated in place
+ * @param {{ onProgress?: (msg: string) => void }} opts
+ * @returns {Promise<void>}
+ */
+async function fillDownloadCounts(results, opts) {
+  const { onProgress } = opts;
+  const resolved = [...results.values()].filter(r => !r.error);
+  if (resolved.length === 0) return;
+
+  onProgress?.('\nFetching download counts...');
+  const counts = await fetchDownloadCounts(resolved.map(r => r.name));
+  for (const result of resolved) {
+    result.downloadsLastMonth = counts.get(result.name.toLowerCase()) ?? null;
+  }
+}
+
+/**
  * Resolves npm dependencies and returns registry metadata for each package.
  * Automatically selects the resolution path based on the input shape:
  *   - Items with a `version` property  → lock file path (metadata-only)
  *   - Items with a `versionSpec` property → package.json path (recursive)
+ * After resolution, download counts are fetched from api.npmjs.org and attached
+ * to each result unless `downloads` is disabled.
  * @param {Array<{ name: string, version: string }|{ name: string, versionSpec: string|null }>} deps
- * @param {{ onProgress?: (msg: string) => void }} [opts]
+ * @param {{ onProgress?: (msg: string) => void, downloads?: boolean }} [opts]
+ * @param {boolean} [opts.downloads=true] - when false, skips the api.npmjs.org
+ *   download-count pass (leaving `downloadsLastMonth` as null). Used by tests to
+ *   avoid network calls.
  * @returns {Promise<Map<string, object>>}
  */
 async function resolveDependencies(deps, opts = {}) {
   if (deps.length === 0) return new Map();
-  return 'version' in deps[0]
-    ? resolveFromLock(deps, opts)
-    : resolveFromRanges(deps, opts);
+  const { downloads = true } = opts;
+  const results = 'version' in deps[0]
+    ? await resolveFromLock(deps, opts)
+    : await resolveFromRanges(deps, opts);
+
+  if (downloads) await fillDownloadCounts(results, opts);
+  return results;
 }
 
 export { resolveDependencies, normalizePackageName };

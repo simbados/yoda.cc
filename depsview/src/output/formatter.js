@@ -177,7 +177,7 @@ function printNonStandardSources(dangerousDeps, privatePkgs) {
  * Column visibility:
  *   - First Release: shown unless `firstRelease: false` (Go modules hide this).
  *   - Downloads:     shown when `downloadStats: true`. The column heading is set
- *                    by `downloadsLabel` (Python: "Downloads/mo"; Rust:
+ *                    by `downloadsLabel` (Python/npm: "Downloads/mo"; Rust:
  *                    "Downloads (90d)" — crates.io's 90-day figure).
  *   - Supply Chain:  shown when `socketScores` is provided (any ecosystem).
  *
@@ -320,10 +320,11 @@ function formatMulti(sections, opts = {}) {
     const { results, directNames, source, note, privateCount = 0, privatePkgs = [], dangerousDeps = [] } = sections.get(ecosystem);
     formatTable(results, directNames, {
       ecosystem,
-      // Per-ecosystem column rules. Rust always shows downloads (crates.io's
-      // 90-day figure comes free with the crate record); Python shows them only
-      // when the user opted in with --download-stats (pypistats is rate-limited).
-      downloadStats: ecosystem === 'rust' || (downloadStats && ecosystem === 'python'),
+      // Per-ecosystem column rules. Rust (crates.io 90-day figure) and npm
+      // (api.npmjs.org last-month figure) always show downloads — cheap bulk
+      // fetches. Python shows them only when the user opted in with
+      // --download-stats (pypistats is rate-limited and CORS-proxied).
+      downloadStats: ecosystem === 'rust' || ecosystem === 'npm' || (downloadStats && ecosystem === 'python'),
       downloadsLabel: ecosystem === 'rust' ? 'Downloads (90d)' : 'Downloads/mo',
       socketScores,
       source,
@@ -344,7 +345,8 @@ function formatMulti(sections, opts = {}) {
  *
  * Each row contains name, version, released, releases, link and (per-ecosystem):
  *   - firstReleased        — npm/python only
- *   - downloadsLastMonth   — Rust always (crates.io 90-day count); Python when
+ *   - downloadsLastMonth   — Rust always (crates.io 90-day count); npm always
+ *                            (api.npmjs.org last-month count); Python when
  *                            `downloadStats: true` (pypistats monthly count)
  *   - supplyChainScore     — any ecosystem, when `socketScores` is provided
  *   - error                — when resolution failed for that package
@@ -362,7 +364,7 @@ function formatJson(sections, opts = {}) {
     if (!sections.has(ecosystem)) continue;
     const { results } = sections.get(ecosystem);
     const includeFirst    = ecosystem !== 'go';
-    const includeDownloads = ecosystem === 'rust' || (downloadStats && ecosystem === 'python');
+    const includeDownloads = ecosystem === 'rust' || ecosystem === 'npm' || (downloadStats && ecosystem === 'python');
 
     out[ecosystem] = sortedResults(results, socketScores ?? new Map(), { ecosystem }).map(r => {
       const obj = { name: r.name, version: r.version, released: r.released, releases: r.releases, link: r.link };

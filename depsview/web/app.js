@@ -897,7 +897,7 @@ if (typeof document !== 'undefined') {
             privateCount:    section.privateCount ?? 0,
             sortCol,
             sortDir,
-            showDownloads:   section.ecosystem === 'rust' || (section.downloadStats && section.ecosystem === 'python'),
+            showDownloads:   section.ecosystem === 'rust' || section.ecosystem === 'npm' || (section.downloadStats && section.ecosystem === 'python'),
             showSupplyChain,
             socketSlug:      showSupplyChain ? (SOCKET_URL_SLUG[section.ecosystem] ?? null) : null,
           });

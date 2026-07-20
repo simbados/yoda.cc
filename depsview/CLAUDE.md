@@ -2,7 +2,7 @@
 
 depsview lists the dependencies and transitive dependencies of a Python, npm, Go, or Rust project. It runs as a CLI and as a browser-only web UI. All metadata is fetched live from public registries — no local language toolchain is required.
 
-External data sources: `pypi.org`, `pypistats.org` (optional Python download stats), `registry.npmjs.org`, `proxy.golang.org`, `crates.io`, `api.github.com`, `socket.dev` (optional supply-chain scores).
+External data sources: `pypi.org`, `pypistats.org` (optional Python download stats), `registry.npmjs.org`, `api.npmjs.org` (npm download counts), `proxy.golang.org`, `crates.io`, `api.github.com`, `socket.dev` (optional supply-chain scores).
 
 Cross-cutting rules (no third-party deps, plan-first, mandatory docstrings, coding style, the three project agents, Definition of Done) live in `yoda/CLAUDE.md` and apply here.
 
@@ -24,7 +24,8 @@ src/
     yarnLockParser.js       yarn.lock parser (Classic v1 + Berry v2+) — pure string, browser-safe
     parserCore.js           package.json parser — pure string, browser-safe
     parser.js               Node.js filesystem wrapper; iterates lockRegistry then falls back to package.json
-    depResolver.js          Fetches package metadata from registry.npmjs.org
+    depResolver.js          Fetches package metadata from registry.npmjs.org; post-pass attaches download counts
+    npmStatsClient.js       api.npmjs.org download-counts client (last-month, bulk + scoped) — browser-safe
     registryFilter.js       Splits packages into public (registry.npmjs.org) vs private by resolved URL
 
   python/
@@ -93,7 +94,7 @@ where `deps` contains only public-registry packages (private ones are in `privat
 
 ## Browser-compatibility rule
 
-Files ending in `parserCore.js`, all individual lock parser files (`lockParser.js`, `pnpmLockParser.js`, `bunLockParser.js`, `yarnLockParser.js`, `lockRegistry.js`), and the Rust browser-loaded helpers (`rust/versionResolver.js`, `rust/crateFilter.js`) **must not import Node.js built-ins** (`fs`, `path`, etc.). They are loaded directly in the browser via the `web/src` symlink. The `parser.js` files (including `rust/parser.js`) are the Node-only fs wrappers and are never loaded in the browser.
+Files ending in `parserCore.js`, all individual lock parser files (`lockParser.js`, `pnpmLockParser.js`, `bunLockParser.js`, `yarnLockParser.js`, `lockRegistry.js`), the npm registry/download clients (`npm/npmClient.js`, `npm/npmStatsClient.js`), and the Rust browser-loaded helpers (`rust/versionResolver.js`, `rust/crateFilter.js`) **must not import Node.js built-ins** (`fs`, `path`, etc.). They are loaded directly in the browser via the `web/src` symlink. The `parser.js` files (including `rust/parser.js`) are the Node-only fs wrappers and are never loaded in the browser.
 
 ## How to add a new npm lock file format
 
