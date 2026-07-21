@@ -134,3 +134,76 @@ describe('resolveVersion — no match', () => {
     assert.equal(version, null);
   });
 });
+
+describe('satisfiesRange — spaced comparators', () => {
+  it('3.3.1 satisfies >= 3.1.0 < 4', () => assert.ok(satisfiesRange('3.3.1', '>= 3.1.0 < 4')));
+  it('3.1.0 satisfies >= 3.1.0 < 4', () => assert.ok(satisfiesRange('3.1.0', '>= 3.1.0 < 4')));
+  it('3.0.0 does not satisfy >= 3.1.0 < 4', () => assert.ok(!satisfiesRange('3.0.0', '>= 3.1.0 < 4')));
+  it('4.0.0 does not satisfy >= 3.1.0 < 4', () => assert.ok(!satisfiesRange('4.0.0', '>= 3.1.0 < 4')));
+
+  it('1.0.1 satisfies > 1.0.0', () => assert.ok(satisfiesRange('1.0.1', '> 1.0.0')));
+  it('1.0.0 does not satisfy > 1.0.0', () => assert.ok(!satisfiesRange('1.0.0', '> 1.0.0')));
+
+  it('2.0.0 satisfies <= 2.0.0', () => assert.ok(satisfiesRange('2.0.0', '<= 2.0.0')));
+  it('2.0.1 does not satisfy <= 2.0.0', () => assert.ok(!satisfiesRange('2.0.1', '<= 2.0.0')));
+
+  it('1.0.0 satisfies >= 1.0.0', () => assert.ok(satisfiesRange('1.0.0', '>= 1.0.0')));
+  it('0.9.9 does not satisfy >= 1.0.0', () => assert.ok(!satisfiesRange('0.9.9', '>= 1.0.0')));
+
+  it('1.5.0 satisfies < 2.0.0', () => assert.ok(satisfiesRange('1.5.0', '< 2.0.0')));
+  it('2.0.0 does not satisfy < 2.0.0', () => assert.ok(!satisfiesRange('2.0.0', '< 2.0.0')));
+});
+
+describe('satisfiesRange — multiple spaces between operator and version', () => {
+  it('3.1.0 satisfies >=  3.1.0', () => assert.ok(satisfiesRange('3.1.0', '>=  3.1.0')));
+  it('3.0.0 does not satisfy >=  3.1.0', () => assert.ok(!satisfiesRange('3.0.0', '>=  3.1.0')));
+  it('3.3.1 satisfies >=   3.1.0    <   4', () => assert.ok(satisfiesRange('3.3.1', '>=   3.1.0    <   4')));
+  it('4.0.0 does not satisfy >=   3.1.0    <   4', () => assert.ok(!satisfiesRange('4.0.0', '>=   3.1.0    <   4')));
+});
+
+describe('satisfiesRange — spaced equals unspaced', () => {
+  const cases = ['3.0.0', '3.1.0', '3.3.1', '4.0.0'];
+  it('>= 3.1.0 < 4 matches identically to >=3.1.0 <4', () => {
+    for (const v of cases) {
+      assert.equal(satisfiesRange(v, '>= 3.1.0 < 4'), satisfiesRange(v, '>=3.1.0 <4'));
+    }
+  });
+
+  it('unspaced >=1.0.0 <2.0.0 still behaves as before', () => {
+    assert.ok(satisfiesRange('1.5.0', '>=1.0.0 <2.0.0'));
+    assert.ok(!satisfiesRange('2.0.0', '>=1.0.0 <2.0.0'));
+    assert.ok(!satisfiesRange('0.9.9', '>=1.0.0 <2.0.0'));
+  });
+
+  it('spaced comparators inside an OR range still resolve per branch', () => {
+    assert.ok(satisfiesRange('1.0.0', '< 1.5.0 || >= 3.0.0'));
+    assert.ok(satisfiesRange('3.1.0', '< 1.5.0 || >= 3.0.0'));
+    assert.ok(!satisfiesRange('2.0.0', '< 1.5.0 || >= 3.0.0'));
+  });
+});
+
+describe('resolveVersion — spaced comparators (thenify regression)', () => {
+  const thenifyVersions = ['1.0.0', '2.0.0', '3.0.0', '3.1.0', '3.1.1', '3.2.0', '3.2.1', '3.3.0', '3.3.1'];
+
+  it('does not return null for >= 3.1.0 < 4 (original bug returned null)', () => {
+    const { version } = resolveVersion('>= 3.1.0 < 4', thenifyVersions);
+    assert.notEqual(version, null);
+  });
+
+  it('picks the highest in-range version 3.3.1 for >= 3.1.0 < 4', () => {
+    const { version } = resolveVersion('>= 3.1.0 < 4', thenifyVersions);
+    assert.equal(version, '3.3.1');
+  });
+
+  it('resolves the spaced range identically to its unspaced form', () => {
+    const spaced = resolveVersion('>= 3.1.0 < 4', thenifyVersions);
+    const unspaced = resolveVersion('>=3.1.0 <4', thenifyVersions);
+    assert.equal(spaced.version, unspaced.version);
+    assert.equal(spaced.version, '3.3.1');
+  });
+
+  it('handles multiple spaces between operator and version', () => {
+    const { version } = resolveVersion('>=   3.1.0   <   4', thenifyVersions);
+    assert.equal(version, '3.3.1');
+  });
+});

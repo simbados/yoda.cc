@@ -63,6 +63,7 @@ src/
 web/
   app.js                    Browser entry point — GitHub mode UI, calls src/github/parser.js
   src → symlink to ../src   Shared source used by both CLI and web
+  _headers                  Cloudflare Pages headers — CSP (incl. connect-src allowlist), HSTS, etc.
 ```
 
 ## Two code paths, one shared core
@@ -77,6 +78,10 @@ Web:  web/app.js            → src/github/parser.js         (fetches via GitHub
 ```
 
 Both paths use the **same** parser cores (`parserCore.js`, `lockParser.js`, etc.) and resolver modules. `src/github/parser.js` is the web equivalent of the four `src/*/parser.js` files combined.
+
+## Content-Security-Policy allowlist (web only)
+
+The web app is served by Cloudflare Pages with a strict CSP defined in `web/_headers`. `default-src 'none'` blocks everything by default, so **every host the browser fetches directly must be listed in `connect-src`**. It is not enough for the upstream host to send CORS headers — a missing `connect-src` entry makes the browser refuse the request before it is sent (`Refused to connect … violates the document's Content Security Policy`). Current `connect-src` hosts: `api.github.com`, `pypi.org`, `registry.npmjs.org`, `api.npmjs.org` (npm download counts), `proxy.golang.org`, `crates.io`, `socket-proxy.yoda.cc` (the Worker proxy for pypistats + socket.dev). Whenever a resolver or client starts fetching a new host from browser-loaded code, add it here or the feature works on the CLI but silently fails in the web UI. The standalone HTML report (`src/output/reportGenerator.js`) has its own inline CSP but makes no network requests (all data is baked in), so it needs no `connect-src`.
 
 ## Parser contract
 
@@ -110,6 +115,7 @@ Files ending in `parserCore.js`, all individual lock parser files (`lockParser.j
 4. Register in `web/app.js` (detectEcosystems, ECOSYSTEM_ORDER, ECOSYSTEM_PURL_TYPE, SOCKET_URL_SLUG, section rendering) and add the radio in `web/index.html`.
 5. Register in `src/main.js` (ecosystem flag + `{ECO}_FILES` set + detection).
 6. Register in `src/output/formatter.js` (ECOSYSTEM_ORDER + PURL mapping) and `src/packageInput.js` (`parse{Eco}` for `--package` input).
+7. If the ecosystem's browser-loaded code fetches any new host (registry, stats API, etc.), add that host to the `connect-src` allowlist in `web/_headers` — otherwise the web UI is blocked by CSP even though the CLI works.
 
 ## Test layout
 

@@ -234,7 +234,15 @@ function satisfiesRange(versionStr, rangeStr) {
 
   return orParts.some(andPart => {
     if (!andPart || andPart === '*') return true;
-    const comparators = andPart.split(/\s+/).filter(Boolean).flatMap(parseComparatorToken);
+    // npm permits whitespace between a comparator operator and its version
+    // (e.g. ">= 3.1.0 < 4"). Glue each operator to the version that follows it
+    // before splitting on whitespace, otherwise a bare ">=" token is mis-parsed
+    // as its own comparator and the range never matches. ">=" / "<=" are listed
+    // first so they are glued as units rather than as ">" + "=".
+    const comparators = andPart
+      .replace(/(>=|<=|>|<|=)\s+/g, '$1')
+      .split(/\s+/).filter(Boolean)
+      .flatMap(parseComparatorToken);
     return comparators.every(c => satisfiesComparator(v, c));
   });
 }
