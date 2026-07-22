@@ -1,18 +1,21 @@
 /**
  * npm downloads API client (api.npmjs.org).
  *
- * Fetches last-month download counts for npm packages. Unlike the npm registry
- * document (registry.npmjs.org), download counts live on a separate endpoint,
- * so this is an extra network pass on top of resolution.
+ * Fetches last-month download counts for npm packages. Download counts live on a
+ * separate endpoint from the registry document (registry.npmjs.org), so this is
+ * an extra network pass on top of resolution.
  *
- * Two request shapes are used:
- *   - Bulk  (unscoped packages): GET /downloads/point/last-month/a,b,c returns a
- *     keyed object `{ a: { downloads }|null, ... }` for up to 128 packages at a
- *     time. This is the cheap path — an entire tree of unscoped packages costs
- *     only ceil(n/128) requests.
- *   - Point (scoped packages @scope/name): the bulk endpoint does not accept
- *     scoped names, so each is fetched individually and returns a flat
- *     `{ downloads, package }` object.
+ * Only UNSCOPED packages are fetched, via the bulk endpoint:
+ *   GET /downloads/point/last-month/a,b,c → `{ a: { downloads }|null, ... }`
+ * for up to 128 packages per request, so an entire tree of unscoped packages
+ * costs only ceil(n/128) requests.
+ *
+ * SCOPED packages (@scope/name) are deliberately NOT fetched. npm's bulk endpoint
+ * rejects them ("scoped packages are not currently supported in bulk lookups"),
+ * and there is no other API that returns scoped counts in bulk — fetching them
+ * one-by-one rate-limits (429) on large trees. Their count is reported as null
+ * (rendered as a dash); the individual figures of scoped packages (@types/*,
+ * platform-specific binaries like @esbuild/*) are the least meaningful anyway.
  *
  * api.npmjs.org sends `Access-Control-Allow-Origin: *`, so the browser calls it
  * directly — no CORS proxy is required. This file is therefore browser-safe and
@@ -86,8 +89,10 @@ function chunk(arr, size) {
 /**
  * Fetches last-month download counts for a set of npm package names.
  *
- * Names are deduplicated case-insensitively and split into unscoped (bulk) and
- * scoped (individual) groups. Results are cached by lowercased name across calls
+ * Names are deduplicated case-insensitively. Only unscoped names are fetched, in
+ * bulk (up to BULK_CHUNK per request). Scoped names (@scope/name) are not fetched
+ * — the bulk endpoint rejects them and there is no bulk alternative — so they are
+ * recorded as null (a dash). Results are cached by lowercased name across calls
  * within one run. Any name whose count cannot be determined maps to null.
  *
  * @param {string[]} names - npm package names (scoped or plain)
@@ -114,14 +119,6 @@ async function fetchDownloadCounts(names, { baseUrl = STATS_BASE } = {}) {
   }
   if (toFetch.size === 0) return out;
 
-  const scoped   = [];
-  const unscoped = [];
-  for (const [key, original] of toFetch) {
-    (original.startsWith('@') ? scoped : unscoped).push([key, original]);
-  }
-
-  const semaphore = new Semaphore(CONCURRENCY);
-
   /**
    * Stores a resolved count in both the cache and the return map.
    * @param {string} key
@@ -132,6 +129,17 @@ async function fetchDownloadCounts(names, { baseUrl = STATS_BASE } = {}) {
     out.set(key, value);
   }
 
+  // Scoped packages cannot be looked up in bulk (npm rejects them) and per-package
+  // lookups rate-limit on large trees, so they are recorded as null without a
+  // network call. Everything else goes through the bulk endpoint.
+  const unscoped = [];
+  for (const [key, original] of toFetch) {
+    if (original.startsWith('@')) record(key, null);
+    else unscoped.push([key, original]);
+  }
+  if (unscoped.length === 0) return out;
+
+  const semaphore = new Semaphore(CONCURRENCY);
   const tasks = [];
 
   // Bulk path: unscoped packages, up to BULK_CHUNK per request.
@@ -153,20 +161,6 @@ async function fetchDownloadCounts(names, { baseUrl = STATS_BASE } = {}) {
         const entry = single ? data : data?.[original];
         record(key, getDownloadCount(entry));
       }
-    })());
-  }
-
-  // Point path: scoped packages, one request each.
-  for (const [key, original] of scoped) {
-    tasks.push((async () => {
-      await semaphore.acquire();
-      let data;
-      try {
-        data = await fetchWithRetry(`${baseUrl}/${encodeStatsName(original)}`, { serviceName: 'npm downloads', throwOnError: false });
-      } finally {
-        semaphore.release();
-      }
-      record(key, getDownloadCount(data));
     })());
   }
 

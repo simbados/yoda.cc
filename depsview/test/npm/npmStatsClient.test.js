@@ -97,33 +97,31 @@ describe('fetchDownloadCounts', () => {
     assert.equal(result.get('solo'), 42);
   });
 
-  it('fetches scoped names individually and keeps them out of the bulk URL', async () => {
-    setFetch((url) => {
-      if (url.includes('babel')) return ok({ downloads: 3, package: '@babel/core' });
-      return ok({ react: { downloads: 1 }, vue: { downloads: 2 } });
-    });
-    const result = await fetchDownloadCounts(['react', 'vue', '@babel/core']);
+  it('records scoped names as null without fetching them and bulk-fetches only the unscoped ones', async () => {
+    setFetch(() => ok({ react: { downloads: 1 }, vue: { downloads: 2 } }));
+    const result = await fetchDownloadCounts(['react', '@babel/core', 'vue', '@types/node']);
 
-    const bulkCall   = calls.find(u => u.includes(','));
-    const scopedCall = calls.find(u => u.includes('babel'));
-    assert.ok(bulkCall);
-    assert.ok(!bulkCall.includes('babel'));
-    assert.equal(bulkCall, `${STATS_BASE}/react,vue`);
-    assert.ok(scopedCall);
-    assert.ok(!scopedCall.includes(','));
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0], `${STATS_BASE}/react,vue`);
+    assert.ok(!calls.some(u => u.includes('babel')));
+    assert.ok(!calls.some(u => u.includes('types')));
+    assert.ok(!calls.some(u => u.includes('%40')));
 
     assert.equal(result.get('react'), 1);
     assert.equal(result.get('vue'), 2);
-    assert.equal(result.get('@babel/core'), 3);
+    assert.equal(result.get('@babel/core'), null);
+    assert.equal(result.get('@types/node'), null);
   });
 
-  it('encodeURIComponent-encodes a scoped name in the point URL', async () => {
-    setFetch(() => ok({ downloads: 8, package: '@babel/core' }));
-    await fetchDownloadCounts(['@babel/core']);
-    assert.equal(calls.length, 1);
-    assert.equal(calls[0], `${STATS_BASE}/%40babel%2Fcore`);
-    assert.ok(calls[0].includes('%2F'));
-    assert.ok(!calls[0].includes('@'));
+  it('makes zero requests and returns name→null when every name is scoped', async () => {
+    setFetch(() => ok({}));
+    const result = await fetchDownloadCounts(['@babel/core', '@types/node', '@ESBuild/Linux']);
+
+    assert.equal(calls.length, 0);
+    assert.equal(result.size, 3);
+    assert.equal(result.get('@babel/core'), null);
+    assert.equal(result.get('@types/node'), null);
+    assert.equal(result.get('@esbuild/linux'), null);
   });
 
   it('lowercases result Map keys', async () => {

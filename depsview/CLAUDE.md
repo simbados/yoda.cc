@@ -25,7 +25,7 @@ src/
     parserCore.js           package.json parser — pure string, browser-safe
     parser.js               Node.js filesystem wrapper; iterates lockRegistry then falls back to package.json
     depResolver.js          Fetches package metadata from registry.npmjs.org; post-pass attaches download counts
-    npmStatsClient.js       api.npmjs.org download-counts client (last-month, bulk + scoped) — browser-safe
+    npmStatsClient.js       api.npmjs.org download-counts client (last-month, bulk/unscoped only) — browser-safe
     registryFilter.js       Splits packages into public (registry.npmjs.org) vs private by resolved URL
 
   python/

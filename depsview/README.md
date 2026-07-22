@@ -241,7 +241,9 @@ When no lock file is found, depsview reads `package.json` and recursively resolv
 
 ### Download counts
 
-A **"Downloads/mo"** column is shown for npm packages (npm, pnpm, bun, and yarn projects all use the same resolver). The figure is the last-month download count from the [npm downloads API](https://github.com/npm/registry/blob/main/docs/download-counts.md) (`api.npmjs.org`). It is displayed **always** — no flag is required. Unlike Python's `--download-stats` opt-in, the fetch is cheap: unscoped packages are batched through the bulk endpoint (up to 128 names per request) and only scoped packages (`@scope/name`) cost one request each, so an entire tree resolves in a handful of extra calls. Packages that fail to resolve show `—`. `api.npmjs.org` emits CORS headers, so the web UI fetches the counts directly with no proxy.
+A **"Downloads/mo"** column is shown for npm packages (npm, pnpm, bun, and yarn projects all use the same resolver). The figure is the last-month download count from the [npm downloads API](https://github.com/npm/registry/blob/main/docs/download-counts.md) (`api.npmjs.org`). It is displayed **always** — no flag is required. Unlike Python's `--download-stats` opt-in, the fetch is cheap: unscoped packages are batched through the bulk endpoint (up to 128 names per request), so an entire tree resolves in a handful of extra calls.
+
+**Scoped packages (`@scope/name`) show `—`, not a count.** npm's bulk endpoint rejects scoped names (`scoped packages are not currently supported in bulk lookups`) and there is no bulk alternative, so counting them would mean one request per package — which rate-limits (429) on large trees. Since a scoped package's individual figure (e.g. `@types/*`, platform binaries like `@esbuild/*`) is rarely a meaningful signal, they are deliberately left blank. Packages that fail to resolve also show `—`. `api.npmjs.org` emits CORS headers, so the web UI fetches the counts directly with no proxy.
 
 ### Scoped packages
 
@@ -393,7 +395,7 @@ GITHUB_TOKEN=ghp_... node src/main.js https://github.com/owner/private-repo
 | Released | Date the resolved version was published |
 | First Release | Date the package first appeared on its registry |
 | Releases | Total number of published versions |
-| Downloads/mo | npm: always shown (last-month count from api.npmjs.org). Python: only with `--download-stats` (monthly count from pypistats) |
+| Downloads/mo | npm: always shown for unscoped packages (last-month count from api.npmjs.org); scoped packages show `—`. Python: only with `--download-stats` (monthly count from pypistats) |
 | Downloads (90d) | Rust only, always shown (last-90-days count from crates.io) |
 | Supply Chain | Score 0–100 % from socket.dev (requires `--socket-key` + `--socket-org`) |
 | Link | Registry page URL (CLI only) |
@@ -502,7 +504,7 @@ The web UI supports the same GitHub URL formats as the CLI. It links each packag
 
 **Python download statistics** — pypistats.org does not emit CORS headers, so the browser cannot call it directly. Tick **Show Python download statistics** before analysing; requests are routed through the same Cloudflare Worker proxy (`socket-proxy.yoda.cc`) used for socket.dev, which adds CORS headers and forwards the response unchanged. The Downloads/mo column appears in the Python section only when this option is enabled.
 
-**npm download counts** — the npm "Downloads/mo" column appears automatically with no checkbox. `api.npmjs.org` emits CORS headers, so the browser fetches the counts directly (bulk for unscoped packages, one request per scoped package); no proxy or opt-in is needed.
+**npm download counts** — the npm "Downloads/mo" column appears automatically with no checkbox. `api.npmjs.org` emits CORS headers, so the browser fetches the counts directly (bulk lookups for unscoped packages; scoped packages show `—` since npm's bulk endpoint does not support them); no proxy or opt-in is needed.
 
 **Rust download counts** — the Rust "Downloads (90d)" column appears automatically with no checkbox. crates.io emits CORS headers and the count arrives with the crate record depsview already fetches, so no proxy or opt-in is needed.
 
