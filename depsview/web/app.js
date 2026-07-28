@@ -13,47 +13,49 @@
  * without a DOM. DOM-manipulation code runs only when `document` is available.
  */
 
-import { parseGithubUrl               } from './src/github/url.js';
-import { parseGithubDependencies,
-         parseGithubNpmDependencies,
-         parseGithubGoDependencies,
-         parseGithubRustDependencies  } from './src/github/parser.js';
-import { resolveDependencies          } from './src/python/depResolver.js';
-import { resolveDependencies as resolveNpm } from './src/npm/depResolver.js';
-import { resolveDependencies as resolveGo  } from './src/go/depResolver.js';
-import { resolveDependencies as resolveRust } from './src/rust/depResolver.js';
-import { setGithubToken               } from './src/github/client.js';
-import { listDirectory                } from './src/github/client.js';
-import { parseMultiPackageInput        } from './src/multiPackageParser.js';
-import { fetchSocketScores, scoreKey  } from './src/socket/client.js';
-import { groupByDomain                } from './src/output/nonStandardSources.js';
-import { NPM_LOCK_FILENAMES           } from './src/npm/lockRegistry.js';
+import { parseGithubUrl } from "./src/github/url.js";
+import {
+  parseGithubDependencies,
+  parseGithubNpmDependencies,
+  parseGithubGoDependencies,
+  parseGithubRustDependencies,
+} from "./src/github/parser.js";
+import { resolveDependencies } from "./src/python/depResolver.js";
+import { resolveDependencies as resolveNpm } from "./src/npm/depResolver.js";
+import { resolveDependencies as resolveGo } from "./src/go/depResolver.js";
+import { resolveDependencies as resolveRust } from "./src/rust/depResolver.js";
+import { setGithubToken } from "./src/github/client.js";
+import { listDirectory } from "./src/github/client.js";
+import { parseMultiPackageInput } from "./src/multiPackageParser.js";
+import { fetchSocketScores, scoreKey } from "./src/socket/client.js";
+import { groupByDomain } from "./src/output/nonStandardSources.js";
+import { NPM_LOCK_FILENAMES } from "./src/npm/lockRegistry.js";
 
 /** Fixed rendering order for ecosystem sections. */
-export const ECOSYSTEM_ORDER = ['npm', 'python', 'go', 'rust'];
+export const ECOSYSTEM_ORDER = ["npm", "python", "go", "rust"];
 
 /**
  * Base URL of the Cloudflare Worker CORS proxy for socket.dev.
  * Set this to your deployed Worker URL (without a trailing slash).
  * Leave empty to disable Supply Chain scores in the browser.
  */
-const SOCKET_PROXY_BASE = 'https://socket-proxy.yoda.cc';
+const SOCKET_PROXY_BASE = "https://socket-proxy.yoda.cc";
 
 /**
  * Base URL of the Cloudflare Worker CORS proxy for pypistats.org.
  * pypistats.org does not emit CORS headers, so the browser cannot call it directly.
  * The Worker adds CORS headers and forwards the response unchanged.
  */
-const PYPISTATS_PROXY_BASE = 'https://socket-proxy.yoda.cc/pypistats/packages';
+const PYPISTATS_PROXY_BASE = "https://socket-proxy.yoda.cc/pypistats/packages";
 
 /**
  * Maps the internal ecosystem identifier to the PURL type expected by socket.dev.
  * Go modules use 'golang', Python packages use 'pypi', Rust crates use 'cargo'.
  */
-const ECOSYSTEM_PURL_TYPE   = { npm: 'npm', python: 'pypi', go: 'golang', rust: 'cargo' };
+const ECOSYSTEM_PURL_TYPE = { npm: "npm", python: "pypi", go: "golang", rust: "cargo" };
 
 /** Maps ecosystem to the socket.dev URL slug used in package detail links. */
-const SOCKET_URL_SLUG = { npm: 'npm', python: 'pypi', go: 'go', rust: 'cargo' };
+const SOCKET_URL_SLUG = { npm: "npm", python: "pypi", go: "go", rust: "cargo" };
 
 // ── Pure utility functions (exported for testing) ─────────────────────────────
 
@@ -64,7 +66,7 @@ const SOCKET_URL_SLUG = { npm: 'npm', python: 'pypi', go: 'go', rust: 'cargo' };
  * @returns {string}
  */
 export function formatNumber(n) {
-  if (n == null) return '–';
+  if (n == null) return "–";
   return n.toLocaleString();
 }
 
@@ -75,7 +77,7 @@ export function formatNumber(n) {
  * @returns {string} e.g. "87%" or "–"
  */
 export function formatScore(n) {
-  if (n == null) return '–';
+  if (n == null) return "–";
   return `${Math.round(n * 100)}%`;
 }
 
@@ -86,7 +88,7 @@ export function formatScore(n) {
  * @returns {number}
  */
 export function daysSince(dateStr) {
-  if (!dateStr || dateStr === 'unknown') return Infinity;
+  if (!dateStr || dateStr === "unknown") return Infinity;
   const ms = Date.now() - new Date(dateStr).getTime();
   if (isNaN(ms)) return Infinity;
   return Math.floor(ms / 86_400_000);
@@ -104,17 +106,18 @@ export function daysSince(dateStr) {
  * @returns {Array<object>}
  */
 export function sortResultsBy(resultsMap, column, direction) {
-  const sign   = direction === 'asc' ? 1 : -1;
-  const isDate = column === 'releaseDate' || column === 'firstReleaseDate';
-  const isNum  = column === 'releaseCount' || column === 'downloadsLastMonth' || column === 'supplyChain';
+  const sign = direction === "asc" ? 1 : -1;
+  const isDate = column === "releaseDate" || column === "firstReleaseDate";
+  const isNum =
+    column === "releaseCount" || column === "downloadsLastMonth" || column === "supplyChain";
 
   return [...resultsMap.values()].sort((a, b) => {
-    const aVal = a[column] ?? (isDate ? 'unknown' : null);
-    const bVal = b[column] ?? (isDate ? 'unknown' : null);
+    const aVal = a[column] ?? (isDate ? "unknown" : null);
+    const bVal = b[column] ?? (isDate ? "unknown" : null);
 
     if (isDate) {
-      const aUnk = aVal === 'unknown';
-      const bUnk = bVal === 'unknown';
+      const aUnk = aVal === "unknown";
+      const bUnk = bVal === "unknown";
       if (aUnk && bUnk) return a.name.localeCompare(b.name);
       if (aUnk) return 1;
       if (bUnk) return -1;
@@ -132,7 +135,7 @@ export function sortResultsBy(resultsMap, column, direction) {
       return cmp !== 0 ? sign * cmp : a.name.localeCompare(b.name);
     }
 
-    const cmp = String(aVal ?? '').localeCompare(String(bVal ?? ''));
+    const cmp = String(aVal ?? "").localeCompare(String(bVal ?? ""));
     return cmp !== 0 ? sign * cmp : 0;
   });
 }
@@ -145,7 +148,7 @@ export function sortResultsBy(resultsMap, column, direction) {
  * @returns {Array<object>}
  */
 export function sortResults(resultsMap) {
-  return sortResultsBy(resultsMap, 'releaseDate', 'desc');
+  return sortResultsBy(resultsMap, "releaseDate", "desc");
 }
 
 /**
@@ -154,15 +157,21 @@ export function sortResults(resultsMap) {
  * @returns {Set<'npm'|'python'|'go'|'rust'>}
  */
 export function detectEcosystems(listing) {
-  const names = new Set(listing.map(e => e.name));
+  const names = new Set(listing.map((e) => e.name));
   const found = new Set();
-  if ([...NPM_LOCK_FILENAMES].some(f => names.has(f)) || names.has('package.json')) found.add('npm');
-  if (names.has('go.sum') || names.has('go.mod'))                                                 found.add('go');
-  if (names.has('Cargo.lock') || names.has('Cargo.toml'))                                         found.add('rust');
-  if (names.has('pyproject.toml')   || names.has('requirements.txt') ||
-      names.has('requirements_all.txt') ||
-      names.has('setup.cfg')        || names.has('Pipfile') ||
-      names.has('manifest.json'))                                                                 found.add('python');
+  if ([...NPM_LOCK_FILENAMES].some((f) => names.has(f)) || names.has("package.json"))
+    found.add("npm");
+  if (names.has("go.sum") || names.has("go.mod")) found.add("go");
+  if (names.has("Cargo.lock") || names.has("Cargo.toml")) found.add("rust");
+  if (
+    names.has("pyproject.toml") ||
+    names.has("requirements.txt") ||
+    names.has("requirements_all.txt") ||
+    names.has("setup.cfg") ||
+    names.has("Pipfile") ||
+    names.has("manifest.json")
+  )
+    found.add("python");
   return found;
 }
 
@@ -175,10 +184,10 @@ export function detectEcosystems(listing) {
  */
 export function detectEcosystem(listing) {
   const set = detectEcosystems(listing);
-  if (set.has('npm'))    return 'npm';
-  if (set.has('go'))     return 'go';
-  if (set.has('rust'))   return 'rust';
-  if (set.has('python')) return 'python';
+  if (set.has("npm")) return "npm";
+  if (set.has("go")) return "go";
+  if (set.has("rust")) return "rust";
+  if (set.has("python")) return "python";
   return null;
 }
 
@@ -222,67 +231,76 @@ function addCell(row, text) {
  * @returns {HTMLElement} the section element
  */
 function renderSection(container, cfg) {
-  const sectionEl = document.createElement('section');
-  sectionEl.className = 'result-section';
+  const sectionEl = document.createElement("section");
+  sectionEl.className = "result-section";
   sectionEl.dataset.ecosystem = cfg.ecosystem;
 
   if (cfg.showHeader) {
-    const h2 = document.createElement('h2');
-    h2.className = 'section-title';
+    const h2 = document.createElement("h2");
+    h2.className = "section-title";
     h2.textContent = cfg.ecosystem;
     sectionEl.appendChild(h2);
   }
 
   const total = cfg.sorted.length;
-  const summary = document.createElement('p');
-  summary.className = 'summary';
+  const summary = document.createElement("p");
+  summary.className = "summary";
   if (cfg.directCount > 0) {
     const transitiveCount = total - cfg.directCount;
-    summary.textContent = `${total} package${total !== 1 ? 's' : ''} total (${cfg.directCount} direct, ${transitiveCount} transitive)`;
+    summary.textContent = `${total} package${total !== 1 ? "s" : ""} total (${cfg.directCount} direct, ${transitiveCount} transitive)`;
   } else {
-    summary.textContent = `${total} package${total !== 1 ? 's' : ''} total`;
+    summary.textContent = `${total} package${total !== 1 ? "s" : ""} total`;
   }
   sectionEl.appendChild(summary);
 
   if (cfg.source) {
-    const sourceEl = document.createElement('p');
-    sourceEl.className = 'source-files';
+    const sourceEl = document.createElement("p");
+    sourceEl.className = "source-files";
     sourceEl.textContent = `Files: ${cfg.source}`;
     sectionEl.appendChild(sourceEl);
   }
 
-  for (const noteText of [cfg.note, cfg.privateCount > 0 ? `${cfg.privateCount} private package${cfg.privateCount === 1 ? '' : 's'} skipped (not on public registry).` : null].filter(Boolean)) {
-    const noteEl = document.createElement('p');
-    noteEl.className = 'note note-warning';
+  for (const noteText of [
+    cfg.note,
+    cfg.privateCount > 0
+      ? `${cfg.privateCount} private package${cfg.privateCount === 1 ? "" : "s"} skipped (not on public registry).`
+      : null,
+  ].filter(Boolean)) {
+    const noteEl = document.createElement("p");
+    noteEl.className = "note note-warning";
     noteEl.textContent = `ⓘ ${noteText}`;
     sectionEl.appendChild(noteEl);
   }
 
   if (total === 0) {
-    const msg = document.createElement('p');
-    msg.textContent = 'No dependencies found.';
+    const msg = document.createElement("p");
+    msg.textContent = "No dependencies found.";
     sectionEl.appendChild(msg);
     container.appendChild(sectionEl);
     return sectionEl;
   }
 
-  const showFirst = cfg.ecosystem !== 'go';
+  const showFirst = cfg.ecosystem !== "go";
 
-  const table = document.createElement('table');
+  const table = document.createElement("table");
   const thead = table.createTHead();
   const headerRow = thead.insertRow();
   const COL_DEFS = [
-    ['Package',  'name'],
-    ['Version',  'version'],
-    ['Released', 'releaseDate'],
+    ["Package", "name"],
+    ["Version", "version"],
+    ["Released", "releaseDate"],
   ];
-  if (showFirst) COL_DEFS.push(['First Release', 'firstReleaseDate']);
-  COL_DEFS.push(['Releases', 'releaseCount']);
-  if (cfg.showDownloads)   COL_DEFS.push([cfg.ecosystem === 'rust' ? 'Downloads (90d)' : 'Downloads/mo', 'downloadsLastMonth']);
-  if (cfg.showSupplyChain) COL_DEFS.push(['Supply Chain', 'supplyChain']);
+  if (showFirst) COL_DEFS.push(["First Release", "firstReleaseDate"]);
+  COL_DEFS.push(["Releases", "releaseCount"]);
+  if (cfg.showDownloads)
+    COL_DEFS.push([
+      cfg.ecosystem === "rust" ? "Downloads (90d)" : "Downloads/mo",
+      "downloadsLastMonth",
+    ]);
+  if (cfg.showSupplyChain) COL_DEFS.push(["Supply Chain", "supplyChain"]);
 
   for (const [label, col] of COL_DEFS) {
-    const th = document.createElement('th');
+    const th = document.createElement("th");
     th.textContent = label;
     th.dataset.col = col;
     if (col === cfg.sortCol) th.classList.add(`th-sort-${cfg.sortDir}`);
@@ -294,17 +312,17 @@ function renderSection(container, cfg) {
     const tr = tbody.insertRow();
 
     const nameTd = tr.insertCell();
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     const rawLink = pkg.link ?? `https://pypi.org/project/${pkg.name}/`;
-    a.href   = rawLink.startsWith('https://') ? rawLink : `https://pypi.org/project/${pkg.name}/`;
-    a.target = '_blank';
-    a.rel    = 'noopener noreferrer';
+    a.href = rawLink.startsWith("https://") ? rawLink : `https://pypi.org/project/${pkg.name}/`;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
     a.textContent = pkg.name;
     nameTd.appendChild(a);
 
     if (pkg.error) {
-      tr.className = 'row-error';
-      const td = addCell(tr, pkg.version ?? 'error');
+      tr.className = "row-error";
+      const td = addCell(tr, pkg.version ?? "error");
       td.colSpan = COL_DEFS.length - 1;
       td.title = pkg.error;
       continue;
@@ -312,36 +330,39 @@ function renderSection(container, cfg) {
 
     addCell(tr, pkg.version);
 
-    const relCell = addCell(tr, pkg.releaseDate ?? 'unknown');
+    const relCell = addCell(tr, pkg.releaseDate ?? "unknown");
     const relAge = daysSince(pkg.releaseDate);
-    if (relAge <= 3)       relCell.className = 'age-new';
-    else if (relAge <= 7)  relCell.className = 'age-orange';
-    else if (relAge <= 30) relCell.className = 'age-fresh';
+    if (relAge <= 3) relCell.className = "age-new";
+    else if (relAge <= 7) relCell.className = "age-orange";
+    else if (relAge <= 30) relCell.className = "age-fresh";
 
     if (showFirst) {
-      const firstCell = addCell(tr, pkg.firstReleaseDate ?? 'unknown');
+      const firstCell = addCell(tr, pkg.firstReleaseDate ?? "unknown");
       const firstAge = daysSince(pkg.firstReleaseDate);
-      if (firstAge <= 3)       firstCell.className = 'age-new';
-      else if (firstAge <= 7)  firstCell.className = 'age-orange';
-      else if (firstAge <= 30) firstCell.className = 'age-fresh';
+      if (firstAge <= 3) firstCell.className = "age-new";
+      else if (firstAge <= 7) firstCell.className = "age-orange";
+      else if (firstAge <= 30) firstCell.className = "age-fresh";
     }
 
     addCell(tr, formatNumber(pkg.releaseCount ?? 0));
-    if (cfg.showDownloads)   addCell(tr, formatNumber(pkg.downloadsLastMonth));
+    if (cfg.showDownloads) addCell(tr, formatNumber(pkg.downloadsLastMonth));
     if (cfg.showSupplyChain) {
-      const scoreCell = document.createElement('td');
+      const scoreCell = document.createElement("td");
       scoreCell.textContent = formatScore(pkg.supplyChain);
       if (pkg.supplyChain != null) {
-        scoreCell.className = pkg.supplyChain >= 0.8 ? 'score-good'
-                            : pkg.supplyChain >= 0.5 ? 'score-warn'
-                            : 'score-bad';
+        scoreCell.className =
+          pkg.supplyChain >= 0.8
+            ? "score-good"
+            : pkg.supplyChain >= 0.5
+              ? "score-warn"
+              : "score-bad";
         if (cfg.socketSlug) {
-          const encoded = encodeURIComponent(pkg.name).replace(/%40/g, '@').replace(/%2F/gi, '/');
-          const socketLink = document.createElement('a');
-          socketLink.href   = `https://socket.dev/${cfg.socketSlug}/package/${encoded}`;
-          socketLink.target = '_blank';
-          socketLink.rel    = 'noopener noreferrer';
-          socketLink.textContent = ' (link)';
+          const encoded = encodeURIComponent(pkg.name).replace(/%40/g, "@").replace(/%2F/gi, "/");
+          const socketLink = document.createElement("a");
+          socketLink.href = `https://socket.dev/${cfg.socketSlug}/package/${encoded}`;
+          socketLink.target = "_blank";
+          socketLink.rel = "noopener noreferrer";
+          socketLink.textContent = " (link)";
           scoreCell.appendChild(socketLink);
         }
       }
@@ -349,8 +370,8 @@ function renderSection(container, cfg) {
     }
   }
 
-  const tableWrapper = document.createElement('div');
-  tableWrapper.className = 'table-scroll';
+  const tableWrapper = document.createElement("div");
+  tableWrapper.className = "table-scroll";
   tableWrapper.appendChild(table);
   sectionEl.appendChild(tableWrapper);
   container.appendChild(sectionEl);
@@ -370,34 +391,34 @@ function appendNonStandardSources(sectionEl, dangerousDeps, privatePkgs) {
   if (!dangerousDeps.length && !privatePkgs.length) return;
 
   const total = dangerousDeps.length + privatePkgs.length;
-  const details = document.createElement('details');
-  details.className = 'nonstd';
+  const details = document.createElement("details");
+  details.className = "nonstd";
 
-  const summary = document.createElement('summary');
-  summary.textContent = `${total} non-standard source${total !== 1 ? 's' : ''}`;
+  const summary = document.createElement("summary");
+  summary.textContent = `${total} non-standard source${total !== 1 ? "s" : ""}`;
   details.appendChild(summary);
 
-  const body = document.createElement('div');
-  body.className = 'nonstd-body';
+  const body = document.createElement("div");
+  body.className = "nonstd-body";
 
   const addRow = (className, text) => {
-    const p = document.createElement('p');
+    const p = document.createElement("p");
     p.className = className;
     p.textContent = text;
     body.appendChild(p);
   };
 
   if (dangerousDeps.length) {
-    addRow('nonstd-warn', '⚠ Non-registry dependency specs (declared in manifest):');
+    addRow("nonstd-warn", "⚠ Non-registry dependency specs (declared in manifest):");
     for (const { name, spec, reason } of dangerousDeps) {
-      addRow('nonstd-warn nonstd-indent', `${name} — ${spec}  (${reason})`);
+      addRow("nonstd-warn nonstd-indent", `${name} — ${spec}  (${reason})`);
     }
   }
 
   if (privatePkgs.length) {
-    addRow('nonstd-info', 'ℹ Non-public registry packages (skipped from resolution):');
+    addRow("nonstd-info", "ℹ Non-public registry packages (skipped from resolution):");
     for (const [domain, names] of groupByDomain(privatePkgs)) {
-      addRow('nonstd-info nonstd-indent', `${domain}: ${names.join(', ')}`);
+      addRow("nonstd-info nonstd-indent", `${domain}: ${names.join(", ")}`);
     }
   }
 
@@ -414,16 +435,16 @@ function appendNonStandardSources(sectionEl, dangerousDeps, privatePkgs) {
  * @param {boolean} showHeader
  */
 function renderSectionError(container, ecosystem, message, showHeader) {
-  const sectionEl = document.createElement('section');
-  sectionEl.className = 'result-section';
+  const sectionEl = document.createElement("section");
+  sectionEl.className = "result-section";
   if (showHeader) {
-    const h2 = document.createElement('h2');
-    h2.className = 'section-title';
+    const h2 = document.createElement("h2");
+    h2.className = "section-title";
     h2.textContent = ecosystem;
     sectionEl.appendChild(h2);
   }
-  const errorEl = document.createElement('p');
-  errorEl.className = 'note note-warning';
+  const errorEl = document.createElement("p");
+  errorEl.className = "note note-warning";
   errorEl.textContent = `ⓘ [${ecosystem}] ${message}`;
   sectionEl.appendChild(errorEl);
   container.appendChild(sectionEl);
@@ -441,28 +462,28 @@ function renderSectionError(container, ecosystem, message, showHeader) {
  * @returns {Promise<boolean>}
  */
 function showWarningDialog(warning) {
-  return new Promise(resolve => {
-    const dialog = document.createElement('dialog');
-    dialog.className = 'warning-dialog';
+  return new Promise((resolve) => {
+    const dialog = document.createElement("dialog");
+    dialog.className = "warning-dialog";
 
-    const h = document.createElement('h2');
-    h.textContent = '⚠ Warning';
+    const h = document.createElement("h2");
+    h.textContent = "⚠ Warning";
 
-    const p = document.createElement('p');
+    const p = document.createElement("p");
     p.textContent = warning;
 
-    const actions = document.createElement('div');
-    actions.className = 'warning-dialog-actions';
+    const actions = document.createElement("div");
+    actions.className = "warning-dialog-actions";
 
-    const cancelBtn = document.createElement('button');
-    cancelBtn.type = 'button';
-    cancelBtn.textContent = 'Cancel';
-    cancelBtn.className = 'btn-secondary';
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.className = "btn-secondary";
 
-    const continueBtn = document.createElement('button');
-    continueBtn.type = 'button';
-    continueBtn.textContent = 'Continue anyway';
-    continueBtn.className = 'btn-warning';
+    const continueBtn = document.createElement("button");
+    continueBtn.type = "button";
+    continueBtn.textContent = "Continue anyway";
+    continueBtn.className = "btn-warning";
 
     let answered = false;
     function finish(value) {
@@ -473,9 +494,9 @@ function showWarningDialog(warning) {
       resolve(value);
     }
 
-    cancelBtn.addEventListener('click', () => finish(false));
-    continueBtn.addEventListener('click', () => finish(true));
-    dialog.addEventListener('cancel', () => finish(false));
+    cancelBtn.addEventListener("click", () => finish(false));
+    continueBtn.addEventListener("click", () => finish(true));
+    dialog.addEventListener("cancel", () => finish(false));
 
     actions.append(cancelBtn, continueBtn);
     dialog.append(h, p, actions);
@@ -504,39 +525,61 @@ function showWarningDialog(warning) {
 async function resolveEcosystem(ecosystem, githubRef, opts) {
   const { includeTests, onProgress, packageInputs, downloadStats = false } = opts;
 
-  let deps, source, note = null, warning = null, privateCount = 0, privatePkgs = [], dangerousDeps = [];
+  let deps,
+    source,
+    note = null,
+    warning = null,
+    privateCount = 0,
+    privatePkgs = [],
+    dangerousDeps = [];
   if (packageInputs && packageInputs.length > 0) {
-    source = 'package search';
-    deps = packageInputs.map(p => ecosystem === 'go'
-      ? { name: p.name, version: p.version }
-      : { name: p.name, versionSpec: p.version }
+    source = "package search";
+    deps = packageInputs.map((p) =>
+      ecosystem === "go"
+        ? { name: p.name, version: p.version }
+        : { name: p.name, versionSpec: p.version },
     );
-  } else if (ecosystem === 'npm') {
-    ({ deps, source, note, warning, privateCount, privatePkgs, dangerousDeps } = await parseGithubNpmDependencies(githubRef, { includeTests }));
+  } else if (ecosystem === "npm") {
+    ({ deps, source, note, warning, privateCount, privatePkgs, dangerousDeps } =
+      await parseGithubNpmDependencies(githubRef, { includeTests }));
     if (warning) {
       const confirmed = await showWarningDialog(warning);
       if (!confirmed) return null;
     }
-    if (privateCount > 0) onProgress(`[npm] Skipped ${privateCount} private package${privateCount === 1 ? '' : 's'} (not on public registry).\n`);
-  } else if (ecosystem === 'go') {
-    ({ deps, source, privateCount, privatePkgs, dangerousDeps } = await parseGithubGoDependencies(githubRef));
-    if (privateCount > 0) onProgress(`[go] Skipped ${privateCount} private module${privateCount === 1 ? '' : 's'} (not on public module proxy).\n`);
-  } else if (ecosystem === 'rust') {
-    ({ deps, source, privateCount, privatePkgs, dangerousDeps } = await parseGithubRustDependencies(githubRef));
-    if (privateCount > 0) onProgress(`[rust] Skipped ${privateCount} private crate${privateCount === 1 ? '' : 's'} (not on crates.io).\n`);
+    if (privateCount > 0)
+      onProgress(
+        `[npm] Skipped ${privateCount} private package${privateCount === 1 ? "" : "s"} (not on public registry).\n`,
+      );
+  } else if (ecosystem === "go") {
+    ({ deps, source, privateCount, privatePkgs, dangerousDeps } =
+      await parseGithubGoDependencies(githubRef));
+    if (privateCount > 0)
+      onProgress(
+        `[go] Skipped ${privateCount} private module${privateCount === 1 ? "" : "s"} (not on public module proxy).\n`,
+      );
+  } else if (ecosystem === "rust") {
+    ({ deps, source, privateCount, privatePkgs, dangerousDeps } =
+      await parseGithubRustDependencies(githubRef));
+    if (privateCount > 0)
+      onProgress(
+        `[rust] Skipped ${privateCount} private crate${privateCount === 1 ? "" : "s"} (not on crates.io).\n`,
+      );
   } else {
     ({ deps, source, dangerousDeps } = await parseGithubDependencies(githubRef, { includeTests }));
   }
 
-  const isLockFile = NPM_LOCK_FILENAMES.has(source) || source === 'go.sum' || source === 'Cargo.lock';
-  onProgress(`[${ecosystem}] Found ${deps.length} ${isLockFile ? 'installed' : 'direct'} dep${deps.length === 1 ? '' : 's'} in ${source}. Resolving…\n`);
+  const isLockFile =
+    NPM_LOCK_FILENAMES.has(source) || source === "go.sum" || source === "Cargo.lock";
+  onProgress(
+    `[${ecosystem}] Found ${deps.length} ${isLockFile ? "installed" : "direct"} dep${deps.length === 1 ? "" : "s"} in ${source}. Resolving…\n`,
+  );
 
   let results;
-  if (ecosystem === 'npm') {
+  if (ecosystem === "npm") {
     results = await resolveNpm(deps, { onProgress: (msg) => onProgress(`[npm] ${msg}\n`) });
-  } else if (ecosystem === 'go') {
+  } else if (ecosystem === "go") {
     results = await resolveGo(deps, { onProgress: (msg) => onProgress(`[go] ${msg}\n`) });
-  } else if (ecosystem === 'rust') {
+  } else if (ecosystem === "rust") {
     results = await resolveRust(deps, { onProgress: (msg) => onProgress(`[rust] ${msg}\n`) });
   } else {
     results = await resolveDependencies(deps, {
@@ -551,69 +594,88 @@ async function resolveEcosystem(ecosystem, githubRef, opts) {
   // - package.json / go.mod / requirements.txt etc.: every parsed dep is direct,
   //   except go.mod where `// indirect` deps are explicitly flagged.
   let directCount = 0;
-  if (ecosystem === 'npm') {
+  if (ecosystem === "npm") {
     if (!isLockFile) {
-      const directNames = new Set(deps.map(d => d.name.toLowerCase()));
-      directCount = [...results.values()].filter(r => directNames.has(r.name.toLowerCase())).length;
+      const directNames = new Set(deps.map((d) => d.name.toLowerCase()));
+      directCount = [...results.values()].filter((r) =>
+        directNames.has(r.name.toLowerCase()),
+      ).length;
     }
-  } else if (ecosystem === 'go') {
-    if (source === 'go.mod') {
-      const directNames = new Set(deps.filter(d => !d.indirect).map(d => d.name.toLowerCase()));
-      directCount = [...results.values()].filter(r => directNames.has(r.name.toLowerCase())).length;
-    } else if (source === 'package search') {
-      const directNames = new Set(deps.map(d => d.name.toLowerCase()));
-      directCount = [...results.values()].filter(r => directNames.has(r.name.toLowerCase())).length;
+  } else if (ecosystem === "go") {
+    if (source === "go.mod") {
+      const directNames = new Set(deps.filter((d) => !d.indirect).map((d) => d.name.toLowerCase()));
+      directCount = [...results.values()].filter((r) =>
+        directNames.has(r.name.toLowerCase()),
+      ).length;
+    } else if (source === "package search") {
+      const directNames = new Set(deps.map((d) => d.name.toLowerCase()));
+      directCount = [...results.values()].filter((r) =>
+        directNames.has(r.name.toLowerCase()),
+      ).length;
     }
-  } else if (ecosystem === 'rust') {
+  } else if (ecosystem === "rust") {
     // Cargo.lock enumerates the full closure without marking direct crates, so
     // the split is only known from Cargo.toml or package-search input.
-    if (source === 'Cargo.toml' || source === 'package search') {
-      const directNames = new Set(deps.map(d => d.name.toLowerCase()));
-      directCount = [...results.values()].filter(r => directNames.has(r.name.toLowerCase())).length;
+    if (source === "Cargo.toml" || source === "package search") {
+      const directNames = new Set(deps.map((d) => d.name.toLowerCase()));
+      directCount = [...results.values()].filter((r) =>
+        directNames.has(r.name.toLowerCase()),
+      ).length;
     }
   } else {
-    const directNames = new Set(deps.map(d => d.name.toLowerCase()));
-    directCount = [...results.values()].filter(r => directNames.has(r.name.toLowerCase())).length;
+    const directNames = new Set(deps.map((d) => d.name.toLowerCase()));
+    directCount = [...results.values()].filter((r) => directNames.has(r.name.toLowerCase())).length;
   }
 
-  return { ecosystem, deps, results, directCount, source, note, privateCount, privatePkgs, dangerousDeps, downloadStats };
+  return {
+    ecosystem,
+    deps,
+    results,
+    directCount,
+    source,
+    note,
+    privateCount,
+    privatePkgs,
+    dangerousDeps,
+    downloadStats,
+  };
 }
 
 // ── Browser initialisation ────────────────────────────────────────────────────
 
-if (typeof document !== 'undefined') {
-  const form              = document.getElementById('form');
-  const urlInput          = document.getElementById('url-input');
-  const urlRow            = document.getElementById('url-row');
-  const pkgInput          = document.getElementById('pkg-input');
-  const pkgRow            = document.getElementById('pkg-row');
-  const pkgSubmitBtn      = document.getElementById('pkg-submit-btn');
-  const tokenInput        = document.getElementById('token-input');
-  const rememberTokenCb   = document.getElementById('remember-token');
-  const storageNote       = document.getElementById('storage-note');
-  const socketKeyInput      = document.getElementById('socket-key-input');
-  const socketOrgInput      = document.getElementById('socket-org-input');
-  const socketConsentCb     = document.getElementById('socket-proxy-consent');
-  const rememberSocketCb    = document.getElementById('remember-socket');
-  const socketStorageNote = document.getElementById('socket-storage-note');
-  const includeTestsCb    = document.getElementById('include-tests');
-  const downloadStatsCb   = document.getElementById('download-stats');
-  const downloadStatsRow  = document.getElementById('download-stats-row');
-  const submitBtn         = document.getElementById('submit-btn');
-  const errorDiv          = document.getElementById('error');
-  const progressDiv       = document.getElementById('progress');
-  const resultsDiv        = document.getElementById('results');
+if (typeof document !== "undefined") {
+  const form = document.getElementById("form");
+  const urlInput = document.getElementById("url-input");
+  const urlRow = document.getElementById("url-row");
+  const pkgInput = document.getElementById("pkg-input");
+  const pkgRow = document.getElementById("pkg-row");
+  const pkgSubmitBtn = document.getElementById("pkg-submit-btn");
+  const tokenInput = document.getElementById("token-input");
+  const rememberTokenCb = document.getElementById("remember-token");
+  const storageNote = document.getElementById("storage-note");
+  const socketKeyInput = document.getElementById("socket-key-input");
+  const socketOrgInput = document.getElementById("socket-org-input");
+  const socketConsentCb = document.getElementById("socket-proxy-consent");
+  const rememberSocketCb = document.getElementById("remember-socket");
+  const socketStorageNote = document.getElementById("socket-storage-note");
+  const includeTestsCb = document.getElementById("include-tests");
+  const downloadStatsCb = document.getElementById("download-stats");
+  const downloadStatsRow = document.getElementById("download-stats-row");
+  const submitBtn = document.getElementById("submit-btn");
+  const errorDiv = document.getElementById("error");
+  const progressDiv = document.getElementById("progress");
+  const resultsDiv = document.getElementById("results");
 
-  const TOKEN_STORAGE_KEY        = 'depsview.github_token';
-  const SOCKET_KEY_STORAGE_KEY   = 'depsview.socket_key';
-  const SOCKET_ORG_STORAGE_KEY   = 'depsview.socket_org';
+  const TOKEN_STORAGE_KEY = "depsview.github_token";
+  const SOCKET_KEY_STORAGE_KEY = "depsview.socket_key";
+  const SOCKET_ORG_STORAGE_KEY = "depsview.socket_org";
 
   /** Textarea placeholder text per ecosystem. */
   const PKG_PLACEHOLDERS = {
-    npm:    'eslint, eslint@9, @babel/core  or  https://github.com/owner/repo',
-    python: 'requests, flask>=2.0, django==4.2  or  https://github.com/owner/repo',
-    go:     'github.com/gin-gonic/gin, github.com/go-chi/chi  or  https://github.com/owner/repo',
-    rust:   'serde, tokio@1, clap@^4.5  or  https://github.com/owner/repo',
+    npm: "eslint, eslint@9, @babel/core  or  https://github.com/owner/repo",
+    python: "requests, flask>=2.0, django==4.2  or  https://github.com/owner/repo",
+    go: "github.com/gin-gonic/gin, github.com/go-chi/chi  or  https://github.com/owner/repo",
+    rust: "serde, tokio@1, clap@^4.5  or  https://github.com/owner/repo",
   };
 
   /**
@@ -628,23 +690,23 @@ if (typeof document !== 'undefined') {
    * @param {string} eco - selected ecosystem value
    */
   function applyEcosystem(eco) {
-    const isSpecific = eco !== 'all';
+    const isSpecific = eco !== "all";
     urlRow.hidden = isSpecific;
     pkgRow.hidden = !isSpecific;
-    if (isSpecific) pkgInput.placeholder = PKG_PLACEHOLDERS[eco] ?? '';
-    downloadStatsRow.hidden = isSpecific && eco !== 'python';
+    if (isSpecific) pkgInput.placeholder = PKG_PLACEHOLDERS[eco] ?? "";
+    downloadStatsRow.hidden = isSpecific && eco !== "python";
   }
 
-  document.querySelectorAll('[name="ecosystem"]').forEach(radio => {
-    radio.addEventListener('change', () => applyEcosystem(radio.value));
+  document.querySelectorAll('[name="ecosystem"]').forEach((radio) => {
+    radio.addEventListener("change", () => applyEcosystem(radio.value));
   });
 
   // Apply the initial state (page load with 'all' pre-selected).
-  applyEcosystem(form.elements['ecosystem'].value);
+  applyEcosystem(form.elements["ecosystem"].value);
 
   /** Enables or disables both submit buttons together. */
   function setSubmitting(disabled) {
-    submitBtn.disabled    = disabled;
+    submitBtn.disabled = disabled;
     pkgSubmitBtn.disabled = disabled;
   }
 
@@ -654,12 +716,12 @@ if (typeof document !== 'undefined') {
 
   const savedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
   if (savedToken) {
-    tokenInput.value        = savedToken;
+    tokenInput.value = savedToken;
     rememberTokenCb.checked = true;
     syncStorageNote();
   }
 
-  rememberTokenCb.addEventListener('change', () => {
+  rememberTokenCb.addEventListener("change", () => {
     syncStorageNote();
     if (rememberTokenCb.checked) {
       const token = tokenInput.value.trim();
@@ -682,7 +744,7 @@ if (typeof document !== 'undefined') {
     syncSocketStorageNote();
   }
 
-  rememberSocketCb.addEventListener('change', () => {
+  rememberSocketCb.addEventListener("change", () => {
     syncSocketStorageNote();
     if (rememberSocketCb.checked) {
       const key = socketKeyInput.value.trim();
@@ -695,9 +757,9 @@ if (typeof document !== 'undefined') {
     }
   });
 
-  socketConsentCb.addEventListener('change', () => {
+  socketConsentCb.addEventListener("change", () => {
     if (socketConsentCb.checked) {
-      socketConsentCb.closest('.option-row').classList.remove('consent-required');
+      socketConsentCb.closest(".option-row").classList.remove("consent-required");
     }
   });
 
@@ -712,20 +774,20 @@ if (typeof document !== 'undefined') {
     errorDiv.hidden = false;
   }
 
-  form.addEventListener('submit', async (e) => {
+  form.addEventListener("submit", async (e) => {
     e.preventDefault();
 
-    errorDiv.hidden         = true;
-    errorDiv.textContent    = '';
-    progressDiv.hidden      = true;
-    progressDiv.textContent = '';
-    resultsDiv.hidden       = true;
-    resultsDiv.innerHTML    = '';
+    errorDiv.hidden = true;
+    errorDiv.textContent = "";
+    progressDiv.hidden = true;
+    progressDiv.textContent = "";
+    resultsDiv.hidden = true;
+    resultsDiv.innerHTML = "";
 
-    const token           = tokenInput.value.trim();
-    const includeTests    = includeTestsCb.checked;
-    const downloadStats   = downloadStatsCb.checked;
-    const ecosystemFilter = form.elements['ecosystem'].value;
+    const token = tokenInput.value.trim();
+    const includeTests = includeTestsCb.checked;
+    const downloadStats = downloadStatsCb.checked;
+    const ecosystemFilter = form.elements["ecosystem"].value;
 
     if (rememberTokenCb.checked && token) {
       localStorage.setItem(TOKEN_STORAGE_KEY, token);
@@ -744,9 +806,9 @@ if (typeof document !== 'undefined') {
     }
 
     if (socketKey && socketOrg && !socketConsentCb.checked) {
-      const row = socketConsentCb.closest('.option-row');
-      row.classList.add('consent-required');
-      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const row = socketConsentCb.closest(".option-row");
+      row.classList.add("consent-required");
+      row.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
 
@@ -755,14 +817,14 @@ if (typeof document !== 'undefined') {
 
     try {
       let ecosystems;
-      let githubRef     = null;
+      let githubRef = null;
       let packageInputs = null;
 
-      if (ecosystemFilter === 'all') {
+      if (ecosystemFilter === "all") {
         // GitHub repo mode: analyse all ecosystems detected in the repository.
         const url = urlInput.value.trim();
         if (!url) {
-          showError('Enter a GitHub repository URL.');
+          showError("Enter a GitHub repository URL.");
           setSubmitting(false);
           return;
         }
@@ -775,19 +837,23 @@ if (typeof document !== 'undefined') {
           return;
         }
 
-        appendProgress('Detecting ecosystems…\n');
-        const listing = await listDirectory(githubRef.owner, githubRef.repo, githubRef.subpath, githubRef.ref);
+        appendProgress("Detecting ecosystems…\n");
+        const listing = await listDirectory(
+          githubRef.owner,
+          githubRef.repo,
+          githubRef.subpath,
+          githubRef.ref,
+        );
         ecosystems = detectEcosystems(listing ?? []);
         // Fall back to 'python' so the depth-2 traversal still gets a chance
         // (covers HA-style nested manifest.json layouts).
-        if (ecosystems.size === 0) ecosystems = new Set(['python']);
-        const detectedOrdered = ECOSYSTEM_ORDER.filter(eco => ecosystems.has(eco));
-        appendProgress(`Detected: ${detectedOrdered.join(', ')}. Resolving…\n`);
-
+        if (ecosystems.size === 0) ecosystems = new Set(["python"]);
+        const detectedOrdered = ECOSYSTEM_ORDER.filter((eco) => ecosystems.has(eco));
+        appendProgress(`Detected: ${detectedOrdered.join(", ")}. Resolving…\n`);
       } else {
         const rawText = pkgInput.value.trim();
         if (!rawText) {
-          showError('Enter at least one package name or a GitHub URL.');
+          showError("Enter at least one package name or a GitHub URL.");
           setSubmitting(false);
           return;
         }
@@ -807,26 +873,35 @@ if (typeof document !== 'undefined') {
           // Package search mode: one or more package names.
           packageInputs = parseMultiPackageInput(rawText, ecosystemFilter);
           if (packageInputs.length === 0) {
-            showError('Enter at least one package name.');
+            showError("Enter at least one package name.");
             setSubmitting(false);
             return;
           }
           ecosystems = new Set([ecosystemFilter]);
-          const names = packageInputs.map(p => p.name).join(', ');
-          appendProgress(`Resolving ${packageInputs.length} ${ecosystemFilter} package${packageInputs.length === 1 ? '' : 's'}: ${names}…\n`);
+          const names = packageInputs.map((p) => p.name).join(", ");
+          appendProgress(
+            `Resolving ${packageInputs.length} ${ecosystemFilter} package${packageInputs.length === 1 ? "" : "s"}: ${names}…\n`,
+          );
         }
       }
 
-      const ordered = ECOSYSTEM_ORDER.filter(eco => ecosystems.has(eco));
+      const ordered = ECOSYSTEM_ORDER.filter((eco) => ecosystems.has(eco));
 
       // Parse + resolve every ecosystem in parallel. Each section captures its
       // own error so a failure in one does not abort the others.
       const settled = await Promise.all(
-        ordered.map(eco =>
-          resolveEcosystem(eco, githubRef, { includeTests, onProgress: appendProgress, packageInputs, downloadStats })
-            .then(section => section ? { ok: true, section } : { ok: false, ecosystem: eco, error: null })
-            .catch(err   => ({ ok: false, ecosystem: eco, error: err.message }))
-        )
+        ordered.map((eco) =>
+          resolveEcosystem(eco, githubRef, {
+            includeTests,
+            onProgress: appendProgress,
+            packageInputs,
+            downloadStats,
+          })
+            .then((section) =>
+              section ? { ok: true, section } : { ok: false, ecosystem: eco, error: null },
+            )
+            .catch((err) => ({ ok: false, ecosystem: eco, error: err.message })),
+        ),
       );
 
       progressDiv.hidden = true;
@@ -841,14 +916,17 @@ if (typeof document !== 'undefined') {
           const purlType = ECOSYSTEM_PURL_TYPE[entry.section.ecosystem];
           if (!purlType) continue;
           for (const pkg of entry.section.results.values()) {
-            if (!pkg.error) allPkgs.push({ name: pkg.name, version: pkg.version, ecosystem: purlType });
+            if (!pkg.error)
+              allPkgs.push({ name: pkg.name, version: pkg.version, ecosystem: purlType });
           }
         }
 
         if (allPkgs.length > 0) {
-          appendProgress('Fetching supply chain scores…\n');
+          appendProgress("Fetching supply chain scores…\n");
           progressDiv.hidden = false;
-          const socketScores = await fetchSocketScores(allPkgs, socketKey, socketOrg, { proxyBase: SOCKET_PROXY_BASE });
+          const socketScores = await fetchSocketScores(allPkgs, socketKey, socketOrg, {
+            proxyBase: SOCKET_PROXY_BASE,
+          });
           progressDiv.hidden = true;
 
           if (socketScores.size > 0) {
@@ -878,8 +956,8 @@ if (typeof document !== 'undefined') {
         }
 
         const section = entry.section;
-        let sortCol = 'releaseDate';
-        let sortDir = 'desc';
+        let sortCol = "releaseDate";
+        let sortDir = "desc";
 
         function rerender() {
           // Tear down the existing section element if it exists, then redraw.
@@ -888,29 +966,36 @@ if (typeof document !== 'undefined') {
 
           const sortedRows = sortResultsBy(section.results, sortCol, sortDir);
           const sectionEl = renderSection(resultsDiv, {
-            ecosystem:       section.ecosystem,
+            ecosystem: section.ecosystem,
             showHeader,
-            sorted:          sortedRows,
-            directCount:     section.directCount,
-            source:          section.source,
-            note:            section.note,
-            privateCount:    section.privateCount ?? 0,
+            sorted: sortedRows,
+            directCount: section.directCount,
+            source: section.source,
+            note: section.note,
+            privateCount: section.privateCount ?? 0,
             sortCol,
             sortDir,
-            showDownloads:   section.ecosystem === 'rust' || section.ecosystem === 'npm' || (section.downloadStats && section.ecosystem === 'python'),
+            showDownloads:
+              section.ecosystem === "rust" ||
+              section.ecosystem === "npm" ||
+              (section.downloadStats && section.ecosystem === "python"),
             showSupplyChain,
-            socketSlug:      showSupplyChain ? (SOCKET_URL_SLUG[section.ecosystem] ?? null) : null,
+            socketSlug: showSupplyChain ? (SOCKET_URL_SLUG[section.ecosystem] ?? null) : null,
           });
-          appendNonStandardSources(sectionEl, section.dangerousDeps ?? [], section.privatePkgs ?? []);
+          appendNonStandardSources(
+            sectionEl,
+            section.dangerousDeps ?? [],
+            section.privatePkgs ?? [],
+          );
 
-          sectionEl.querySelectorAll('th[data-col]').forEach(th => {
+          sectionEl.querySelectorAll("th[data-col]").forEach((th) => {
             const col = th.dataset.col;
-            th.addEventListener('click', () => {
+            th.addEventListener("click", () => {
               if (sortCol === col) {
-                sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+                sortDir = sortDir === "asc" ? "desc" : "asc";
               } else {
                 sortCol = col;
-                sortDir = (col === 'name' || col === 'version') ? 'asc' : 'desc';
+                sortDir = col === "name" || col === "version" ? "asc" : "desc";
               }
               rerender();
             });

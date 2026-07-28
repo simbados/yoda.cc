@@ -5,8 +5,8 @@
  * formulae.brew.sh API from the browser — no server-side component.
  */
 
-import { resolve } from './src/homebrew/resolver.js';
-import { setGithubToken } from './src/homebrew/client.js';
+import { resolve } from "./src/homebrew/resolver.js";
+import { setGithubToken } from "./src/homebrew/client.js";
 
 // ── Pure utility functions (exported for testing) ─────────────────────────────
 
@@ -23,9 +23,9 @@ import { setGithubToken } from './src/homebrew/client.js';
 export function parseBrewInput(text) {
   const MAX_NAMES = 50;
   return text
-    .replace(/\\[ \t]*\n[ \t]*/g, ',')
+    .replace(/\\[ \t]*\n[ \t]*/g, ",")
     .split(/[,\n]+/)
-    .map(part => (part.trim().split(/\s+/)[0] ?? '').toLowerCase())
+    .map((part) => (part.trim().split(/\s+/)[0] ?? "").toLowerCase())
     .filter(Boolean)
     .filter((v, i, a) => a.indexOf(v) === i)
     .slice(0, MAX_NAMES);
@@ -52,7 +52,7 @@ export function daysSince(dateStr) {
  * @returns {string}
  */
 export function formatInstalls(n) {
-  if (n == null) return '–';
+  if (n == null) return "–";
   return n.toLocaleString();
 }
 
@@ -67,9 +67,9 @@ export function formatInstalls(n) {
  * @returns {Array<object>}
  */
 export function sortResultsBy(resultsMap, column, direction) {
-  const sign   = direction === 'asc' ? 1 : -1;
-  const isNum  = column === 'installs365';
-  const isDate = column === 'updatedAt';
+  const sign = direction === "asc" ? 1 : -1;
+  const isNum = column === "installs365";
+  const isDate = column === "updatedAt";
 
   return [...resultsMap.values()].sort((a, b) => {
     const aVal = a[column] ?? null;
@@ -95,7 +95,7 @@ export function sortResultsBy(resultsMap, column, direction) {
       return cmp !== 0 ? sign * cmp : a.name.localeCompare(b.name);
     }
 
-    const cmp = String(aVal ?? '').localeCompare(String(bVal ?? ''));
+    const cmp = String(aVal ?? "").localeCompare(String(bVal ?? ""));
     return cmp !== 0 ? sign * cmp : 0;
   });
 }
@@ -124,45 +124,45 @@ function addCell(row, text) {
  */
 function renderResults(container, sorted) {
   container.hidden = false;
-  container.innerHTML = '';
+  container.innerHTML = "";
 
-  const total         = sorted.length;
-  const rootCount       = sorted.filter(p => p.depth === 0).length;
-  const directCount     = sorted.filter(p => p.depth === 1).length;
-  const transitiveCount = sorted.filter(p => p.depth > 1).length;
+  const total = sorted.length;
+  const rootCount = sorted.filter((p) => p.depth === 0).length;
+  const directCount = sorted.filter((p) => p.depth === 1).length;
+  const transitiveCount = sorted.filter((p) => p.depth > 1).length;
 
-  const summary = document.createElement('p');
-  summary.className = 'summary';
+  const summary = document.createElement("p");
+  summary.className = "summary";
   if (rootCount > 0 && (directCount > 0 || transitiveCount > 0)) {
-    const rootLabel = `${rootCount} root${rootCount !== 1 ? 's' : ''}`;
+    const rootLabel = `${rootCount} root${rootCount !== 1 ? "s" : ""}`;
     summary.textContent =
-      `${total} package${total !== 1 ? 's' : ''} total ` +
+      `${total} package${total !== 1 ? "s" : ""} total ` +
       `(${rootLabel}, ${directCount} direct, ${transitiveCount} transitive)`;
   } else {
-    summary.textContent = `${total} package${total !== 1 ? 's' : ''} total`;
+    summary.textContent = `${total} package${total !== 1 ? "s" : ""} total`;
   }
   container.appendChild(summary);
 
   if (total === 0) {
-    const msg = document.createElement('p');
-    msg.textContent = 'No packages found.';
+    const msg = document.createElement("p");
+    msg.textContent = "No packages found.";
     container.appendChild(msg);
     return;
   }
 
-  const table = document.createElement('table');
+  const table = document.createElement("table");
 
   const thead = table.createTHead();
   const headerRow = thead.insertRow();
   const COL_DEFS = [
-    ['Package',        'name'],
-    ['Type',           'type'],
-    ['Version',        'version'],
-    ['Updated',        'updatedAt'],
-    ['Installs/year',  'installs365'],
+    ["Package", "name"],
+    ["Type", "type"],
+    ["Version", "version"],
+    ["Updated", "updatedAt"],
+    ["Installs/year", "installs365"],
   ];
   for (const [label, col] of COL_DEFS) {
-    const th = document.createElement('th');
+    const th = document.createElement("th");
     th.textContent = label;
     th.dataset.col = col;
     headerRow.appendChild(th);
@@ -173,59 +173,59 @@ function renderResults(container, sorted) {
     const tr = tbody.insertRow();
 
     const nameTd = tr.insertCell();
-    const a = document.createElement('a');
-    a.href   = pkg.link?.startsWith('https://') ? pkg.link : '#';
-    a.target = '_blank';
-    a.rel    = 'noopener noreferrer';
+    const a = document.createElement("a");
+    a.href = pkg.link?.startsWith("https://") ? pkg.link : "#";
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
     a.textContent = pkg.name;
     nameTd.appendChild(a);
     if (pkg.caskAlsoExists) {
-      const hint = document.createElement('a');
-      hint.href      = `https://formulae.brew.sh/cask/${pkg.name}`;
-      hint.target    = '_blank';
-      hint.rel       = 'noopener noreferrer';
-      hint.textContent = 'cask';
-      hint.className = 'cask-hint';
+      const hint = document.createElement("a");
+      hint.href = `https://formulae.brew.sh/cask/${pkg.name}`;
+      hint.target = "_blank";
+      hint.rel = "noopener noreferrer";
+      hint.textContent = "cask";
+      hint.className = "cask-hint";
       nameTd.appendChild(hint);
     }
 
     addCell(tr, pkg.type);
 
     if (pkg.error) {
-      tr.className = 'row-error';
+      tr.className = "row-error";
       const td = addCell(tr, pkg.error);
       td.colSpan = 3;
       continue;
     }
 
     addCell(tr, pkg.version);
-    const updatedCell = addCell(tr, pkg.updatedAt ?? '–');
-    if (daysSince(pkg.updatedAt) <=  7) updatedCell.className = 'age-new';
-    else if (daysSince(pkg.updatedAt) <= 30) updatedCell.className = 'age-fresh';
+    const updatedCell = addCell(tr, pkg.updatedAt ?? "–");
+    if (daysSince(pkg.updatedAt) <= 7) updatedCell.className = "age-new";
+    else if (daysSince(pkg.updatedAt) <= 30) updatedCell.className = "age-fresh";
     addCell(tr, formatInstalls(pkg.installs365));
   }
 
-  const tableScroll = document.createElement('div');
-  tableScroll.className = 'table-scroll';
+  const tableScroll = document.createElement("div");
+  tableScroll.className = "table-scroll";
   tableScroll.appendChild(table);
   container.appendChild(tableScroll);
 }
 
 // ── Browser initialisation ────────────────────────────────────────────────────
 
-if (typeof document !== 'undefined') {
-  const form             = document.getElementById('form');
-  const formulaInput     = document.getElementById('formula-input');
-  const includeBuildCb   = document.getElementById('include-build');
-  const tokenInput       = document.getElementById('token-input');
-  const rememberTokenCb  = document.getElementById('remember-token');
-  const storageNote      = document.getElementById('storage-note');
-  const submitBtn        = document.getElementById('submit-btn');
-  const errorDiv         = document.getElementById('error');
-  const progressDiv      = document.getElementById('progress');
-  const resultsDiv       = document.getElementById('results');
+if (typeof document !== "undefined") {
+  const form = document.getElementById("form");
+  const formulaInput = document.getElementById("formula-input");
+  const includeBuildCb = document.getElementById("include-build");
+  const tokenInput = document.getElementById("token-input");
+  const rememberTokenCb = document.getElementById("remember-token");
+  const storageNote = document.getElementById("storage-note");
+  const submitBtn = document.getElementById("submit-btn");
+  const errorDiv = document.getElementById("error");
+  const progressDiv = document.getElementById("progress");
+  const resultsDiv = document.getElementById("results");
 
-  const TOKEN_STORAGE_KEY = 'brewview.github_token';
+  const TOKEN_STORAGE_KEY = "brewview.github_token";
 
   function syncStorageNote() {
     storageNote.hidden = !rememberTokenCb.checked;
@@ -233,12 +233,12 @@ if (typeof document !== 'undefined') {
 
   const savedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
   if (savedToken) {
-    tokenInput.value        = savedToken;
+    tokenInput.value = savedToken;
     rememberTokenCb.checked = true;
     syncStorageNote();
   }
 
-  rememberTokenCb.addEventListener('change', () => {
+  rememberTokenCb.addEventListener("change", () => {
     syncStorageNote();
     if (rememberTokenCb.checked) {
       const token = tokenInput.value.trim();
@@ -248,8 +248,8 @@ if (typeof document !== 'undefined') {
     }
   });
 
-  formulaInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+  formulaInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       form.requestSubmit();
     }
@@ -266,18 +266,18 @@ if (typeof document !== 'undefined') {
     errorDiv.hidden = false;
   }
 
-  form.addEventListener('submit', async (e) => {
+  form.addEventListener("submit", async (e) => {
     e.preventDefault();
 
-    errorDiv.hidden      = true;
-    errorDiv.textContent = '';
-    progressDiv.hidden   = true;
-    progressDiv.textContent = '';
-    resultsDiv.hidden    = true;
-    resultsDiv.innerHTML = '';
+    errorDiv.hidden = true;
+    errorDiv.textContent = "";
+    progressDiv.hidden = true;
+    progressDiv.textContent = "";
+    resultsDiv.hidden = true;
+    resultsDiv.innerHTML = "";
 
-    const token            = tokenInput.value.trim();
-    const names            = parseBrewInput(formulaInput.value);
+    const token = tokenInput.value.trim();
+    const names = parseBrewInput(formulaInput.value);
     const includeBuildDeps = includeBuildCb.checked;
 
     if (rememberTokenCb.checked && token) {
@@ -287,7 +287,7 @@ if (typeof document !== 'undefined') {
     }
 
     if (names.length === 0) {
-      showError('Enter at least one formula or cask name.');
+      showError("Enter at least one formula or cask name.");
       return;
     }
 
@@ -297,7 +297,7 @@ if (typeof document !== 'undefined') {
     try {
       const { results, rateLimited } = await resolve(names, {
         includeBuildDeps,
-        onProgress: msg => appendProgress(msg + '\n'),
+        onProgress: (msg) => appendProgress(msg + "\n"),
       });
 
       progressDiv.hidden = true;
@@ -308,26 +308,26 @@ if (typeof document !== 'undefined') {
       if (rateLimited) {
         showError(
           'GitHub API rate limit reached — some "Updated" dates could not be fetched. ' +
-          'Add a personal access token above to raise the limit to 5 000 req/hr, or wait for the unauthenticated limit (60/hr) to reset.'
+            "Add a personal access token above to raise the limit to 5 000 req/hr, or wait for the unauthenticated limit (60/hr) to reset.",
         );
       }
 
-      let sortCol = 'updatedAt';
-      let sortDir = 'desc';
+      let sortCol = "updatedAt";
+      let sortDir = "desc";
 
       function rerender() {
         renderResults(resultsDiv, sortResultsBy(results, sortCol, sortDir));
 
-        resultsDiv.querySelectorAll('th[data-col]').forEach(th => {
+        resultsDiv.querySelectorAll("th[data-col]").forEach((th) => {
           const col = th.dataset.col;
-          th.classList.toggle('th-sort-asc',  col === sortCol && sortDir === 'asc');
-          th.classList.toggle('th-sort-desc', col === sortCol && sortDir === 'desc');
-          th.addEventListener('click', () => {
+          th.classList.toggle("th-sort-asc", col === sortCol && sortDir === "asc");
+          th.classList.toggle("th-sort-desc", col === sortCol && sortDir === "desc");
+          th.addEventListener("click", () => {
             if (sortCol === col) {
-              sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+              sortDir = sortDir === "asc" ? "desc" : "asc";
             } else {
               sortCol = col;
-              sortDir = (col === 'name' || col === 'version') ? 'asc' : 'desc';
+              sortDir = col === "name" || col === "version" ? "asc" : "desc";
             }
             rerender();
           });

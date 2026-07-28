@@ -5,10 +5,10 @@
  * project directory.
  */
 
-import fs from 'node:fs';
-import path from 'node:path';
-import { parseGoSum, parseGoMod, parseGoModReplaces } from './parserCore.js';
-import { partitionGoModules } from './moduleFilter.js';
+import fs from "node:fs";
+import path from "node:path";
+import { parseGoSum, parseGoMod, parseGoModReplaces } from "./parserCore.js";
+import { partitionGoModules } from "./moduleFilter.js";
 
 /**
  * Detects and parses the Go dependency file in a given project directory.
@@ -35,16 +35,18 @@ import { partitionGoModules } from './moduleFilter.js';
 export function parseDependencyFile(projectPath) {
   // Always read go.mod for replace directives when present.
   let dangerousDeps = [];
-  const goModPath = path.join(projectPath, 'go.mod');
+  const goModPath = path.join(projectPath, "go.mod");
   if (fs.existsSync(goModPath) && !fs.statSync(goModPath).isDirectory()) {
     try {
-      dangerousDeps = parseGoModReplaces(fs.readFileSync(goModPath, 'utf8')).dangerousDeps;
-    } catch { /* ignore — replace parsing is best-effort */ }
+      dangerousDeps = parseGoModReplaces(fs.readFileSync(goModPath, "utf8")).dangerousDeps;
+    } catch {
+      /* ignore — replace parsing is best-effort */
+    }
   }
 
   const candidates = [
-    { file: 'go.sum', parse: parseGoSum },
-    { file: 'go.mod', parse: parseGoMod },
+    { file: "go.sum", parse: parseGoSum },
+    { file: "go.mod", parse: parseGoMod },
   ];
 
   for (const { file, parse } of candidates) {
@@ -52,9 +54,15 @@ export function parseDependencyFile(projectPath) {
     if (!fs.existsSync(fullPath)) continue;
     if (fs.statSync(fullPath).isDirectory()) continue;
     try {
-      const content = fs.readFileSync(fullPath, 'utf8');
+      const content = fs.readFileSync(fullPath, "utf8");
       const { publicMods, privateCount, privateMods } = partitionGoModules(parse(content));
-      return { deps: publicMods, source: file, privateCount, privatePkgs: privateMods, dangerousDeps };
+      return {
+        deps: publicMods,
+        source: file,
+        privateCount,
+        privatePkgs: privateMods,
+        dangerousDeps,
+      };
     } catch (err) {
       throw new Error(`Failed to parse ${file}: ${err.message}`);
     }
@@ -73,9 +81,9 @@ export function parseDependencyFile(projectPath) {
  */
 export function readDirectNamesFromGoMod(dirPath) {
   try {
-    const content = fs.readFileSync(path.join(dirPath, 'go.mod'), 'utf8');
+    const content = fs.readFileSync(path.join(dirPath, "go.mod"), "utf8");
     const deps = parseGoMod(content);
-    return new Set(deps.filter(d => !d.indirect).map(d => d.name.toLowerCase()));
+    return new Set(deps.filter((d) => !d.indirect).map((d) => d.name.toLowerCase()));
   } catch {
     return new Set();
   }

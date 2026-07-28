@@ -19,7 +19,7 @@
  * a skipped-count note and the non-standard-sources block.
  */
 
-import { isCratesIoSource } from './parserCore.js';
+import { isCratesIoSource } from "./parserCore.js";
 
 /**
  * Returns true when a Cargo.lock `source` field points at the public
@@ -50,7 +50,7 @@ export function isPublicCratesIo(source) {
  * }}
  */
 export function partitionCargoPackages(packages) {
-  const publicPkgs  = [];
+  const publicPkgs = [];
   const privatePkgs = [];
 
   for (const pkg of packages) {

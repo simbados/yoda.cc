@@ -4,36 +4,45 @@
  * browser environment and cannot be tested with the Node.js test runner.
  */
 
-import { describe, it } from 'node:test';
-import assert from 'node:assert/strict';
-import { formatNumber, formatScore, daysSince, sortResults, sortResultsBy, detectEcosystem, detectEcosystems, ECOSYSTEM_ORDER } from '../web/app.js';
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import {
+  formatNumber,
+  formatScore,
+  daysSince,
+  sortResults,
+  sortResultsBy,
+  detectEcosystem,
+  detectEcosystems,
+  ECOSYSTEM_ORDER,
+} from "../web/app.js";
 
 // ── formatNumber ───────────────────────────────────────────────────────────────
 
-describe('formatNumber', () => {
+describe("formatNumber", () => {
   it('returns "–" for null', () => {
-    assert.equal(formatNumber(null), '–');
+    assert.equal(formatNumber(null), "–");
   });
 
   it('returns "–" for undefined', () => {
-    assert.equal(formatNumber(undefined), '–');
+    assert.equal(formatNumber(undefined), "–");
   });
 
-  it('formats 0 as a string', () => {
-    assert.equal(formatNumber(0), '0');
+  it("formats 0 as a string", () => {
+    assert.equal(formatNumber(0), "0");
   });
 
-  it('formats a plain integer without separators', () => {
-    assert.equal(formatNumber(42), '42');
+  it("formats a plain integer without separators", () => {
+    assert.equal(formatNumber(42), "42");
   });
 
-  it('formats a four-digit number with a thousand separator', () => {
+  it("formats a four-digit number with a thousand separator", () => {
     // toLocaleString output is locale-dependent, so just check it contains the digits
     const result = formatNumber(1234);
     assert.match(result, /1.234/); // "." matches any separator character (comma or period)
   });
 
-  it('formats a large number with separators', () => {
+  it("formats a large number with separators", () => {
     const result = formatNumber(1_234_567);
     assert.match(result, /1.234.567/);
   });
@@ -41,274 +50,273 @@ describe('formatNumber', () => {
 
 // ── formatScore ────────────────────────────────────────────────────────────────
 
-describe('formatScore', () => {
+describe("formatScore", () => {
   it('returns "–" for null', () => {
-    assert.equal(formatScore(null), '–');
+    assert.equal(formatScore(null), "–");
   });
 
   it('returns "–" for undefined', () => {
-    assert.equal(formatScore(undefined), '–');
+    assert.equal(formatScore(undefined), "–");
   });
 
   it('returns "87%" for 0.87', () => {
-    assert.equal(formatScore(0.87), '87%');
+    assert.equal(formatScore(0.87), "87%");
   });
 
   it('returns "100%" for 1', () => {
-    assert.equal(formatScore(1), '100%');
+    assert.equal(formatScore(1), "100%");
   });
 
   it('returns "0%" for 0', () => {
-    assert.equal(formatScore(0), '0%');
+    assert.equal(formatScore(0), "0%");
   });
 
   it('rounds to nearest integer (0.876 → "88%")', () => {
-    assert.equal(formatScore(0.876), '88%');
+    assert.equal(formatScore(0.876), "88%");
   });
 });
 
 // ── daysSince ──────────────────────────────────────────────────────────────────
 
-describe('daysSince', () => {
+describe("daysSince", () => {
   it('returns Infinity for the sentinel value "unknown"', () => {
-    assert.equal(daysSince('unknown'), Infinity);
+    assert.equal(daysSince("unknown"), Infinity);
   });
 
-  it('returns Infinity for null', () => {
+  it("returns Infinity for null", () => {
     assert.equal(daysSince(null), Infinity);
   });
 
-  it('returns Infinity for undefined', () => {
+  it("returns Infinity for undefined", () => {
     assert.equal(daysSince(undefined), Infinity);
   });
 
-  it('returns Infinity for an empty string', () => {
-    assert.equal(daysSince(''), Infinity);
+  it("returns Infinity for an empty string", () => {
+    assert.equal(daysSince(""), Infinity);
   });
 
-  it('returns Infinity for an unparseable string', () => {
-    assert.equal(daysSince('not-a-date'), Infinity);
+  it("returns Infinity for an unparseable string", () => {
+    assert.equal(daysSince("not-a-date"), Infinity);
   });
 
-  it('returns 0 for today', () => {
+  it("returns 0 for today", () => {
     const today = new Date().toISOString().slice(0, 10);
     assert.equal(daysSince(today), 0);
   });
 
-  it('returns a positive integer for a past date', () => {
+  it("returns a positive integer for a past date", () => {
     const threeDaysAgo = new Date(Date.now() - 3 * 86_400_000).toISOString().slice(0, 10);
     assert.equal(daysSince(threeDaysAgo), 3);
   });
 
-  it('returns a large number for an old date', () => {
-    assert.ok(daysSince('2011-01-01') > 3000);
+  it("returns a large number for an old date", () => {
+    assert.ok(daysSince("2011-01-01") > 3000);
   });
 });
 
 // ── sortResults ────────────────────────────────────────────────────────────────
 
-describe('sortResults', () => {
-  it('returns an empty array for an empty Map', () => {
+describe("sortResults", () => {
+  it("returns an empty array for an empty Map", () => {
     assert.deepEqual(sortResults(new Map()), []);
   });
 
-  it('returns a single-entry array unchanged', () => {
-    const map = new Map([['a', { name: 'alpha', releaseDate: '2024-01-01' }]]);
+  it("returns a single-entry array unchanged", () => {
+    const map = new Map([["a", { name: "alpha", releaseDate: "2024-01-01" }]]);
     assert.equal(sortResults(map).length, 1);
-    assert.equal(sortResults(map)[0].name, 'alpha');
+    assert.equal(sortResults(map)[0].name, "alpha");
   });
 
-  it('sorts newest release date first', () => {
+  it("sorts newest release date first", () => {
     const map = new Map([
-      ['a', { name: 'alpha', releaseDate: '2023-01-01' }],
-      ['b', { name: 'beta',  releaseDate: '2024-06-01' }],
-      ['c', { name: 'gamma', releaseDate: '2022-03-15' }],
+      ["a", { name: "alpha", releaseDate: "2023-01-01" }],
+      ["b", { name: "beta", releaseDate: "2024-06-01" }],
+      ["c", { name: "gamma", releaseDate: "2022-03-15" }],
     ]);
     const sorted = sortResults(map);
-    assert.equal(sorted[0].name, 'beta');
-    assert.equal(sorted[1].name, 'alpha');
-    assert.equal(sorted[2].name, 'gamma');
+    assert.equal(sorted[0].name, "beta");
+    assert.equal(sorted[1].name, "alpha");
+    assert.equal(sorted[2].name, "gamma");
   });
 
-  it('breaks ties alphabetically by name', () => {
+  it("breaks ties alphabetically by name", () => {
     const map = new Map([
-      ['b', { name: 'beta',  releaseDate: '2024-01-01' }],
-      ['a', { name: 'alpha', releaseDate: '2024-01-01' }],
+      ["b", { name: "beta", releaseDate: "2024-01-01" }],
+      ["a", { name: "alpha", releaseDate: "2024-01-01" }],
     ]);
     const sorted = sortResults(map);
-    assert.equal(sorted[0].name, 'alpha');
-    assert.equal(sorted[1].name, 'beta');
+    assert.equal(sorted[0].name, "alpha");
+    assert.equal(sorted[1].name, "beta");
   });
 
   it('sinks "unknown" release dates to the bottom', () => {
     const map = new Map([
-      ['a', { name: 'alpha',   releaseDate: 'unknown' }],
-      ['b', { name: 'beta',    releaseDate: '2024-01-01' }],
-      ['c', { name: 'gamma',   releaseDate: '2023-06-01' }],
+      ["a", { name: "alpha", releaseDate: "unknown" }],
+      ["b", { name: "beta", releaseDate: "2024-01-01" }],
+      ["c", { name: "gamma", releaseDate: "2023-06-01" }],
     ]);
     const sorted = sortResults(map);
-    assert.equal(sorted[2].name, 'alpha');
+    assert.equal(sorted[2].name, "alpha");
   });
 
   it('sorts multiple "unknown" entries alphabetically among themselves', () => {
     const map = new Map([
-      ['b', { name: 'zeta',  releaseDate: 'unknown' }],
-      ['a', { name: 'alpha', releaseDate: 'unknown' }],
-      ['c', { name: 'mu',    releaseDate: 'unknown' }],
+      ["b", { name: "zeta", releaseDate: "unknown" }],
+      ["a", { name: "alpha", releaseDate: "unknown" }],
+      ["c", { name: "mu", releaseDate: "unknown" }],
     ]);
     const sorted = sortResults(map);
-    assert.equal(sorted[0].name, 'alpha');
-    assert.equal(sorted[1].name, 'mu');
-    assert.equal(sorted[2].name, 'zeta');
+    assert.equal(sorted[0].name, "alpha");
+    assert.equal(sorted[1].name, "mu");
+    assert.equal(sorted[2].name, "zeta");
   });
 
-  it('does not mutate the input Map', async () => {
+  it("does not mutate the input Map", async () => {
     const map = new Map([
-      ['a', { name: 'alpha', releaseDate: '2023-01-01' }],
-      ['b', { name: 'beta',  releaseDate: '2024-01-01' }],
+      ["a", { name: "alpha", releaseDate: "2023-01-01" }],
+      ["b", { name: "beta", releaseDate: "2024-01-01" }],
     ]);
-    const originalOrder = [...map.values()].map(v => v.name);
+    const originalOrder = [...map.values()].map((v) => v.name);
     sortResults(map);
-    const afterOrder = [...map.values()].map(v => v.name);
+    const afterOrder = [...map.values()].map((v) => v.name);
     assert.deepEqual(originalOrder, afterOrder);
   });
 });
 
-
 // ── sortResultsBy ──────────────────────────────────────────────────────────────
 
-describe('sortResultsBy — string columns', () => {
-  it('sorts name ascending', () => {
+describe("sortResultsBy — string columns", () => {
+  it("sorts name ascending", () => {
     const map = new Map([
-      ['z', { name: 'zeta',  version: '1.0.0', releaseDate: '2024-01-01' }],
-      ['a', { name: 'alpha', version: '1.0.0', releaseDate: '2024-01-01' }],
-      ['m', { name: 'mu',    version: '1.0.0', releaseDate: '2024-01-01' }],
+      ["z", { name: "zeta", version: "1.0.0", releaseDate: "2024-01-01" }],
+      ["a", { name: "alpha", version: "1.0.0", releaseDate: "2024-01-01" }],
+      ["m", { name: "mu", version: "1.0.0", releaseDate: "2024-01-01" }],
     ]);
-    const sorted = sortResultsBy(map, 'name', 'asc');
-    assert.equal(sorted[0].name, 'alpha');
-    assert.equal(sorted[1].name, 'mu');
-    assert.equal(sorted[2].name, 'zeta');
+    const sorted = sortResultsBy(map, "name", "asc");
+    assert.equal(sorted[0].name, "alpha");
+    assert.equal(sorted[1].name, "mu");
+    assert.equal(sorted[2].name, "zeta");
   });
 
-  it('sorts name descending', () => {
+  it("sorts name descending", () => {
     const map = new Map([
-      ['a', { name: 'alpha', version: '1.0.0', releaseDate: '2024-01-01' }],
-      ['z', { name: 'zeta',  version: '1.0.0', releaseDate: '2024-01-01' }],
+      ["a", { name: "alpha", version: "1.0.0", releaseDate: "2024-01-01" }],
+      ["z", { name: "zeta", version: "1.0.0", releaseDate: "2024-01-01" }],
     ]);
-    const sorted = sortResultsBy(map, 'name', 'desc');
-    assert.equal(sorted[0].name, 'zeta');
-    assert.equal(sorted[1].name, 'alpha');
-  });
-});
-
-describe('sortResultsBy — date columns', () => {
-  it('sorts releaseDate descending (newest first)', () => {
-    const map = new Map([
-      ['a', { name: 'alpha', releaseDate: '2022-01-01' }],
-      ['b', { name: 'beta',  releaseDate: '2024-06-01' }],
-      ['c', { name: 'gamma', releaseDate: '2023-03-15' }],
-    ]);
-    const sorted = sortResultsBy(map, 'releaseDate', 'desc');
-    assert.equal(sorted[0].name, 'beta');
-    assert.equal(sorted[1].name, 'gamma');
-    assert.equal(sorted[2].name, 'alpha');
-  });
-
-  it('sorts releaseDate ascending (oldest first)', () => {
-    const map = new Map([
-      ['a', { name: 'alpha', releaseDate: '2022-01-01' }],
-      ['b', { name: 'beta',  releaseDate: '2024-06-01' }],
-    ]);
-    const sorted = sortResultsBy(map, 'releaseDate', 'asc');
-    assert.equal(sorted[0].name, 'alpha');
-    assert.equal(sorted[1].name, 'beta');
-  });
-
-  it('sinks unknown releaseDate to the bottom regardless of direction', () => {
-    const map = new Map([
-      ['a', { name: 'alpha',   releaseDate: 'unknown' }],
-      ['b', { name: 'beta',    releaseDate: '2024-01-01' }],
-    ]);
-    const descSorted = sortResultsBy(map, 'releaseDate', 'desc');
-    assert.equal(descSorted[1].name, 'alpha', 'unknown sinks in desc');
-    const ascSorted  = sortResultsBy(map, 'releaseDate', 'asc');
-    assert.equal(ascSorted[1].name, 'alpha', 'unknown sinks in asc');
-  });
-
-  it('sorts firstReleaseDate column', () => {
-    const map = new Map([
-      ['a', { name: 'alpha', firstReleaseDate: '2015-01-01' }],
-      ['b', { name: 'beta',  firstReleaseDate: '2020-06-01' }],
-    ]);
-    const sorted = sortResultsBy(map, 'firstReleaseDate', 'desc');
-    assert.equal(sorted[0].name, 'beta');
-    assert.equal(sorted[1].name, 'alpha');
+    const sorted = sortResultsBy(map, "name", "desc");
+    assert.equal(sorted[0].name, "zeta");
+    assert.equal(sorted[1].name, "alpha");
   });
 });
 
-describe('sortResultsBy — numeric columns', () => {
-  it('sorts releaseCount descending', () => {
+describe("sortResultsBy — date columns", () => {
+  it("sorts releaseDate descending (newest first)", () => {
     const map = new Map([
-      ['a', { name: 'alpha', releaseCount: 10 }],
-      ['b', { name: 'beta',  releaseCount: 50 }],
-      ['c', { name: 'gamma', releaseCount: 5  }],
+      ["a", { name: "alpha", releaseDate: "2022-01-01" }],
+      ["b", { name: "beta", releaseDate: "2024-06-01" }],
+      ["c", { name: "gamma", releaseDate: "2023-03-15" }],
     ]);
-    const sorted = sortResultsBy(map, 'releaseCount', 'desc');
-    assert.equal(sorted[0].name, 'beta');
-    assert.equal(sorted[2].name, 'gamma');
+    const sorted = sortResultsBy(map, "releaseDate", "desc");
+    assert.equal(sorted[0].name, "beta");
+    assert.equal(sorted[1].name, "gamma");
+    assert.equal(sorted[2].name, "alpha");
   });
 
-  it('sorts releaseCount ascending', () => {
+  it("sorts releaseDate ascending (oldest first)", () => {
     const map = new Map([
-      ['a', { name: 'alpha', releaseCount: 10 }],
-      ['b', { name: 'beta',  releaseCount: 50 }],
+      ["a", { name: "alpha", releaseDate: "2022-01-01" }],
+      ["b", { name: "beta", releaseDate: "2024-06-01" }],
     ]);
-    const sorted = sortResultsBy(map, 'releaseCount', 'asc');
-    assert.equal(sorted[0].name, 'alpha');
-    assert.equal(sorted[1].name, 'beta');
+    const sorted = sortResultsBy(map, "releaseDate", "asc");
+    assert.equal(sorted[0].name, "alpha");
+    assert.equal(sorted[1].name, "beta");
   });
 
-  it('sinks null downloadsLastMonth to the bottom', () => {
+  it("sinks unknown releaseDate to the bottom regardless of direction", () => {
     const map = new Map([
-      ['a', { name: 'alpha', downloadsLastMonth: null }],
-      ['b', { name: 'beta',  downloadsLastMonth: 1000 }],
+      ["a", { name: "alpha", releaseDate: "unknown" }],
+      ["b", { name: "beta", releaseDate: "2024-01-01" }],
     ]);
-    const sorted = sortResultsBy(map, 'downloadsLastMonth', 'desc');
-    assert.equal(sorted[1].name, 'alpha', 'null sinks regardless of direction');
+    const descSorted = sortResultsBy(map, "releaseDate", "desc");
+    assert.equal(descSorted[1].name, "alpha", "unknown sinks in desc");
+    const ascSorted = sortResultsBy(map, "releaseDate", "asc");
+    assert.equal(ascSorted[1].name, "alpha", "unknown sinks in asc");
   });
 
-  it('sorts supplyChain column descending', () => {
+  it("sorts firstReleaseDate column", () => {
     const map = new Map([
-      ['a', { name: 'alpha', supplyChain: 0.4 }],
-      ['b', { name: 'beta',  supplyChain: 0.9 }],
-      ['c', { name: 'gamma', supplyChain: 0.7 }],
+      ["a", { name: "alpha", firstReleaseDate: "2015-01-01" }],
+      ["b", { name: "beta", firstReleaseDate: "2020-06-01" }],
     ]);
-    const sorted = sortResultsBy(map, 'supplyChain', 'desc');
-    assert.equal(sorted[0].name, 'beta');
-    assert.equal(sorted[1].name, 'gamma');
-    assert.equal(sorted[2].name, 'alpha');
-  });
-
-  it('sinks null supplyChain to the bottom', () => {
-    const map = new Map([
-      ['a', { name: 'alpha', supplyChain: null }],
-      ['b', { name: 'beta',  supplyChain: 0.8  }],
-    ]);
-    const desc = sortResultsBy(map, 'supplyChain', 'desc');
-    assert.equal(desc[1].name, 'alpha');
-    const asc  = sortResultsBy(map, 'supplyChain', 'asc');
-    assert.equal(asc[1].name, 'alpha');
+    const sorted = sortResultsBy(map, "firstReleaseDate", "desc");
+    assert.equal(sorted[0].name, "beta");
+    assert.equal(sorted[1].name, "alpha");
   });
 });
 
-describe('sortResultsBy — does not mutate input Map', () => {
-  it('returns a new array leaving the Map unchanged', () => {
+describe("sortResultsBy — numeric columns", () => {
+  it("sorts releaseCount descending", () => {
     const map = new Map([
-      ['a', { name: 'alpha', releaseDate: '2022-01-01' }],
-      ['b', { name: 'beta',  releaseDate: '2024-01-01' }],
+      ["a", { name: "alpha", releaseCount: 10 }],
+      ["b", { name: "beta", releaseCount: 50 }],
+      ["c", { name: "gamma", releaseCount: 5 }],
+    ]);
+    const sorted = sortResultsBy(map, "releaseCount", "desc");
+    assert.equal(sorted[0].name, "beta");
+    assert.equal(sorted[2].name, "gamma");
+  });
+
+  it("sorts releaseCount ascending", () => {
+    const map = new Map([
+      ["a", { name: "alpha", releaseCount: 10 }],
+      ["b", { name: "beta", releaseCount: 50 }],
+    ]);
+    const sorted = sortResultsBy(map, "releaseCount", "asc");
+    assert.equal(sorted[0].name, "alpha");
+    assert.equal(sorted[1].name, "beta");
+  });
+
+  it("sinks null downloadsLastMonth to the bottom", () => {
+    const map = new Map([
+      ["a", { name: "alpha", downloadsLastMonth: null }],
+      ["b", { name: "beta", downloadsLastMonth: 1000 }],
+    ]);
+    const sorted = sortResultsBy(map, "downloadsLastMonth", "desc");
+    assert.equal(sorted[1].name, "alpha", "null sinks regardless of direction");
+  });
+
+  it("sorts supplyChain column descending", () => {
+    const map = new Map([
+      ["a", { name: "alpha", supplyChain: 0.4 }],
+      ["b", { name: "beta", supplyChain: 0.9 }],
+      ["c", { name: "gamma", supplyChain: 0.7 }],
+    ]);
+    const sorted = sortResultsBy(map, "supplyChain", "desc");
+    assert.equal(sorted[0].name, "beta");
+    assert.equal(sorted[1].name, "gamma");
+    assert.equal(sorted[2].name, "alpha");
+  });
+
+  it("sinks null supplyChain to the bottom", () => {
+    const map = new Map([
+      ["a", { name: "alpha", supplyChain: null }],
+      ["b", { name: "beta", supplyChain: 0.8 }],
+    ]);
+    const desc = sortResultsBy(map, "supplyChain", "desc");
+    assert.equal(desc[1].name, "alpha");
+    const asc = sortResultsBy(map, "supplyChain", "asc");
+    assert.equal(asc[1].name, "alpha");
+  });
+});
+
+describe("sortResultsBy — does not mutate input Map", () => {
+  it("returns a new array leaving the Map unchanged", () => {
+    const map = new Map([
+      ["a", { name: "alpha", releaseDate: "2022-01-01" }],
+      ["b", { name: "beta", releaseDate: "2024-01-01" }],
     ]);
     const originalKeys = [...map.keys()];
-    sortResultsBy(map, 'releaseDate', 'desc');
+    sortResultsBy(map, "releaseDate", "desc");
     assert.deepEqual([...map.keys()], originalKeys);
   });
 });
@@ -323,84 +331,84 @@ describe('sortResultsBy — does not mutate input Map', () => {
 // Removing that fallback causes HA integration repos to fail with "Could not
 // detect ecosystem" even though the dep file is reachable via traversal.
 
-describe('detectEcosystem', () => {
-  it('detects npm from package-lock.json', () => {
-    const listing = [{ name: 'package-lock.json', type: 'file' }];
-    assert.equal(detectEcosystem(listing), 'npm');
+describe("detectEcosystem", () => {
+  it("detects npm from package-lock.json", () => {
+    const listing = [{ name: "package-lock.json", type: "file" }];
+    assert.equal(detectEcosystem(listing), "npm");
   });
 
-  it('detects npm from pnpm-lock.yaml', () => {
-    const listing = [{ name: 'pnpm-lock.yaml', type: 'file' }];
-    assert.equal(detectEcosystem(listing), 'npm');
+  it("detects npm from pnpm-lock.yaml", () => {
+    const listing = [{ name: "pnpm-lock.yaml", type: "file" }];
+    assert.equal(detectEcosystem(listing), "npm");
   });
 
-  it('detects npm from package.json', () => {
-    const listing = [{ name: 'package.json', type: 'file' }];
-    assert.equal(detectEcosystem(listing), 'npm');
+  it("detects npm from package.json", () => {
+    const listing = [{ name: "package.json", type: "file" }];
+    assert.equal(detectEcosystem(listing), "npm");
   });
 
-  it('npm takes precedence over python when both present', () => {
+  it("npm takes precedence over python when both present", () => {
     const listing = [
-      { name: 'package.json',  type: 'file' },
-      { name: 'requirements.txt', type: 'file' },
+      { name: "package.json", type: "file" },
+      { name: "requirements.txt", type: "file" },
     ];
-    assert.equal(detectEcosystem(listing), 'npm');
+    assert.equal(detectEcosystem(listing), "npm");
   });
 
-  it('detects go from go.sum', () => {
-    const listing = [{ name: 'go.sum', type: 'file' }];
-    assert.equal(detectEcosystem(listing), 'go');
+  it("detects go from go.sum", () => {
+    const listing = [{ name: "go.sum", type: "file" }];
+    assert.equal(detectEcosystem(listing), "go");
   });
 
-  it('detects go from go.mod', () => {
-    const listing = [{ name: 'go.mod', type: 'file' }];
-    assert.equal(detectEcosystem(listing), 'go');
+  it("detects go from go.mod", () => {
+    const listing = [{ name: "go.mod", type: "file" }];
+    assert.equal(detectEcosystem(listing), "go");
   });
 
-  it('npm takes precedence over go when both present', () => {
+  it("npm takes precedence over go when both present", () => {
     const listing = [
-      { name: 'package.json', type: 'file' },
-      { name: 'go.mod',       type: 'file' },
+      { name: "package.json", type: "file" },
+      { name: "go.mod", type: "file" },
     ];
-    assert.equal(detectEcosystem(listing), 'npm');
+    assert.equal(detectEcosystem(listing), "npm");
   });
 
-  it('go takes precedence over python when both present', () => {
+  it("go takes precedence over python when both present", () => {
     const listing = [
-      { name: 'go.mod',           type: 'file' },
-      { name: 'requirements.txt', type: 'file' },
+      { name: "go.mod", type: "file" },
+      { name: "requirements.txt", type: "file" },
     ];
-    assert.equal(detectEcosystem(listing), 'go');
+    assert.equal(detectEcosystem(listing), "go");
   });
 
-  it('detects python from pyproject.toml', () => {
-    const listing = [{ name: 'pyproject.toml', type: 'file' }];
-    assert.equal(detectEcosystem(listing), 'python');
+  it("detects python from pyproject.toml", () => {
+    const listing = [{ name: "pyproject.toml", type: "file" }];
+    assert.equal(detectEcosystem(listing), "python");
   });
 
-  it('detects python from requirements.txt', () => {
-    const listing = [{ name: 'requirements.txt', type: 'file' }];
-    assert.equal(detectEcosystem(listing), 'python');
+  it("detects python from requirements.txt", () => {
+    const listing = [{ name: "requirements.txt", type: "file" }];
+    assert.equal(detectEcosystem(listing), "python");
   });
 
-  it('detects python from requirements_all.txt', () => {
-    const listing = [{ name: 'requirements_all.txt', type: 'file' }];
-    assert.equal(detectEcosystem(listing), 'python');
+  it("detects python from requirements_all.txt", () => {
+    const listing = [{ name: "requirements_all.txt", type: "file" }];
+    assert.equal(detectEcosystem(listing), "python");
   });
 
-  it('detects python from manifest.json', () => {
-    const listing = [{ name: 'manifest.json', type: 'file' }];
-    assert.equal(detectEcosystem(listing), 'python');
+  it("detects python from manifest.json", () => {
+    const listing = [{ name: "manifest.json", type: "file" }];
+    assert.equal(detectEcosystem(listing), "python");
   });
 
-  it('detects python from setup.cfg', () => {
-    const listing = [{ name: 'setup.cfg', type: 'file' }];
-    assert.equal(detectEcosystem(listing), 'python');
+  it("detects python from setup.cfg", () => {
+    const listing = [{ name: "setup.cfg", type: "file" }];
+    assert.equal(detectEcosystem(listing), "python");
   });
 
-  it('detects python from Pipfile', () => {
-    const listing = [{ name: 'Pipfile', type: 'file' }];
-    assert.equal(detectEcosystem(listing), 'python');
+  it("detects python from Pipfile", () => {
+    const listing = [{ name: "Pipfile", type: "file" }];
+    assert.equal(detectEcosystem(listing), "python");
   });
 
   // ── HA regression guard ──────────────────────────────────────────────────
@@ -411,24 +419,24 @@ describe('detectEcosystem', () => {
   // its depth-2 traversal and finds the nested manifest.json.
   // If this test starts failing the fallback may have been removed.
 
-  it('returns null for a HA-style root listing (only custom_components dir)', () => {
+  it("returns null for a HA-style root listing (only custom_components dir)", () => {
     const listing = [
-      { name: 'custom_components', type: 'dir' },
-      { name: 'README.md',         type: 'file' },
-      { name: '.github',           type: 'dir' },
+      { name: "custom_components", type: "dir" },
+      { name: "README.md", type: "file" },
+      { name: ".github", type: "dir" },
     ];
     assert.equal(detectEcosystem(listing), null);
   });
 
-  it('returns null for an empty listing', () => {
+  it("returns null for an empty listing", () => {
     assert.equal(detectEcosystem([]), null);
   });
 
-  it('returns null when only unrecognised files and dirs are present', () => {
+  it("returns null when only unrecognised files and dirs are present", () => {
     const listing = [
-      { name: 'src',       type: 'dir' },
-      { name: 'README.md', type: 'file' },
-      { name: 'LICENSE',   type: 'file' },
+      { name: "src", type: "dir" },
+      { name: "README.md", type: "file" },
+      { name: "LICENSE", type: "file" },
     ];
     assert.equal(detectEcosystem(listing), null);
   });
@@ -436,33 +444,33 @@ describe('detectEcosystem', () => {
 
 // ── detectEcosystems (multi-valued) ──────────────────────────────────────────
 
-describe('detectEcosystems', () => {
-  it('returns every ecosystem present in the listing', () => {
+describe("detectEcosystems", () => {
+  it("returns every ecosystem present in the listing", () => {
     const listing = [
-      { name: 'package.json',     type: 'file' },
-      { name: 'go.mod',           type: 'file' },
-      { name: 'requirements.txt', type: 'file' },
+      { name: "package.json", type: "file" },
+      { name: "go.mod", type: "file" },
+      { name: "requirements.txt", type: "file" },
     ];
     const set = detectEcosystems(listing);
     assert.equal(set.size, 3);
-    assert.ok(set.has('npm'));
-    assert.ok(set.has('go'));
-    assert.ok(set.has('python'));
+    assert.ok(set.has("npm"));
+    assert.ok(set.has("go"));
+    assert.ok(set.has("python"));
   });
 
-  it('returns a single-element set when only one ecosystem is present', () => {
-    const listing = [{ name: 'go.sum', type: 'file' }];
+  it("returns a single-element set when only one ecosystem is present", () => {
+    const listing = [{ name: "go.sum", type: "file" }];
     const set = detectEcosystems(listing);
-    assert.deepEqual([...set], ['go']);
+    assert.deepEqual([...set], ["go"]);
   });
 
-  it('returns an empty set when no recognised files are present', () => {
+  it("returns an empty set when no recognised files are present", () => {
     assert.equal(detectEcosystems([]).size, 0);
   });
 });
 
-describe('ECOSYSTEM_ORDER', () => {
-  it('is the fixed npm → python → go → rust sequence', () => {
-    assert.deepEqual(ECOSYSTEM_ORDER, ['npm', 'python', 'go', 'rust']);
+describe("ECOSYSTEM_ORDER", () => {
+  it("is the fixed npm → python → go → rust sequence", () => {
+    assert.deepEqual(ECOSYSTEM_ORDER, ["npm", "python", "go", "rust"]);
   });
 });

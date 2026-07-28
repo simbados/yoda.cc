@@ -12,32 +12,32 @@
  */
 
 const PUBLIC_GO_HOSTS = new Set([
-  'github.com',
-  'gitlab.com',
-  'bitbucket.org',
-  'golang.org',
-  'gopkg.in',
-  'k8s.io',
-  'sigs.k8s.io',
-  'go.uber.org',
-  'google.golang.org',
-  'cloud.google.com',
-  'go.opencensus.io',
-  'go.opentelemetry.io',
-  'mvdan.cc',
-  'honnef.co',
-  'filippo.io',
-  'mellium.im',
-  'nhooyr.io',
-  'cel.dev',
-  'buf.build',
-  'cuelang.org',
-  'dario.cat',
-  'go.etcd.io',
-  'go.mongodb.org',
-  'go.temporal.io',
-  'gocloud.dev',
-  'storj.io',
+  "github.com",
+  "gitlab.com",
+  "bitbucket.org",
+  "golang.org",
+  "gopkg.in",
+  "k8s.io",
+  "sigs.k8s.io",
+  "go.uber.org",
+  "google.golang.org",
+  "cloud.google.com",
+  "go.opencensus.io",
+  "go.opentelemetry.io",
+  "mvdan.cc",
+  "honnef.co",
+  "filippo.io",
+  "mellium.im",
+  "nhooyr.io",
+  "cel.dev",
+  "buf.build",
+  "cuelang.org",
+  "dario.cat",
+  "go.etcd.io",
+  "go.mongodb.org",
+  "go.temporal.io",
+  "gocloud.dev",
+  "storj.io",
 ]);
 
 /**
@@ -49,7 +49,7 @@ const PUBLIC_GO_HOSTS = new Set([
  */
 export function isPublicGoModule(modulePath) {
   if (!modulePath) return false;
-  const host = modulePath.split('/')[0];
+  const host = modulePath.split("/")[0];
   return PUBLIC_GO_HOSTS.has(host);
 }
 
@@ -68,7 +68,7 @@ export function isPublicGoModule(modulePath) {
  * }}
  */
 export function partitionGoModules(modules) {
-  const publicMods  = [];
+  const publicMods = [];
   const privateMods = [];
   for (const mod of modules) {
     if (isPublicGoModule(mod.name)) {

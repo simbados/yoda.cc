@@ -33,7 +33,7 @@ class Semaphore {
       this.count++;
       return Promise.resolve();
     }
-    return new Promise(resolve => this.queue.push(resolve));
+    return new Promise((resolve) => this.queue.push(resolve));
   }
 
   /**

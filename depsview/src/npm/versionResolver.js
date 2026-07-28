@@ -11,19 +11,17 @@
  * @returns {{ major: number, minor: number, patch: number, pre: Array<number|string>|null }}
  */
 function parseSemver(v) {
-  const s = String(v).trim().replace(/^v/, '').split('+')[0];
-  const dashIdx = s.indexOf('-');
-  const core   = dashIdx === -1 ? s : s.slice(0, dashIdx);
+  const s = String(v).trim().replace(/^v/, "").split("+")[0];
+  const dashIdx = s.indexOf("-");
+  const core = dashIdx === -1 ? s : s.slice(0, dashIdx);
   const preStr = dashIdx === -1 ? null : s.slice(dashIdx + 1);
 
-  const parts = core.split('.');
+  const parts = core.split(".");
   const major = parseInt(parts[0], 10) || 0;
   const minor = parseInt(parts[1], 10) || 0;
   const patch = parseInt(parts[2], 10) || 0;
 
-  const pre = preStr
-    ? preStr.split('.').map(p => /^\d+$/.test(p) ? parseInt(p, 10) : p)
-    : null;
+  const pre = preStr ? preStr.split(".").map((p) => (/^\d+$/.test(p) ? parseInt(p, 10) : p)) : null;
 
   return { major, minor, patch, pre };
 }
@@ -51,9 +49,14 @@ function compareSemver(a, b) {
     for (let i = 0; i < len; i++) {
       if (i >= a.pre.length) return -1;
       if (i >= b.pre.length) return 1;
-      const ai = a.pre[i], bi = b.pre[i];
-      const aNum = typeof ai === 'number', bNum = typeof bi === 'number';
-      if (aNum && bNum) { if (ai !== bi) return ai - bi; continue; }
+      const ai = a.pre[i],
+        bi = b.pre[i];
+      const aNum = typeof ai === "number",
+        bNum = typeof bi === "number";
+      if (aNum && bNum) {
+        if (ai !== bi) return ai - bi;
+        continue;
+      }
       if (aNum) return -1; // numeric < string in semver pre-release ordering
       if (bNum) return 1;
       const cmp = String(ai).localeCompare(String(bi));
@@ -69,8 +72,11 @@ function compareSemver(a, b) {
  * @returns {boolean}
  */
 function isPreRelease(v) {
-  try { return parseSemver(v).pre !== null; }
-  catch { return false; }
+  try {
+    return parseSemver(v).pre !== null;
+  } catch {
+    return false;
+  }
 }
 
 // ── Range expansion ───────────────────────────────────────────────────────────
@@ -84,18 +90,19 @@ function isPreRelease(v) {
  * @returns {Array<{ op: string, ver: ReturnType<parseSemver> }>}
  */
 function expandTilde(s) {
-  const parts = s.split('.');
+  const parts = s.split(".");
   const major = parseInt(parts[0], 10) || 0;
   const hasMinor = parts.length >= 2 && !/^[xX*]$/.test(parts[1]);
-  const minor = hasMinor ? (parseInt(parts[1], 10) || 0) : 0;
-  const patch = parts.length >= 3 && !/^[xX*]$/.test(parts[2]) ? (parseInt(parts[2], 10) || 0) : 0;
+  const minor = hasMinor ? parseInt(parts[1], 10) || 0 : 0;
+  const patch = parts.length >= 3 && !/^[xX*]$/.test(parts[2]) ? parseInt(parts[2], 10) || 0 : 0;
 
   const lower = parseSemver(`${major}.${minor}.${patch}`);
-  const upper = hasMinor
-    ? parseSemver(`${major}.${minor + 1}.0`)
-    : parseSemver(`${major + 1}.0.0`);
+  const upper = hasMinor ? parseSemver(`${major}.${minor + 1}.0`) : parseSemver(`${major + 1}.0.0`);
 
-  return [{ op: '>=', ver: lower }, { op: '<', ver: upper }];
+  return [
+    { op: ">=", ver: lower },
+    { op: "<", ver: upper },
+  ];
 }
 
 /**
@@ -111,8 +118,8 @@ function expandTilde(s) {
  * @returns {Array<{ op: string, ver: ReturnType<parseSemver> }>}
  */
 function expandCaret(s) {
-  const parts = s.split('.');
-  const isWild = p => !p || /^[xX*]$/.test(p);
+  const parts = s.split(".");
+  const isWild = (p) => !p || /^[xX*]$/.test(p);
 
   const major = parseInt(parts[0], 10) || 0;
   const minor = parts.length >= 2 && !isWild(parts[1]) ? parseInt(parts[1], 10) || 0 : null;
@@ -124,18 +131,21 @@ function expandCaret(s) {
   if (major > 0) {
     upper = parseSemver(`${major + 1}.0.0`);
   } else if (minor === null) {
-    upper = parseSemver('1.0.0');
+    upper = parseSemver("1.0.0");
   } else if (minor > 0) {
     upper = parseSemver(`0.${minor + 1}.0`);
   } else if (patch === null) {
-    upper = parseSemver('0.1.0');
+    upper = parseSemver("0.1.0");
   } else if (patch > 0) {
     upper = parseSemver(`0.0.${patch + 1}`);
   } else {
-    upper = parseSemver('0.0.1');
+    upper = parseSemver("0.0.1");
   }
 
-  return [{ op: '>=', ver: lower }, { op: '<', ver: upper }];
+  return [
+    { op: ">=", ver: lower },
+    { op: "<", ver: upper },
+  ];
 }
 
 /**
@@ -147,8 +157,8 @@ function expandCaret(s) {
  * @returns {Array<{ op: string, ver: ReturnType<parseSemver> }>}
  */
 function expandXRange(s) {
-  const parts = s.split('.');
-  const isWild = p => !p || /^[xX*]$/.test(p);
+  const parts = s.split(".");
+  const isWild = (p) => !p || /^[xX*]$/.test(p);
 
   if (isWild(parts[0])) return [];
 
@@ -156,8 +166,8 @@ function expandXRange(s) {
 
   if (parts.length < 2 || isWild(parts[1])) {
     return [
-      { op: '>=', ver: parseSemver(`${major}.0.0`) },
-      { op: '<',  ver: parseSemver(`${major + 1}.0.0`) },
+      { op: ">=", ver: parseSemver(`${major}.0.0`) },
+      { op: "<", ver: parseSemver(`${major + 1}.0.0`) },
     ];
   }
 
@@ -165,12 +175,12 @@ function expandXRange(s) {
 
   if (parts.length < 3 || isWild(parts[2])) {
     return [
-      { op: '>=', ver: parseSemver(`${major}.${minor}.0`) },
-      { op: '<',  ver: parseSemver(`${major}.${minor + 1}.0`) },
+      { op: ">=", ver: parseSemver(`${major}.${minor}.0`) },
+      { op: "<", ver: parseSemver(`${major}.${minor + 1}.0`) },
     ];
   }
 
-  return [{ op: '=', ver: parseSemver(s) }];
+  return [{ op: "=", ver: parseSemver(s) }];
 }
 
 /**
@@ -182,13 +192,19 @@ function expandXRange(s) {
 function satisfiesComparator(v, { op, ver }) {
   const cmp = compareSemver(v, ver);
   switch (op) {
-    case '=':
-    case '==': return cmp === 0;
-    case '>=': return cmp >= 0;
-    case '<=': return cmp <= 0;
-    case '>':  return cmp > 0;
-    case '<':  return cmp < 0;
-    default:   return true;
+    case "=":
+    case "==":
+      return cmp === 0;
+    case ">=":
+      return cmp >= 0;
+    case "<=":
+      return cmp <= 0;
+    case ">":
+      return cmp > 0;
+    case "<":
+      return cmp < 0;
+    default:
+      return true;
   }
 }
 
@@ -200,21 +216,27 @@ function satisfiesComparator(v, { op, ver }) {
  */
 function parseComparatorToken(token) {
   const s = token.trim();
-  if (!s || s === '*') return [];
-  if (s.startsWith('~')) return expandTilde(s.slice(1).trim());
-  if (s.startsWith('^')) return expandCaret(s.slice(1).trim());
+  if (!s || s === "*") return [];
+  if (s.startsWith("~")) return expandTilde(s.slice(1).trim());
+  if (s.startsWith("^")) return expandCaret(s.slice(1).trim());
 
   const opMatch = s.match(/^(>=|<=|>|<|={1,2})\s*(.+)$/);
   if (opMatch) {
-    try { return [{ op: opMatch[1].replace('==', '='), ver: parseSemver(opMatch[2]) }]; }
-    catch { return []; }
+    try {
+      return [{ op: opMatch[1].replace("==", "="), ver: parseSemver(opMatch[2]) }];
+    } catch {
+      return [];
+    }
   }
 
   // X-range or bare version
   if (/[xX*]/.test(s) || /^\d+(\.\d+)?$/.test(s)) return expandXRange(s);
 
-  try { return [{ op: '=', ver: parseSemver(s) }]; }
-  catch { return []; }
+  try {
+    return [{ op: "=", ver: parseSemver(s) }];
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -227,23 +249,27 @@ function parseComparatorToken(token) {
  */
 function satisfiesRange(versionStr, rangeStr) {
   let v;
-  try { v = parseSemver(versionStr); }
-  catch { return false; }
+  try {
+    v = parseSemver(versionStr);
+  } catch {
+    return false;
+  }
 
-  const orParts = rangeStr.split('||').map(s => s.trim());
+  const orParts = rangeStr.split("||").map((s) => s.trim());
 
-  return orParts.some(andPart => {
-    if (!andPart || andPart === '*') return true;
+  return orParts.some((andPart) => {
+    if (!andPart || andPart === "*") return true;
     // npm permits whitespace between a comparator operator and its version
     // (e.g. ">= 3.1.0 < 4"). Glue each operator to the version that follows it
     // before splitting on whitespace, otherwise a bare ">=" token is mis-parsed
     // as its own comparator and the range never matches. ">=" / "<=" are listed
     // first so they are glued as units rather than as ">" + "=".
     const comparators = andPart
-      .replace(/(>=|<=|>|<|=)\s+/g, '$1')
-      .split(/\s+/).filter(Boolean)
+      .replace(/(>=|<=|>|<|=)\s+/g, "$1")
+      .split(/\s+/)
+      .filter(Boolean)
       .flatMap(parseComparatorToken);
-    return comparators.every(c => satisfiesComparator(v, c));
+    return comparators.every((c) => satisfiesComparator(v, c));
   });
 }
 
@@ -260,25 +286,28 @@ function satisfiesRange(versionStr, rangeStr) {
  * @returns {{ version: string|null, isLatest: boolean }}
  */
 function resolveVersion(versionSpec, allVersions) {
-  if (!allVersions || allVersions.length === 0) return { version: 'unknown', isLatest: true };
+  if (!allVersions || allVersions.length === 0) return { version: "unknown", isLatest: true };
 
   const sortedDesc = (versions) =>
     [...versions].sort((a, b) => {
-      try { return compareSemver(parseSemver(b), parseSemver(a)); }
-      catch { return 0; }
+      try {
+        return compareSemver(parseSemver(b), parseSemver(a));
+      } catch {
+        return 0;
+      }
     });
 
-  const spec = (versionSpec ?? '').trim();
-  const isAny = !spec || spec === '*' || spec === 'latest' || spec === '';
+  const spec = (versionSpec ?? "").trim();
+  const isAny = !spec || spec === "*" || spec === "latest" || spec === "";
 
   if (isAny) {
-    const stable = allVersions.filter(v => !isPreRelease(v));
-    const pool   = stable.length > 0 ? stable : allVersions;
+    const stable = allVersions.filter((v) => !isPreRelease(v));
+    const pool = stable.length > 0 ? stable : allVersions;
     const sorted = sortedDesc(pool);
     return { version: sorted[0], isLatest: true };
   }
 
-  const sortedStable = sortedDesc(allVersions.filter(v => !isPreRelease(v)));
+  const sortedStable = sortedDesc(allVersions.filter((v) => !isPreRelease(v)));
   for (const v of sortedStable) {
     if (satisfiesRange(v, spec)) return { version: v, isLatest: v === sortedStable[0] };
   }

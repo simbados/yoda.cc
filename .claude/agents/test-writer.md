@@ -27,10 +27,14 @@ If the subproject has no `CLAUDE.md`, apply the defaults in the next section ver
 - **Test names** state the exact expected behaviour: `'returns null when version list is empty'`, not `'works correctly'`.
 - **Network calls must be mocked** using the `mockFetch` pattern — replace `globalThis.fetch` in `beforeEach`/`afterEach` and restore it after:
   ```js
-  import { describe, it, beforeEach, afterEach } from 'node:test';
+  import { describe, it, beforeEach, afterEach } from "node:test";
   let origFetch;
-  beforeEach(() => { origFetch = globalThis.fetch; });
-  afterEach(() => { globalThis.fetch = origFetch; });
+  beforeEach(() => {
+    origFetch = globalThis.fetch;
+  });
+  afterEach(() => {
+    globalThis.fetch = origFetch;
+  });
   function mockFetch(response) {
     globalThis.fetch = async (url, opts) => response;
   }

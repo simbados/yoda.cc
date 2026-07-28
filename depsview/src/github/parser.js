@@ -10,27 +10,34 @@
  * combined constraint (e.g. ">=2.28" + "<3.0" → ">=2.28,<3.0").
  */
 
-import { listDirectory, fetchFileContent } from './client.js';
-import { parsePackageJson } from '../npm/parserCore.js';
-import { NPM_LOCK_FILES, NPM_LOCK_FILENAMES } from '../npm/lockRegistry.js';
+import { listDirectory, fetchFileContent } from "./client.js";
+import { parsePackageJson } from "../npm/parserCore.js";
+import { NPM_LOCK_FILES, NPM_LOCK_FILENAMES } from "../npm/lockRegistry.js";
 import {
   parseDependencyString,
   parsePyprojectToml,
   parseManifestJson,
   parseSetupCfg,
   parsePipfile,
-} from '../python/parserCore.js';
-import { normalizePackageName } from '../python/pypiClient.js';
-import { isTestDirectory, isTestRequirementsFile } from '../python/testFilter.js';
-import { parseGoSum, parseGoMod, parseGoModReplaces } from '../go/parserCore.js';
-import { parseCargoLock, parseCargoToml } from '../rust/parserCore.js';
-import { partitionNpmPackages } from '../npm/registryFilter.js';
-import { partitionGoModules    } from '../go/moduleFilter.js';
-import { partitionCargoPackages } from '../rust/crateFilter.js';
-import { parsePep508UrlRequirement } from '../python/parserCore.js';
+} from "../python/parserCore.js";
+import { normalizePackageName } from "../python/pypiClient.js";
+import { isTestDirectory, isTestRequirementsFile } from "../python/testFilter.js";
+import { parseGoSum, parseGoMod, parseGoModReplaces } from "../go/parserCore.js";
+import { parseCargoLock, parseCargoToml } from "../rust/parserCore.js";
+import { partitionNpmPackages } from "../npm/registryFilter.js";
+import { partitionGoModules } from "../go/moduleFilter.js";
+import { partitionCargoPackages } from "../rust/crateFilter.js";
+import { parsePep508UrlRequirement } from "../python/parserCore.js";
 
 /** Recognised dependency filenames, checked case-sensitively against the repo listing. */
-const DEP_FILENAMES = new Set(['pyproject.toml', 'manifest.json', 'requirements.txt', 'requirements_all.txt', 'setup.cfg', 'Pipfile']);
+const DEP_FILENAMES = new Set([
+  "pyproject.toml",
+  "manifest.json",
+  "requirements.txt",
+  "requirements_all.txt",
+  "setup.cfg",
+  "Pipfile",
+]);
 
 /**
  * How many directory levels below the starting path to search.
@@ -49,12 +56,12 @@ const MAX_DEPTH = 2;
  * @returns {string} resolved path from the repo root
  */
 function resolvePath(base, relative) {
-  const parts = base ? base.split('/') : [];
-  for (const seg of relative.split('/')) {
-    if (seg === '..') parts.pop();
-    else if (seg !== '.') parts.push(seg);
+  const parts = base ? base.split("/") : [];
+  for (const seg of relative.split("/")) {
+    if (seg === "..") parts.pop();
+    else if (seg !== ".") parts.push(seg);
   }
-  return parts.join('/');
+  return parts.join("/");
 }
 
 /**
@@ -80,33 +87,51 @@ function resolvePath(base, relative) {
  *   filename contains a test-related keyword (e.g. requirements-test.txt)
  * @returns {Promise<{ deps: Array<{ name: string, versionSpec: string|null }>, dangerousDeps: Array<{ name: string, spec: string, reason: string }> }>}
  */
-async function parseRequirementsTxtAsync(content, owner, repo, baseDir, ref, visited = new Set(), includeTests = false) {
+async function parseRequirementsTxtAsync(
+  content,
+  owner,
+  repo,
+  baseDir,
+  ref,
+  visited = new Set(),
+  includeTests = false,
+) {
   const deps = [];
   const dangerousDeps = [];
 
-  for (let line of content.split('\n')) {
-    line = line.split('#')[0].trim();
-    while (line.endsWith('\\')) line = line.slice(0, -1).trim();
+  for (let line of content.split("\n")) {
+    line = line.split("#")[0].trim();
+    while (line.endsWith("\\")) line = line.slice(0, -1).trim();
     if (!line) continue;
 
     if (/^(-r|--requirement)\s+/.test(line)) {
-      const includePath = line.replace(/^(-r|--requirement)\s+/, '').trim();
+      const includePath = line.replace(/^(-r|--requirement)\s+/, "").trim();
 
       // Skip test requirement includes unless the caller opted in
       if (!includeTests) {
-        const basename = includePath.includes('/') ? includePath.slice(includePath.lastIndexOf('/') + 1) : includePath;
+        const basename = includePath.includes("/")
+          ? includePath.slice(includePath.lastIndexOf("/") + 1)
+          : includePath;
         if (isTestRequirementsFile(basename)) continue;
       }
 
-      const fullPath    = resolvePath(baseDir, includePath);
+      const fullPath = resolvePath(baseDir, includePath);
 
       // Security: skip already-visited paths (circular include guard)
       if (visited.has(fullPath)) continue;
 
-      const includeDir     = fullPath.includes('/') ? fullPath.slice(0, fullPath.lastIndexOf('/')) : '';
+      const includeDir = fullPath.includes("/") ? fullPath.slice(0, fullPath.lastIndexOf("/")) : "";
       const includeContent = await fetchFileContent(owner, repo, fullPath, ref);
       if (includeContent) {
-        const sub = await parseRequirementsTxtAsync(includeContent, owner, repo, includeDir, ref, new Set([...visited, fullPath]), includeTests);
+        const sub = await parseRequirementsTxtAsync(
+          includeContent,
+          owner,
+          repo,
+          includeDir,
+          ref,
+          new Set([...visited, fullPath]),
+          includeTests,
+        );
         deps.push(...sub.deps);
         dangerousDeps.push(...sub.dangerousDeps);
       }
@@ -176,19 +201,19 @@ async function findDepFiles(owner, repo, ref, dirPath, depth, includeTests = fal
   if (!listing) return [];
 
   const depFiles = listing
-    .filter(entry => entry.type === 'file' && DEP_FILENAMES.has(entry.name))
-    .map(entry => entry.name);
+    .filter((entry) => entry.type === "file" && DEP_FILENAMES.has(entry.name))
+    .map((entry) => entry.name);
 
   const localResult = depFiles.length > 0 ? [{ dirPath, depFiles }] : [];
 
   if (depth >= MAX_DEPTH) return localResult;
 
   const subdirs = listing
-    .filter(entry => entry.type === 'dir')
-    .filter(entry => includeTests || !isTestDirectory(entry.name));
+    .filter((entry) => entry.type === "dir")
+    .filter((entry) => includeTests || !isTestDirectory(entry.name));
 
   const childResults = await Promise.all(
-    subdirs.map(subdir => findDepFiles(owner, repo, ref, subdir.path, depth + 1, includeTests))
+    subdirs.map((subdir) => findDepFiles(owner, repo, ref, subdir.path, depth + 1, includeTests)),
   );
 
   return [...localResult, ...childResults.flat()];
@@ -218,7 +243,7 @@ async function parseGithubDependencies({ owner, repo, ref, subpath }, options = 
   // can give a clear "Directory not found" error instead of "no dep files found".
   const rootListing = await listDirectory(owner, repo, subpath, ref);
   if (!rootListing) {
-    const dir = subpath || '/';
+    const dir = subpath || "/";
     throw new Error(`Directory not found: ${dir} in ${owner}/${repo} at ref "${ref}"`);
   }
 
@@ -228,17 +253,17 @@ async function parseGithubDependencies({ owner, repo, ref, subpath }, options = 
     const location = subpath ? `${owner}/${repo}/${subpath}` : `${owner}/${repo}`;
     throw new Error(
       `No dependency file found in ${location} (ref: ${ref}, searched ${MAX_DEPTH} levels deep). ` +
-      `Looked for: ${[...DEP_FILENAMES].join(', ')}`
+        `Looked for: ${[...DEP_FILENAMES].join(", ")}`,
     );
   }
 
   // Fetch all dep files across all directories in parallel
   const fetchJobs = found.flatMap(({ dirPath, depFiles }) =>
-    depFiles.map(async name => {
+    depFiles.map(async (name) => {
       const filePath = dirPath ? `${dirPath}/${name}` : name;
       const content = await fetchFileContent(owner, repo, filePath, ref);
       return { name, filePath, dirPath, content };
-    })
+    }),
   );
   const fetched = await Promise.all(fetchJobs);
 
@@ -247,23 +272,35 @@ async function parseGithubDependencies({ owner, repo, ref, subpath }, options = 
     fetched
       .filter(({ content }) => content !== null)
       .map(async ({ name, filePath, dirPath, content }) => {
-        const baseDir = dirPath || '';
-        if (name === 'pyproject.toml')     return { filePath, deps: parsePyprojectToml(content, includeTests), dangerousDeps: [] };
-        if (name === 'manifest.json')      return { filePath, deps: parseManifestJson(content), dangerousDeps: [] };
-        if (name === 'requirements.txt' || name === 'requirements_all.txt') {
-          const { deps, dangerousDeps } = await parseRequirementsTxtAsync(content, owner, repo, baseDir, ref, new Set([filePath]), includeTests);
+        const baseDir = dirPath || "";
+        if (name === "pyproject.toml")
+          return { filePath, deps: parsePyprojectToml(content, includeTests), dangerousDeps: [] };
+        if (name === "manifest.json")
+          return { filePath, deps: parseManifestJson(content), dangerousDeps: [] };
+        if (name === "requirements.txt" || name === "requirements_all.txt") {
+          const { deps, dangerousDeps } = await parseRequirementsTxtAsync(
+            content,
+            owner,
+            repo,
+            baseDir,
+            ref,
+            new Set([filePath]),
+            includeTests,
+          );
           return { filePath, deps, dangerousDeps };
         }
-        if (name === 'setup.cfg')          return { filePath, deps: parseSetupCfg(content), dangerousDeps: [] };
-        if (name === 'Pipfile')            return { filePath, deps: parsePipfile(content, includeTests), dangerousDeps: [] };
+        if (name === "setup.cfg")
+          return { filePath, deps: parseSetupCfg(content), dangerousDeps: [] };
+        if (name === "Pipfile")
+          return { filePath, deps: parsePipfile(content, includeTests), dangerousDeps: [] };
         return { filePath, deps: [], dangerousDeps: [] };
-      })
+      }),
   );
 
   return {
     deps: mergeDeps(allDepArrays.flatMap(({ deps }) => deps)),
     dangerousDeps: allDepArrays.flatMap(({ dangerousDeps }) => dangerousDeps),
-    source: allDepArrays.map(({ filePath }) => filePath).join(', '),
+    source: allDepArrays.map(({ filePath }) => filePath).join(", "),
   };
 }
 
@@ -282,42 +319,62 @@ async function parseGithubNpmDependencies({ owner, repo, ref, subpath }, options
 
   const listing = await listDirectory(owner, repo, subpath, ref);
   if (!listing) {
-    const dir = subpath || '/';
+    const dir = subpath || "/";
     throw new Error(`Directory not found: ${dir} in ${owner}/${repo} at ref "${ref}"`);
   }
 
-  const fileNames = new Set(
-    listing.filter(e => e.type === 'file').map(e => e.name)
-  );
+  const fileNames = new Set(listing.filter((e) => e.type === "file").map((e) => e.name));
 
-  const lockEntry = NPM_LOCK_FILES.find(e => fileNames.has(e.filename));
-  const preferred = lockEntry ? lockEntry.filename
-    : fileNames.has('package.json') ? 'package.json'
-    : null;
+  const lockEntry = NPM_LOCK_FILES.find((e) => fileNames.has(e.filename));
+  const preferred = lockEntry
+    ? lockEntry.filename
+    : fileNames.has("package.json")
+      ? "package.json"
+      : null;
 
   if (!preferred) {
     const location = subpath ? `${owner}/${repo}/${subpath}` : `${owner}/${repo}`;
-    throw new Error(`No npm dependency file found in ${location} (ref: ${ref}). Looked for: ${[...NPM_LOCK_FILENAMES].join(', ')}, package.json`);
+    throw new Error(
+      `No npm dependency file found in ${location} (ref: ${ref}). Looked for: ${[...NPM_LOCK_FILENAMES].join(", ")}, package.json`,
+    );
   }
 
   const filePath = subpath ? `${subpath}/${preferred}` : preferred;
-  const content  = await fetchFileContent(owner, repo, filePath, ref);
+  const content = await fetchFileContent(owner, repo, filePath, ref);
   if (!content) {
     throw new Error(`Failed to fetch ${filePath} from ${owner}/${repo}`);
   }
 
   if (lockEntry) {
     const rawDeps = lockEntry.parse(content, includeTests);
-    const note    = lockEntry.getNote(content);
+    const note = lockEntry.getNote(content);
     const warning = lockEntry.getWarning(content);
-    const dangerousDeps = lockEntry.getDangerousDeps ? lockEntry.getDangerousDeps(content, includeTests) : [];
+    const dangerousDeps = lockEntry.getDangerousDeps
+      ? lockEntry.getDangerousDeps(content, includeTests)
+      : [];
     const { publicPkgs, privateCount, privatePkgs } = partitionNpmPackages(rawDeps);
-    return { deps: publicPkgs, source: preferred, note, warning, privateCount, privatePkgs, dangerousDeps };
+    return {
+      deps: publicPkgs,
+      source: preferred,
+      note,
+      warning,
+      privateCount,
+      privatePkgs,
+      dangerousDeps,
+    };
   }
 
   // package.json fallback: returns { deps, dangerousDeps }
   const { deps, dangerousDeps } = parsePackageJson(content, includeTests);
-  return { deps, source: preferred, note: null, warning: null, privateCount: 0, privatePkgs: [], dangerousDeps };
+  return {
+    deps,
+    source: preferred,
+    note: null,
+    warning: null,
+    privateCount: 0,
+    privatePkgs: [],
+    dangerousDeps,
+  };
 }
 
 /**
@@ -332,34 +389,38 @@ async function parseGithubNpmDependencies({ owner, repo, ref, subpath }, options
 async function parseGithubGoDependencies({ owner, repo, ref, subpath }) {
   const listing = await listDirectory(owner, repo, subpath, ref);
   if (!listing) {
-    const dir = subpath || '/';
+    const dir = subpath || "/";
     throw new Error(`Directory not found: ${dir} in ${owner}/${repo} at ref "${ref}"`);
   }
 
-  const fileNames = new Set(
-    listing.filter(e => e.type === 'file').map(e => e.name)
-  );
+  const fileNames = new Set(listing.filter((e) => e.type === "file").map((e) => e.name));
 
-  const preferred = fileNames.has('go.sum') ? 'go.sum'
-    : fileNames.has('go.mod')               ? 'go.mod'
-    : null;
+  const preferred = fileNames.has("go.sum") ? "go.sum" : fileNames.has("go.mod") ? "go.mod" : null;
 
   if (!preferred) {
     const location = subpath ? `${owner}/${repo}/${subpath}` : `${owner}/${repo}`;
-    throw new Error(`No Go dependency file found in ${location} (ref: ${ref}). Looked for: go.sum, go.mod`);
+    throw new Error(
+      `No Go dependency file found in ${location} (ref: ${ref}). Looked for: go.sum, go.mod`,
+    );
   }
 
   const filePath = subpath ? `${subpath}/${preferred}` : preferred;
-  const content  = await fetchFileContent(owner, repo, filePath, ref);
+  const content = await fetchFileContent(owner, repo, filePath, ref);
   if (!content) {
     throw new Error(`Failed to fetch ${filePath} from ${owner}/${repo}`);
   }
 
-  const rawDeps = preferred === 'go.sum' ? parseGoSum(content) : parseGoMod(content);
+  const rawDeps = preferred === "go.sum" ? parseGoSum(content) : parseGoMod(content);
   const { publicMods, privateCount, privateMods } = partitionGoModules(rawDeps);
   // Replace directive detection only when go.mod is the primary source — no extra fetch.
-  const dangerousDeps = preferred === 'go.mod' ? parseGoModReplaces(content).dangerousDeps : [];
-  return { deps: publicMods, source: preferred, privateCount, privatePkgs: privateMods, dangerousDeps };
+  const dangerousDeps = preferred === "go.mod" ? parseGoModReplaces(content).dangerousDeps : [];
+  return {
+    deps: publicMods,
+    source: preferred,
+    privateCount,
+    privatePkgs: privateMods,
+    dangerousDeps,
+  };
 }
 
 /**
@@ -385,36 +446,47 @@ async function parseGithubGoDependencies({ owner, repo, ref, subpath }) {
 async function parseGithubRustDependencies({ owner, repo, ref, subpath }) {
   const listing = await listDirectory(owner, repo, subpath, ref);
   if (!listing) {
-    const dir = subpath || '/';
+    const dir = subpath || "/";
     throw new Error(`Directory not found: ${dir} in ${owner}/${repo} at ref "${ref}"`);
   }
 
-  const fileNames = new Set(
-    listing.filter(e => e.type === 'file').map(e => e.name)
-  );
+  const fileNames = new Set(listing.filter((e) => e.type === "file").map((e) => e.name));
 
-  const preferred = fileNames.has('Cargo.lock') ? 'Cargo.lock'
-    : fileNames.has('Cargo.toml')               ? 'Cargo.toml'
-    : null;
+  const preferred = fileNames.has("Cargo.lock")
+    ? "Cargo.lock"
+    : fileNames.has("Cargo.toml")
+      ? "Cargo.toml"
+      : null;
 
   if (!preferred) {
     const location = subpath ? `${owner}/${repo}/${subpath}` : `${owner}/${repo}`;
-    throw new Error(`No Rust dependency file found in ${location} (ref: ${ref}). Looked for: Cargo.lock, Cargo.toml`);
+    throw new Error(
+      `No Rust dependency file found in ${location} (ref: ${ref}). Looked for: Cargo.lock, Cargo.toml`,
+    );
   }
 
   const filePath = subpath ? `${subpath}/${preferred}` : preferred;
-  const content  = await fetchFileContent(owner, repo, filePath, ref);
+  const content = await fetchFileContent(owner, repo, filePath, ref);
   if (!content) {
     throw new Error(`Failed to fetch ${filePath} from ${owner}/${repo}`);
   }
 
-  if (preferred === 'Cargo.lock') {
-    const { publicPkgs, privateCount, privatePkgs } = partitionCargoPackages(parseCargoLock(content));
-    return { deps: publicPkgs, source: 'Cargo.lock', privateCount, privatePkgs, dangerousDeps: [] };
+  if (preferred === "Cargo.lock") {
+    const { publicPkgs, privateCount, privatePkgs } = partitionCargoPackages(
+      parseCargoLock(content),
+    );
+    return { deps: publicPkgs, source: "Cargo.lock", privateCount, privatePkgs, dangerousDeps: [] };
   }
 
   const { deps, dangerousDeps } = parseCargoToml(content);
-  return { deps, source: 'Cargo.toml', privateCount: 0, privatePkgs: [], dangerousDeps };
+  return { deps, source: "Cargo.toml", privateCount: 0, privatePkgs: [], dangerousDeps };
 }
 
-export { parseGithubDependencies, parseGithubNpmDependencies, parseGithubGoDependencies, parseGithubRustDependencies, resolvePath, mergeDeps };
+export {
+  parseGithubDependencies,
+  parseGithubNpmDependencies,
+  parseGithubGoDependencies,
+  parseGithubRustDependencies,
+  resolvePath,
+  mergeDeps,
+};

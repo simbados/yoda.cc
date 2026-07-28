@@ -19,28 +19,28 @@
  * No third-party dependencies (vanilla Node only) per repo-wide rule.
  */
 
-const fs = require('fs');
-const path = require('path');
-const crypto = require('crypto');
-const { execSync } = require('child_process');
+const fs = require("fs");
+const path = require("path");
+const crypto = require("crypto");
+const { execSync } = require("child_process");
 
-const REPO_ROOT = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
+const REPO_ROOT = execSync("git rev-parse --show-toplevel", { encoding: "utf8" }).trim();
 
 const PAGES = [
   {
-    html: 'landing/index.html',
-    sitemap: 'landing/pages.xml',
-    headers: 'landing/_headers',
+    html: "landing/index.html",
+    sitemap: "landing/pages.xml",
+    headers: "landing/_headers",
   },
   {
-    html: 'depsview/web/index.html',
-    sitemap: 'depsview/web/sitemap.xml',
-    headers: 'depsview/web/_headers',
+    html: "depsview/web/index.html",
+    sitemap: "depsview/web/sitemap.xml",
+    headers: "depsview/web/_headers",
   },
   {
-    html: 'brewview/web/index.html',
-    sitemap: 'brewview/web/sitemap.xml',
-    headers: 'brewview/web/_headers',
+    html: "brewview/web/index.html",
+    sitemap: "brewview/web/sitemap.xml",
+    headers: "brewview/web/_headers",
   },
 ];
 
@@ -58,8 +58,8 @@ function today() {
  * @returns {Set<string>}
  */
 function stagedFiles() {
-  const out = execSync('git diff --cached --name-only --diff-filter=ACMR', { encoding: 'utf8' });
-  return new Set(out.split('\n').filter(Boolean));
+  const out = execSync("git diff --cached --name-only --diff-filter=ACMR", { encoding: "utf8" });
+  return new Set(out.split("\n").filter(Boolean));
 }
 
 /**
@@ -69,11 +69,8 @@ function stagedFiles() {
  * @returns {boolean} true if the file was modified
  */
 function bumpLastmod(sitemapPath, date) {
-  const orig = fs.readFileSync(sitemapPath, 'utf8');
-  const updated = orig.replace(
-    /<lastmod>[^<]*<\/lastmod>/g,
-    `<lastmod>${date}</lastmod>`,
-  );
+  const orig = fs.readFileSync(sitemapPath, "utf8");
+  const updated = orig.replace(/<lastmod>[^<]*<\/lastmod>/g, `<lastmod>${date}</lastmod>`);
   if (updated === orig) return false;
   fs.writeFileSync(sitemapPath, updated);
   return true;
@@ -86,7 +83,7 @@ function bumpLastmod(sitemapPath, date) {
  * @returns {string|null}
  */
 function extractJsonLd(htmlPath) {
-  const html = fs.readFileSync(htmlPath, 'utf8');
+  const html = fs.readFileSync(htmlPath, "utf8");
   const m = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
   return m ? m[1] : null;
 }
@@ -98,7 +95,7 @@ function extractJsonLd(htmlPath) {
  * @returns {string}
  */
 function sha256base64(s) {
-  return crypto.createHash('sha256').update(s, 'utf8').digest('base64');
+  return crypto.createHash("sha256").update(s, "utf8").digest("base64");
 }
 
 /**
@@ -111,7 +108,7 @@ function sha256base64(s) {
  * @returns {boolean} true if the file was modified
  */
 function syncCspHash(headersPath, newHash) {
-  const orig = fs.readFileSync(headersPath, 'utf8');
+  const orig = fs.readFileSync(headersPath, "utf8");
   const re = /'sha256-[A-Za-z0-9+/=]+'/;
   if (!re.test(orig)) {
     console.warn(`[sync-seo] no 'sha256-…' token found in ${headersPath}; skipping`);
@@ -128,7 +125,7 @@ function syncCspHash(headersPath, newHash) {
  * touched files when running in --pre-commit mode.
  */
 function main() {
-  const preCommit = process.argv.includes('--pre-commit');
+  const preCommit = process.argv.includes("--pre-commit");
   const staged = preCommit ? stagedFiles() : null;
   const date = today();
   const touched = [];
@@ -153,15 +150,15 @@ function main() {
   }
 
   if (!touched.length) {
-    if (!preCommit) console.log('[sync-seo] already in sync');
+    if (!preCommit) console.log("[sync-seo] already in sync");
     return;
   }
 
   if (preCommit) {
-    execSync(`git add ${touched.map(p => JSON.stringify(p)).join(' ')}`, { stdio: 'inherit' });
-    console.log(`[sync-seo] updated and re-staged: ${touched.join(', ')}`);
+    execSync(`git add ${touched.map((p) => JSON.stringify(p)).join(" ")}`, { stdio: "inherit" });
+    console.log(`[sync-seo] updated and re-staged: ${touched.join(", ")}`);
   } else {
-    console.log(`[sync-seo] updated: ${touched.join(', ')}`);
+    console.log(`[sync-seo] updated: ${touched.join(", ")}`);
   }
 }
 

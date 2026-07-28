@@ -32,7 +32,7 @@ export function parseGoSum(content) {
   const seen = new Set();
   const deps = [];
 
-  for (const line of content.split('\n')) {
+  for (const line of content.split("\n")) {
     const trimmed = line.trim();
     if (!trimmed) continue;
 
@@ -40,7 +40,7 @@ export function parseGoSum(content) {
     if (parts.length < 3) continue;
 
     const [name, versionField] = parts;
-    if (versionField.endsWith('/go.mod')) continue;
+    if (versionField.endsWith("/go.mod")) continue;
 
     const key = `${name}@${versionField}`;
     if (seen.has(key)) continue;
@@ -86,36 +86,46 @@ function unquote(s) {
  */
 export function parseGoModReplaces(content) {
   const dangerousDeps = [];
-  const redirectDeps  = [];
-  let inReplaceBlock  = false;
+  const redirectDeps = [];
+  let inReplaceBlock = false;
 
   const parseLine = (line) => {
     // go.mod replace syntax: module [version] => replacement [version]
     // replacement can be a local path (./... or ../...) or another module path
     const m = line.match(/^(\S+)(?:\s+\S+)?\s+=>\s+(\S+)(?:\s+\S+)?$/);
     if (!m) return;
-    const original    = unquote(m[1]);
+    const original = unquote(m[1]);
     const replacement = unquote(m[2]);
     if (/^\.\.?[/\\]/.test(replacement)) {
-      dangerousDeps.push({ name: original, spec: `${original} => ${replacement}`, reason: 'local path replace' });
+      dangerousDeps.push({
+        name: original,
+        spec: `${original} => ${replacement}`,
+        reason: "local path replace",
+      });
     } else {
       redirectDeps.push({ name: original, replacement });
     }
   };
 
-  for (const rawLine of content.split('\n')) {
-    const commentIdx = rawLine.indexOf('//');
+  for (const rawLine of content.split("\n")) {
+    const commentIdx = rawLine.indexOf("//");
     const line = (commentIdx !== -1 ? rawLine.slice(0, commentIdx) : rawLine).trim();
     if (!line) continue;
 
     if (inReplaceBlock) {
-      if (line === ')') { inReplaceBlock = false; continue; }
+      if (line === ")") {
+        inReplaceBlock = false;
+        continue;
+      }
       parseLine(line);
       continue;
     }
 
-    if (/^replace\s*\(/.test(line)) { inReplaceBlock = true; continue; }
-    if (/^replace\s+\S/.test(line)) parseLine(line.replace(/^replace\s+/, ''));
+    if (/^replace\s*\(/.test(line)) {
+      inReplaceBlock = true;
+      continue;
+    }
+    if (/^replace\s+\S/.test(line)) parseLine(line.replace(/^replace\s+/, ""));
   }
 
   return { dangerousDeps, redirectDeps };
@@ -125,15 +135,15 @@ export function parseGoMod(content) {
   const deps = [];
   let inRequireBlock = false;
 
-  for (const rawLine of content.split('\n')) {
+  for (const rawLine of content.split("\n")) {
     // Detect indirect annotation before stripping comments
-    const commentIdx = rawLine.indexOf('//');
+    const commentIdx = rawLine.indexOf("//");
     const isIndirect = commentIdx !== -1 && /\bindirect\b/.test(rawLine.slice(commentIdx));
     const line = (commentIdx !== -1 ? rawLine.slice(0, commentIdx) : rawLine).trim();
     if (!line) continue;
 
     if (inRequireBlock) {
-      if (line === ')') {
+      if (line === ")") {
         inRequireBlock = false;
         continue;
       }
@@ -150,7 +160,7 @@ export function parseGoMod(content) {
     }
 
     if (/^require\s+\S/.test(line)) {
-      const rest = line.replace(/^require\s+/, '');
+      const rest = line.replace(/^require\s+/, "");
       const parts = rest.split(/\s+/);
       if (parts.length >= 2) {
         deps.push({ name: unquote(parts[0]), version: unquote(parts[1]), indirect: isIndirect });

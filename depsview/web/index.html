@@ -1,217 +1,266 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Dependency Viewer — depsview</title>
-  <meta name="description" content="Analyse Python, npm, Go, and Rust dependencies from any public GitHub repository. See release dates, supply chain scores, and package metadata.">
-  <link rel="canonical" href="https://deps.yoda.cc/">
-  <meta property="og:type"        content="website">
-  <meta property="og:url"         content="https://deps.yoda.cc/">
-  <meta property="og:title"       content="Dependency Viewer — depsview">
-  <meta property="og:description" content="Analyse Python, npm, Go, and Rust dependencies from any public GitHub repository. See release dates, supply chain scores, and package metadata.">
-  <meta name="twitter:card"        content="summary">
-  <meta name="twitter:title"       content="Dependency Viewer — depsview">
-  <meta name="twitter:description" content="Analyse Python, npm, Go, and Rust dependencies from any public GitHub repository. See release dates, supply chain scores, and package metadata.">
-  <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <link rel="stylesheet" href="style.css">
-  <script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "WebApplication",
-  "name": "depsview",
-  "alternateName": "Dependency Viewer",
-  "url": "https://deps.yoda.cc/",
-  "description": "Analyse Python, npm, Go, and Rust dependencies from any public GitHub repository. See release dates, supply chain security scores, and package metadata — all in your browser.",
-  "applicationCategory": "DeveloperApplication",
-  "operatingSystem": "Any",
-  "browserRequirements": "Requires JavaScript",
-  "isAccessibleForFree": true,
-  "offers": {
-    "@type": "Offer",
-    "price": "0",
-    "priceCurrency": "USD"
-  },
-  "author": {
-    "@type": "Person",
-    "name": "simbados",
-    "url": "https://simbados.com",
-    "sameAs": ["https://github.com/simbados"]
-  },
-  "sameAs": "https://github.com/simbados/yoda.cc/tree/main/depsview",
-  "featureList": [
-    "npm lock files: package-lock.json, pnpm-lock.yaml, yarn.lock, bun.lock",
-    "Python manifests: requirements.txt, pyproject.toml, setup.cfg, Pipfile",
-    "Go modules: go.mod, go.sum",
-    "Rust crates: Cargo.lock, Cargo.toml",
-    "Supply chain security scores via Socket.dev",
-    "Release-date freshness indicators",
-    "Browser-only analysis — data stays on your machine"
-  ]
-}
-  </script>
-</head>
-<body class="pg-tool">
-  <main>
-    <header class="site-header">
-      <div class="header-top">
-        <a class="logo" href="https://yoda.cc">~/yoda</a>
-        <a class="header-crosslink" href="https://brew.yoda.cc">brewview ↗</a>
-        <a href="https://github.com/simbados/yoda.cc/tree/main/depsview" target="_blank" rel="noopener noreferrer">
-          <img src="github-mark.png" alt="GitHub" class="header-github">
-        </a>
-      </div>
-      <h1>Dependency Viewer</h1>
-    </header>
-
-    <p class="tagline">Analyse Python, npm, Go, and Rust dependencies from any public GitHub repository.</p>
-    <p class="tagline-sub">External calls go only to <code>api.github.com</code>, <code>pypi.org</code>, <code>registry.npmjs.org</code>, <code>proxy.golang.org</code>, and <code>crates.io</code>. With Socket.dev credentials or Python download stats, also to the proxy Worker at <code>socket-proxy.yoda.cc</code>.</p>
-
-    <form id="form" autocomplete="off">
-
-      <!-- ── Main action ─────────────────────────────────────────────────── -->
-      <div class="option-row ecosystem-row">
-        <span class="option-label">Ecosystem:</span>
-        <div class="ecosystem-picker" role="group" aria-label="Ecosystem filter">
-          <label class="eco-btn"><input type="radio" name="ecosystem" value="all" checked><span>All</span></label>
-          <label class="eco-btn"><input type="radio" name="ecosystem" value="npm"><span>npm</span></label>
-          <label class="eco-btn"><input type="radio" name="ecosystem" value="python"><span>Python</span></label>
-          <label class="eco-btn"><input type="radio" name="ecosystem" value="go"><span>Go</span></label>
-          <label class="eco-btn"><input type="radio" name="ecosystem" value="rust"><span>Rust</span></label>
-        </div>
-      </div>
-
-      <div class="input-row" id="url-row">
-        <input
-          id="url-input"
-          type="text"
-          placeholder="https://github.com/owner/repo"
-          spellcheck="false"
-        >
-        <button id="submit-btn" type="submit">Analyse</button>
-      </div>
-
-      <div class="pkg-input-row" id="pkg-row" hidden>
-        <textarea
-          id="pkg-input"
-          spellcheck="false"
-          placeholder="eslint, eslint@9, @babel/core  or  https://github.com/owner/repo"
-        ></textarea>
-        <button id="pkg-submit-btn" type="submit">Analyse</button>
-      </div>
-
-      <div class="option-row">
-        <input id="include-tests" type="checkbox">
-        <label for="include-tests">Include test &amp; dev dependencies</label>
-      </div>
-
-      <div class="option-row" id="download-stats-row">
-        <input id="download-stats" type="checkbox">
-        <label for="download-stats">Show Python download statistics <span class="option-hint">· via pypistats.org proxy</span></label>
-      </div>
-
-      <!-- ── GitHub authentication ───────────────────────────────────────── -->
-      <div class="form-card">
-        <p class="form-card-label">GitHub authentication <span class="form-card-optional">optional</span></p>
-        <div class="input-row token-row">
-          <input
-            id="token-input"
-            type="password"
-            placeholder="Personal access token"
-            spellcheck="false"
-            autocomplete="off"
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dependency Viewer — depsview</title>
+    <meta
+      name="description"
+      content="Analyse Python, npm, Go, and Rust dependencies from any public GitHub repository. See release dates, supply chain scores, and package metadata."
+    />
+    <link rel="canonical" href="https://deps.yoda.cc/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://deps.yoda.cc/" />
+    <meta property="og:title" content="Dependency Viewer — depsview" />
+    <meta
+      property="og:description"
+      content="Analyse Python, npm, Go, and Rust dependencies from any public GitHub repository. See release dates, supply chain scores, and package metadata."
+    />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Dependency Viewer — depsview" />
+    <meta
+      name="twitter:description"
+      content="Analyse Python, npm, Go, and Rust dependencies from any public GitHub repository. See release dates, supply chain scores, and package metadata."
+    />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="stylesheet" href="style.css" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "depsview",
+        "alternateName": "Dependency Viewer",
+        "url": "https://deps.yoda.cc/",
+        "description": "Analyse Python, npm, Go, and Rust dependencies from any public GitHub repository. See release dates, supply chain security scores, and package metadata — all in your browser.",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "Any",
+        "browserRequirements": "Requires JavaScript",
+        "isAccessibleForFree": true,
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        },
+        "author": {
+          "@type": "Person",
+          "name": "simbados",
+          "url": "https://simbados.com",
+          "sameAs": ["https://github.com/simbados"]
+        },
+        "sameAs": "https://github.com/simbados/yoda.cc/tree/main/depsview",
+        "featureList": [
+          "npm lock files: package-lock.json, pnpm-lock.yaml, yarn.lock, bun.lock",
+          "Python manifests: requirements.txt, pyproject.toml, setup.cfg, Pipfile",
+          "Go modules: go.mod, go.sum",
+          "Rust crates: Cargo.lock, Cargo.toml",
+          "Supply chain security scores via Socket.dev",
+          "Release-date freshness indicators",
+          "Browser-only analysis — data stays on your machine"
+        ]
+      }
+    </script>
+  </head>
+  <body class="pg-tool">
+    <main>
+      <header class="site-header">
+        <div class="header-top">
+          <a class="logo" href="https://yoda.cc">~/yoda</a>
+          <a class="header-crosslink" href="https://brew.yoda.cc">brewview ↗</a>
+          <a
+            href="https://github.com/simbados/yoda.cc/tree/main/depsview"
+            target="_blank"
+            rel="noopener noreferrer"
           >
+            <img src="github-mark.png" alt="GitHub" class="header-github" />
+          </a>
         </div>
-        <div class="option-row">
-          <input id="remember-token" type="checkbox">
-          <label for="remember-token">Remember token <span class="option-hint">· local storage only</span></label>
-        </div>
-        <p class="storage-note" id="storage-note" hidden>
-          Saved in your browser's <strong>local storage</strong> — readable by any JavaScript on this page. Uncheck and submit to remove.
-        </p>
-        <p class="form-card-note">
-          60 req/hr without a token · 5 000 req/hr with one · required for private repos ·
-          token sent only to <code>api.github.com</code>
-        </p>
-      </div>
+        <h1>Dependency Viewer</h1>
+      </header>
 
-      <!-- ── Socket.dev supply chain ─────────────────────────────────────── -->
-      <div class="form-card">
-        <p class="form-card-label">Socket.dev supply chain <span class="form-card-optional">optional</span></p>
-        <div class="input-row token-row">
-          <input
-            id="socket-key-input"
-            type="password"
-            placeholder="API key"
-            spellcheck="false"
-            autocomplete="off"
-          >
-        </div>
-        <div class="input-row token-row">
-          <input
-            id="socket-org-input"
-            type="text"
-            placeholder="Org slug"
-            spellcheck="false"
-            autocomplete="off"
-          >
-        </div>
-        <div class="option-row align-top">
-          <input id="socket-proxy-consent" type="checkbox">
-          <label for="socket-proxy-consent">I understand my API key is forwarded through the Cloudflare Worker at <code>socket-proxy.yoda.cc</code> to <code>api.socket.dev</code></label>
-        </div>
-        <div class="option-row">
-          <input id="remember-socket" type="checkbox">
-          <label for="remember-socket">Remember key and org</label>
-        </div>
-        <p class="storage-note" id="socket-storage-note" hidden>
-          Saved in your browser's <strong>local storage</strong>. Your API key is sent only to the configured proxy Worker, which forwards it to <code>api.socket.dev</code>. Uncheck and submit to remove.
-        </p>
-      </div>
-
-    </form>
-
-    <!-- ── Supported lock files (indexable copy) ──────────────────────────── -->
-    <section class="supported">
-      <h2>Supported lock files</h2>
-      <p>
-        depsview reads npm lock files (<code>package-lock.json</code>, <code>pnpm-lock.yaml</code>,
-        <code>yarn.lock</code>, <code>bun.lock</code>), Python manifests (<code>requirements.txt</code>,
-        <code>pyproject.toml</code>, <code>setup.cfg</code>, <code>Pipfile</code>), Go modules
-        (<code>go.mod</code>, <code>go.sum</code>), and Rust crates
-        (<code>Cargo.lock</code>, <code>Cargo.toml</code>) straight from any public GitHub repository.
+      <p class="tagline">
+        Analyse Python, npm, Go, and Rust dependencies from any public GitHub repository.
       </p>
-    </section>
+      <p class="tagline-sub">
+        External calls go only to <code>api.github.com</code>, <code>pypi.org</code>,
+        <code>registry.npmjs.org</code>, <code>proxy.golang.org</code>, and <code>crates.io</code>.
+        With Socket.dev credentials or Python download stats, also to the proxy Worker at
+        <code>socket-proxy.yoda.cc</code>.
+      </p>
 
-    <!-- ── How it works ───────────────────────────────────────────────────── -->
-    <details class="info-details">
-      <summary>How it works</summary>
-      <div class="info-details-body">
-        <p class="note">
-          Polyglot repos (e.g. both <code>package.json</code> and <code>go.mod</code>) are resolved per ecosystem and rendered as separate sections, sorted independently.
+      <form id="form" autocomplete="off">
+        <!-- ── Main action ─────────────────────────────────────────────────── -->
+        <div class="option-row ecosystem-row">
+          <span class="option-label">Ecosystem:</span>
+          <div class="ecosystem-picker" role="group" aria-label="Ecosystem filter">
+            <label class="eco-btn"
+              ><input type="radio" name="ecosystem" value="all" checked /><span>All</span></label
+            >
+            <label class="eco-btn"
+              ><input type="radio" name="ecosystem" value="npm" /><span>npm</span></label
+            >
+            <label class="eco-btn"
+              ><input type="radio" name="ecosystem" value="python" /><span>Python</span></label
+            >
+            <label class="eco-btn"
+              ><input type="radio" name="ecosystem" value="go" /><span>Go</span></label
+            >
+            <label class="eco-btn"
+              ><input type="radio" name="ecosystem" value="rust" /><span>Rust</span></label
+            >
+          </div>
+        </div>
+
+        <div class="input-row" id="url-row">
+          <input
+            id="url-input"
+            type="text"
+            placeholder="https://github.com/owner/repo"
+            spellcheck="false"
+          />
+          <button id="submit-btn" type="submit">Analyse</button>
+        </div>
+
+        <div class="pkg-input-row" id="pkg-row" hidden>
+          <textarea
+            id="pkg-input"
+            spellcheck="false"
+            placeholder="eslint, eslint@9, @babel/core  or  https://github.com/owner/repo"
+          ></textarea>
+          <button id="pkg-submit-btn" type="submit">Analyse</button>
+        </div>
+
+        <div class="option-row">
+          <input id="include-tests" type="checkbox" />
+          <label for="include-tests">Include test &amp; dev dependencies</label>
+        </div>
+
+        <div class="option-row" id="download-stats-row">
+          <input id="download-stats" type="checkbox" />
+          <label for="download-stats"
+            >Show Python download statistics
+            <span class="option-hint">· via pypistats.org proxy</span></label
+          >
+        </div>
+
+        <!-- ── GitHub authentication ───────────────────────────────────────── -->
+        <div class="form-card">
+          <p class="form-card-label">
+            GitHub authentication <span class="form-card-optional">optional</span>
+          </p>
+          <div class="input-row token-row">
+            <input
+              id="token-input"
+              type="password"
+              placeholder="Personal access token"
+              spellcheck="false"
+              autocomplete="off"
+            />
+          </div>
+          <div class="option-row">
+            <input id="remember-token" type="checkbox" />
+            <label for="remember-token"
+              >Remember token <span class="option-hint">· local storage only</span></label
+            >
+          </div>
+          <p class="storage-note" id="storage-note" hidden>
+            Saved in your browser's <strong>local storage</strong> — readable by any JavaScript on
+            this page. Uncheck and submit to remove.
+          </p>
+          <p class="form-card-note">
+            60 req/hr without a token · 5 000 req/hr with one · required for private repos · token
+            sent only to <code>api.github.com</code>
+          </p>
+        </div>
+
+        <!-- ── Socket.dev supply chain ─────────────────────────────────────── -->
+        <div class="form-card">
+          <p class="form-card-label">
+            Socket.dev supply chain <span class="form-card-optional">optional</span>
+          </p>
+          <div class="input-row token-row">
+            <input
+              id="socket-key-input"
+              type="password"
+              placeholder="API key"
+              spellcheck="false"
+              autocomplete="off"
+            />
+          </div>
+          <div class="input-row token-row">
+            <input
+              id="socket-org-input"
+              type="text"
+              placeholder="Org slug"
+              spellcheck="false"
+              autocomplete="off"
+            />
+          </div>
+          <div class="option-row align-top">
+            <input id="socket-proxy-consent" type="checkbox" />
+            <label for="socket-proxy-consent"
+              >I understand my API key is forwarded through the Cloudflare Worker at
+              <code>socket-proxy.yoda.cc</code> to <code>api.socket.dev</code></label
+            >
+          </div>
+          <div class="option-row">
+            <input id="remember-socket" type="checkbox" />
+            <label for="remember-socket">Remember key and org</label>
+          </div>
+          <p class="storage-note" id="socket-storage-note" hidden>
+            Saved in your browser's <strong>local storage</strong>. Your API key is sent only to the
+            configured proxy Worker, which forwards it to <code>api.socket.dev</code>. Uncheck and
+            submit to remove.
+          </p>
+        </div>
+      </form>
+
+      <!-- ── Supported lock files (indexable copy) ──────────────────────────── -->
+      <section class="supported">
+        <h2>Supported lock files</h2>
+        <p>
+          depsview reads npm lock files (<code>package-lock.json</code>,
+          <code>pnpm-lock.yaml</code>, <code>yarn.lock</code>, <code>bun.lock</code>), Python
+          manifests (<code>requirements.txt</code>, <code>pyproject.toml</code>,
+          <code>setup.cfg</code>, <code>Pipfile</code>), Go modules (<code>go.mod</code>,
+          <code>go.sum</code>), and Rust crates (<code>Cargo.lock</code>, <code>Cargo.toml</code>)
+          straight from any public GitHub repository.
         </p>
-        <p class="note">
-          npm, Go, and Rust packages from private registries are automatically skipped — the count of excluded entries is shown in the results.
-          Python PEP 508 URL requirements (<code>pkg @ https://…</code>) are silently skipped.
-        </p>
-        <p class="note">
-          Supply chain scores require a Socket.dev API key and org slug (enter above to add a Supply Chain column).
-          Python download statistics (Downloads/mo column) are fetched via the same proxy Worker at <code>socket-proxy.yoda.cc</code> — enable with the checkbox above.
-        </p>
-      </div>
-    </details>
+      </section>
 
-    <p class="legend">
-      <span class="legend-swatch age-new">■</span> Released or first appeared 3 days ago or less &nbsp;&nbsp;
-      <span class="legend-swatch age-orange">■</span> 7 days or less &nbsp;&nbsp;
-      <span class="legend-swatch age-fresh">■</span> 30 days or less
-    </p>
+      <!-- ── How it works ───────────────────────────────────────────────────── -->
+      <details class="info-details">
+        <summary>How it works</summary>
+        <div class="info-details-body">
+          <p class="note">
+            Polyglot repos (e.g. both <code>package.json</code> and <code>go.mod</code>) are
+            resolved per ecosystem and rendered as separate sections, sorted independently.
+          </p>
+          <p class="note">
+            npm, Go, and Rust packages from private registries are automatically skipped — the count
+            of excluded entries is shown in the results. Python PEP 508 URL requirements (<code
+              >pkg @ https://…</code
+            >) are silently skipped.
+          </p>
+          <p class="note">
+            Supply chain scores require a Socket.dev API key and org slug (enter above to add a
+            Supply Chain column). Python download statistics (Downloads/mo column) are fetched via
+            the same proxy Worker at <code>socket-proxy.yoda.cc</code> — enable with the checkbox
+            above.
+          </p>
+        </div>
+      </details>
 
-    <div id="error" hidden></div>
-    <div id="progress" hidden></div>
-    <div id="results" hidden></div>
-  </main>
+      <p class="legend">
+        <span class="legend-swatch age-new">■</span> Released or first appeared 3 days ago or less
+        &nbsp;&nbsp; <span class="legend-swatch age-orange">■</span> 7 days or less &nbsp;&nbsp;
+        <span class="legend-swatch age-fresh">■</span> 30 days or less
+      </p>
 
-  <script type="module" src="app.js"></script>
-</body>
+      <div id="error" hidden></div>
+      <div id="progress" hidden></div>
+      <div id="results" hidden></div>
+    </main>
+
+    <script type="module" src="app.js"></script>
+  </body>
 </html>

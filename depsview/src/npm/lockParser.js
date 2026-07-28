@@ -18,9 +18,9 @@
  */
 function nameFromKey(key) {
   if (!key) return null;
-  const idx = key.lastIndexOf('node_modules/');
+  const idx = key.lastIndexOf("node_modules/");
   if (idx === -1) return null;
-  return key.slice(idx + 'node_modules/'.length);
+  return key.slice(idx + "node_modules/".length);
 }
 
 /**
@@ -33,7 +33,7 @@ function nameFromKey(key) {
  */
 function parseV2(data, includeTests) {
   const packages = data.packages ?? {};
-  const seen    = new Set(); // name@version keys already added
+  const seen = new Set(); // name@version keys already added
   const results = [];
 
   for (const [key, pkg] of Object.entries(packages)) {
@@ -81,7 +81,7 @@ function collectV1(deps, includeTests, seen, results) {
  * @returns {Array<{ name: string, version: string }>}
  */
 function parseV1(data, includeTests) {
-  const seen    = new Set();
+  const seen = new Set();
   const results = [];
   collectV1(data.dependencies ?? {}, includeTests, seen, results);
   return results;

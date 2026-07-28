@@ -1,6 +1,14 @@
 {
   "permissions": {
-    "ask": ["Write", "Edit", "WebFetch", "WebSearch", "Bash(npm *)", "Bash(pnpm *)"],
+    "ask": [
+      "Write",
+      "Edit",
+      "WebFetch",
+      "WebSearch",
+      "Bash(npm *)",
+      "Bash(pnpm *)",
+      "Bash(node *)"
+    ],
     "allow": [
       "Read",
       "Bash(grep *)",

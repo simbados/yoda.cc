@@ -10,7 +10,7 @@
  * Comparison is done against lowercased names, so "Tests" and "TEST" also match.
  * @type {Set<string>}
  */
-const TEST_DIR_NAMES = new Set(['test', 'tests', 'testing', 'e2e', 'integration_tests']);
+const TEST_DIR_NAMES = new Set(["test", "tests", "testing", "e2e", "integration_tests"]);
 
 /**
  * Keywords whose presence as a word segment in a requirements filename marks
@@ -20,7 +20,7 @@ const TEST_DIR_NAMES = new Set(['test', 'tests', 'testing', 'e2e', 'integration_
  * Examples that do not match: "requirements.txt", "base-requirements.txt"
  * @type {Set<string>}
  */
-const TEST_FILE_KEYWORDS = new Set(['test', 'tests', 'testing', 'dev', 'lint', 'docs', 'ci']);
+const TEST_FILE_KEYWORDS = new Set(["test", "tests", "testing", "dev", "lint", "docs", "ci"]);
 
 /**
  * Returns true when the given directory name is a recognised test directory.
@@ -41,9 +41,9 @@ function isTestDirectory(name) {
  * @returns {boolean}
  */
 function isTestRequirementsFile(filename) {
-  const withoutExt = filename.toLowerCase().replace(/\.[^.]+$/, '');
+  const withoutExt = filename.toLowerCase().replace(/\.[^.]+$/, "");
   const segments = withoutExt.split(/[-_.]/);
-  return segments.some(seg => TEST_FILE_KEYWORDS.has(seg));
+  return segments.some((seg) => TEST_FILE_KEYWORDS.has(seg));
 }
 
 export { isTestDirectory, isTestRequirementsFile };

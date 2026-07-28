@@ -11,12 +11,12 @@
  * `data-section="<id>"` attributes from the `<thead>` rows.
  */
 
-import { randomBytes } from 'node:crypto';
-import { sortedResults, ECOSYSTEM_ORDER, purlEcosystem } from './formatter.js';
-import { groupByDomain } from './nonStandardSources.js';
+import { randomBytes } from "node:crypto";
+import { sortedResults, ECOSYSTEM_ORDER, purlEcosystem } from "./formatter.js";
+import { groupByDomain } from "./nonStandardSources.js";
 
 /** Maps a depsview ecosystem label to the socket.dev URL slug for "(link)" anchors. */
-const SOCKET_URL_SLUG = { npm: 'npm', python: 'pypi', go: 'go', rust: 'cargo' };
+const SOCKET_URL_SLUG = { npm: "npm", python: "pypi", go: "go", rust: "cargo" };
 
 /**
  * Escapes a string for safe insertion into HTML text content or attribute values
@@ -27,12 +27,12 @@ const SOCKET_URL_SLUG = { npm: 'npm', python: 'pypi', go: 'go', rust: 'cargo' };
  * @returns {string}
  */
 function escapeHtml(value) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#x27;');
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;");
 }
 
 /**
@@ -43,7 +43,7 @@ function escapeHtml(value) {
  * @returns {number}
  */
 function daysSince(dateStr) {
-  if (!dateStr || dateStr === 'unknown') return Infinity;
+  if (!dateStr || dateStr === "unknown") return Infinity;
   const ms = Date.now() - new Date(dateStr).getTime();
   if (isNaN(ms)) return Infinity;
   return Math.floor(ms / 86_400_000);
@@ -56,9 +56,9 @@ function daysSince(dateStr) {
  * @returns {{ text: string, className: string|null }}
  */
 function scoreDisplay(score) {
-  if (score == null) return { text: '–', className: null };
+  if (score == null) return { text: "–", className: null };
   const pct = Math.round(score * 100);
-  const className = score >= 0.8 ? 'score-good' : score >= 0.5 ? 'score-warn' : 'score-bad';
+  const className = score >= 0.8 ? "score-good" : score >= 0.5 ? "score-warn" : "score-bad";
   return { text: `${pct}%`, className };
 }
 
@@ -71,7 +71,7 @@ function scoreDisplay(score) {
  */
 function socketPackageUrl(name, socketSlug) {
   if (!socketSlug) return null;
-  const encoded = encodeURIComponent(name).replace(/%40/g, '@').replace(/%2F/gi, '/');
+  const encoded = encodeURIComponent(name).replace(/%40/g, "@").replace(/%2F/gi, "/");
   return `https://socket.dev/${socketSlug}/package/${encoded}`;
 }
 
@@ -82,7 +82,7 @@ function socketPackageUrl(name, socketSlug) {
  * @returns {string}
  */
 function formatDownloads(count) {
-  return count !== null ? count.toLocaleString('en-US') : '–';
+  return count !== null ? count.toLocaleString("en-US") : "–";
 }
 
 /** Inline CSS block shared by every generated report. */
@@ -205,9 +205,7 @@ details.nonstd > summary:hover { color: var(--text); }
  */
 function renderSection(ecosystem, section, showHeader, socketScores, downloadStats) {
   const sectionId = `sec-${ecosystem}`;
-  const headerHtml = showHeader
-    ? `<h2 class="section-title">${escapeHtml(ecosystem)}</h2>`
-    : '';
+  const headerHtml = showHeader ? `<h2 class="section-title">${escapeHtml(ecosystem)}</h2>` : "";
 
   if (section.error) {
     return {
@@ -219,56 +217,63 @@ function renderSection(ecosystem, section, showHeader, socketScores, downloadSta
     };
   }
 
-  const rows = sortedResults(
-    section.results,
-    socketScores ?? new Map(),
-    { ecosystem }
-  );
+  const rows = sortedResults(section.results, socketScores ?? new Map(), { ecosystem });
   const total = rows.length;
 
-  const showFirst  = ecosystem !== 'go';
+  const showFirst = ecosystem !== "go";
   // Rust (crates.io 90-day figure) and npm (api.npmjs.org last-month figure)
   // always show downloads via cheap bulk fetches; Python only when
   // --download-stats was passed.
-  const showDl     = ecosystem === 'rust' || ecosystem === 'npm' || (downloadStats && ecosystem === 'python');
-  const dlLabel    = ecosystem === 'rust' ? 'Downloads (90d)' : 'Downloads/mo';
+  const showDl =
+    ecosystem === "rust" || ecosystem === "npm" || (downloadStats && ecosystem === "python");
+  const dlLabel = ecosystem === "rust" ? "Downloads (90d)" : "Downloads/mo";
   const showSocket = socketScores != null;
   const socketSlug = SOCKET_URL_SLUG[ecosystem] ?? null;
 
   // Summary line
   let summaryText;
   if (section.directNames && section.directNames.size > 0) {
-    const directCount = rows.filter(r => section.directNames.has(r.name.toLowerCase().replace(/[-_.]+/g, '-'))).length;
+    const directCount = rows.filter((r) =>
+      section.directNames.has(r.name.toLowerCase().replace(/[-_.]+/g, "-")),
+    ).length;
     const transitiveCount = total - directCount;
-    summaryText = `${total} package${total !== 1 ? 's' : ''} total (${directCount} direct, ${transitiveCount} transitive)`;
+    summaryText = `${total} package${total !== 1 ? "s" : ""} total (${directCount} direct, ${transitiveCount} transitive)`;
   } else {
-    summaryText = `${total} package${total !== 1 ? 's' : ''} total`;
+    summaryText = `${total} package${total !== 1 ? "s" : ""} total`;
   }
   if (section.source) summaryText += ` · from ${section.source}`;
 
   // Header columns
-  const colDefs = [['Package', 'name'], ['Version', 'version'], ['Released', 'released']];
-  if (showFirst)  colDefs.push(['First Release', 'firstReleased']);
-  colDefs.push(['Releases', 'releases']);
-  if (showDl)     colDefs.push([dlLabel, 'downloadsLastMonth']);
-  if (showSocket) colDefs.push(['Supply Chain', 'supplyChain']);
+  const colDefs = [
+    ["Package", "name"],
+    ["Version", "version"],
+    ["Released", "released"],
+  ];
+  if (showFirst) colDefs.push(["First Release", "firstReleased"]);
+  colDefs.push(["Releases", "releases"]);
+  if (showDl) colDefs.push([dlLabel, "downloadsLastMonth"]);
+  if (showSocket) colDefs.push(["Supply Chain", "supplyChain"]);
 
-  const headerCellsHtml = colDefs.map(([label, col]) =>
-    `<th data-col="${escapeHtml(col)}"${col === 'released' ? ' class="th-sort-desc"' : ''}>${escapeHtml(label)}</th>`
-  ).join('');
+  const headerCellsHtml = colDefs
+    .map(
+      ([label, col]) =>
+        `<th data-col="${escapeHtml(col)}"${col === "released" ? ' class="th-sort-desc"' : ""}>${escapeHtml(label)}</th>`,
+    )
+    .join("");
 
   const cfg = { showFirst, showDl, showSocket, socketSlug };
   // tbody is intentionally empty — all rows are rendered client-side by the
   // embedded sort script using DOM methods so no user data touches HTML strings.
 
   const privateCount = section.privateCount ?? 0;
-  const privateNote = privateCount > 0
-    ? `${privateCount} private package${privateCount === 1 ? '' : 's'} skipped (not on public registry).`
-    : null;
+  const privateNote =
+    privateCount > 0
+      ? `${privateCount} private package${privateCount === 1 ? "" : "s"} skipped (not on public registry).`
+      : null;
   const noteHtml = [section.note, privateNote]
     .filter(Boolean)
-    .map(n => `<p class="note-warning">${escapeHtml(n)}</p>`)
-    .join('\n');
+    .map((n) => `<p class="note-warning">${escapeHtml(n)}</p>`)
+    .join("\n");
 
   // Convert private packages to [{domain, names}] server-side so the embedded
   // script receives structured data rather than raw URLs.
@@ -454,7 +459,7 @@ D.sections.forEach(function(s){
 function generateReport(sections, opts = {}) {
   const { downloadStats = false, socketScores = null } = opts;
 
-  const present = ECOSYSTEM_ORDER.filter(eco => sections.has(eco));
+  const present = ECOSYSTEM_ORDER.filter((eco) => sections.has(eco));
   const showHeader = present.length >= 2;
 
   const sectionBlocks = [];
@@ -465,24 +470,24 @@ function generateReport(sections, opts = {}) {
       sections.get(ecosystem),
       showHeader,
       socketScores,
-      downloadStats
+      downloadStats,
     );
     sectionBlocks.push(html);
     if (scriptCfg) scriptCfgs.push(scriptCfg);
   }
 
-  const ecosystemsText = present.join(', ') || '(none)';
-  const metaText = `${ecosystemsText} · generated ${new Date().toISOString().slice(0, 19).replace('T', ' ')} UTC`;
+  const ecosystemsText = present.join(", ") || "(none)";
+  const metaText = `${ecosystemsText} · generated ${new Date().toISOString().slice(0, 19).replace("T", " ")} UTC`;
 
   // Escape </script> sequences inside the JSON so they cannot prematurely close
   // the script block. < / > are valid JSON/JS unicode escapes.
   const scriptData = JSON.stringify({ sections: scriptCfgs })
-    .replace(/</g, '\\u003c')
-    .replace(/>/g, '\\u003e');
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e");
 
   // CSP nonce: a fresh random value per report so only this exact script block
   // is allowed to run — tighter than 'unsafe-inline'.
-  const nonce = randomBytes(16).toString('base64');
+  const nonce = randomBytes(16).toString("base64");
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -497,7 +502,7 @@ function generateReport(sections, opts = {}) {
   <main>
     <h1>Dependency Report</h1>
     <p class="report-meta">${escapeHtml(metaText)}</p>
-${sectionBlocks.join('\n')}
+${sectionBlocks.join("\n")}
   </main>
   <script nonce="${nonce}">${buildSortScript(scriptData)}</script>
 </body>

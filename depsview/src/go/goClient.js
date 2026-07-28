@@ -7,9 +7,9 @@
  * API reference: https://proxy.golang.org/ — implements the GOPROXY protocol.
  */
 
-import { fetchWithRetry } from '../util/http.js';
+import { fetchWithRetry } from "../util/http.js";
 
-const PROXY_BASE = 'https://proxy.golang.org';
+const PROXY_BASE = "https://proxy.golang.org";
 
 /**
  * Encodes a Go module path for use in a proxy URL.
@@ -21,7 +21,7 @@ const PROXY_BASE = 'https://proxy.golang.org';
  * @returns {string}
  */
 export function escapeModulePath(name) {
-  return name.replace(/[A-Z]/g, c => `!${c.toLowerCase()}`);
+  return name.replace(/[A-Z]/g, (c) => `!${c.toLowerCase()}`);
 }
 
 /**
@@ -54,18 +54,19 @@ function encodedModulePath(name) {
 export async function fetchModuleInfo(name, version) {
   const encoded = encodedModulePath(name);
   if (!encoded) return null;
-  const url = version === 'latest'
-    ? `${PROXY_BASE}/${encoded}/@latest`
-    : `${PROXY_BASE}/${encoded}/@v/${encodeURIComponent(version)}.info`;
+  const url =
+    version === "latest"
+      ? `${PROXY_BASE}/${encoded}/@latest`
+      : `${PROXY_BASE}/${encoded}/@v/${encodeURIComponent(version)}.info`;
   const text = await fetchWithRetry(url, {
-    serviceName:  'proxy.golang.org',
+    serviceName: "proxy.golang.org",
     throwOnError: false,
-    responseType: 'text',
+    responseType: "text",
   });
   if (!text) return null;
   try {
     const raw = JSON.parse(text);
-    if (typeof raw?.Version !== 'string' && typeof raw?.Time !== 'string') return null;
+    if (typeof raw?.Version !== "string" && typeof raw?.Time !== "string") return null;
     return { Version: raw.Version ?? null, Time: raw.Time ?? null };
   } catch {
     return null;
@@ -85,12 +86,15 @@ export async function fetchModuleVersionList(name) {
   if (!encoded) return [];
   const url = `${PROXY_BASE}/${encoded}/@v/list`;
   const text = await fetchWithRetry(url, {
-    serviceName:  'proxy.golang.org',
+    serviceName: "proxy.golang.org",
     throwOnError: false,
-    responseType: 'text',
+    responseType: "text",
   });
   if (!text) return [];
-  return text.split('\n').map(v => v.trim()).filter(Boolean);
+  return text
+    .split("\n")
+    .map((v) => v.trim())
+    .filter(Boolean);
 }
 
 /**
@@ -107,9 +111,9 @@ export async function fetchModuleMod(name, version) {
   if (!encoded) return null;
   const url = `${PROXY_BASE}/${encoded}/@v/${encodeURIComponent(version)}.mod`;
   return fetchWithRetry(url, {
-    serviceName:  'proxy.golang.org',
+    serviceName: "proxy.golang.org",
     throwOnError: false,
-    responseType: 'text',
+    responseType: "text",
   });
 }
 
@@ -119,5 +123,5 @@ export async function fetchModuleMod(name, version) {
  * @returns {string} ISO date or "unknown"
  */
 export function getReleaseDate(info) {
-  return info?.Time ? info.Time.slice(0, 10) : 'unknown';
+  return info?.Time ? info.Time.slice(0, 10) : "unknown";
 }

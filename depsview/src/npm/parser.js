@@ -8,12 +8,12 @@
  * lockRegistry.js — adding a new lock file format only requires a new entry there.
  */
 
-import fs   from 'node:fs';
-import path from 'node:path';
-import { parsePackageJson             } from './parserCore.js';
-import { NPM_LOCK_FILES, NPM_LOCK_FILENAMES } from './lockRegistry.js';
-import { normalizePackageName         } from './depResolver.js';
-import { partitionNpmPackages         } from './registryFilter.js';
+import fs from "node:fs";
+import path from "node:path";
+import { parsePackageJson } from "./parserCore.js";
+import { NPM_LOCK_FILES, NPM_LOCK_FILENAMES } from "./lockRegistry.js";
+import { normalizePackageName } from "./depResolver.js";
+import { partitionNpmPackages } from "./registryFilter.js";
 
 /**
  * Reads and parses npm dependency files from a project directory.
@@ -38,27 +38,50 @@ function parseDependencyFile(projectPath, options = {}) {
     const lockPath = path.join(projectPath, filename);
     if (fs.existsSync(lockPath) && !fs.statSync(lockPath).isDirectory()) {
       try {
-        const content = fs.readFileSync(lockPath, 'utf8');
-        const { publicPkgs, privateCount, privatePkgs } = partitionNpmPackages(parse(content, includeTests));
+        const content = fs.readFileSync(lockPath, "utf8");
+        const { publicPkgs, privateCount, privatePkgs } = partitionNpmPackages(
+          parse(content, includeTests),
+        );
         const dangerousDeps = getDangerousDeps ? getDangerousDeps(content, includeTests) : [];
-        return { deps: publicPkgs, source: filename, note: getNote(content), warning: getWarning(content), privateCount, privatePkgs, dangerousDeps };
+        return {
+          deps: publicPkgs,
+          source: filename,
+          note: getNote(content),
+          warning: getWarning(content),
+          privateCount,
+          privatePkgs,
+          dangerousDeps,
+        };
       } catch (err) {
         throw new Error(`Failed to parse ${filename}: ${err.message}`);
       }
     }
   }
 
-  const pkgPath = path.join(projectPath, 'package.json');
+  const pkgPath = path.join(projectPath, "package.json");
   if (fs.existsSync(pkgPath) && !fs.statSync(pkgPath).isDirectory()) {
     try {
-      const { deps, dangerousDeps } = parsePackageJson(fs.readFileSync(pkgPath, 'utf8'), includeTests);
-      return { deps, source: 'package.json', note: null, warning: null, privateCount: 0, privatePkgs: [], dangerousDeps };
+      const { deps, dangerousDeps } = parsePackageJson(
+        fs.readFileSync(pkgPath, "utf8"),
+        includeTests,
+      );
+      return {
+        deps,
+        source: "package.json",
+        note: null,
+        warning: null,
+        privateCount: 0,
+        privatePkgs: [],
+        dangerousDeps,
+      };
     } catch (err) {
       throw new Error(`Failed to parse package.json: ${err.message}`);
     }
   }
 
-  throw new Error(`No npm dependency file found in ${projectPath}. Looked for: ${[...NPM_LOCK_FILENAMES].join(', ')}, package.json`);
+  throw new Error(
+    `No npm dependency file found in ${projectPath}. Looked for: ${[...NPM_LOCK_FILENAMES].join(", ")}, package.json`,
+  );
 }
 
 /**
@@ -73,9 +96,9 @@ function parseDependencyFile(projectPath, options = {}) {
  */
 function readDirectNamesFromPackageJson(dirPath, includeTests) {
   try {
-    const content = fs.readFileSync(path.join(dirPath, 'package.json'), 'utf8');
+    const content = fs.readFileSync(path.join(dirPath, "package.json"), "utf8");
     const { deps } = parsePackageJson(content, includeTests);
-    return new Set(deps.map(d => normalizePackageName(d.name)));
+    return new Set(deps.map((d) => normalizePackageName(d.name)));
   } catch {
     return new Set();
   }

@@ -25,8 +25,8 @@
  * @returns {1|2}
  */
 function getYarnMajorVersion(content) {
-  if (content.includes('# yarn lockfile v1')) return 1;
-  if (content.includes('__metadata:')) return 2;
+  if (content.includes("# yarn lockfile v1")) return 1;
+  if (content.includes("__metadata:")) return 2;
   return 1;
 }
 
@@ -38,8 +38,8 @@ function getYarnMajorVersion(content) {
  * @returns {string|null}
  */
 function parseClassicSpecifier(spec) {
-  const s = spec.replace(/^["']|["']$/g, '').trim();
-  const i = s.lastIndexOf('@');
+  const s = spec.replace(/^["']|["']$/g, "").trim();
+  const i = s.lastIndexOf("@");
   return i > 0 ? s.slice(0, i) : null;
 }
 
@@ -50,8 +50,8 @@ function parseClassicSpecifier(spec) {
  * @returns {string|null}
  */
 function parseBerrySpecifier(spec) {
-  const s = spec.replace(/^["']|["']$/g, '').trim();
-  const i = s.indexOf('@npm:');
+  const s = spec.replace(/^["']|["']$/g, "").trim();
+  const i = s.indexOf("@npm:");
   return i > 0 ? s.slice(0, i) : null;
 }
 
@@ -74,24 +74,29 @@ function parseBerrySpecifier(spec) {
  * @param {boolean} [includeTests=false] - accepted for interface consistency; has no effect
  * @returns {Array<{ name: string, version: string, resolved: string|null }>}
  */
-function parseYarnLock(content, includeTests = false) { // eslint-disable-line no-unused-vars
+function parseYarnLock(content, includeTests = false) {
+  // eslint-disable-line no-unused-vars
   const isBerry = getYarnMajorVersion(content) === 2;
-  const lines   = content.split('\n');
+  const lines = content.split("\n");
 
   /** @type {Map<string, { name: string, version: string, resolved: string|null }>} */
   const pkgMap = new Map();
 
-  let currentName     = null;
-  let currentVersion  = null;
+  let currentName = null;
+  let currentVersion = null;
   let currentResolved = null; // Classic only; Berry always null
   let currentLinkType = null; // Berry only
 
   function flushEntry() {
     if (currentName && currentVersion) {
-      if (!isBerry || currentLinkType === 'hard') {
+      if (!isBerry || currentLinkType === "hard") {
         const key = `${currentName}@${currentVersion}`;
         if (!pkgMap.has(key)) {
-          pkgMap.set(key, { name: currentName, version: currentVersion, resolved: currentResolved });
+          pkgMap.set(key, {
+            name: currentName,
+            version: currentVersion,
+            resolved: currentResolved,
+          });
         }
       }
     }
@@ -100,39 +105,49 @@ function parseYarnLock(content, includeTests = false) { // eslint-disable-line n
 
   for (const rawLine of lines) {
     const trimmed = rawLine.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
+    if (!trimmed || trimmed.startsWith("#")) continue;
 
     const indent = rawLine.length - rawLine.trimStart().length;
 
     if (indent === 0) {
       flushEntry();
-      if (trimmed.endsWith(':')) {
-        const header    = trimmed.slice(0, -1);
-        const firstSpec = header.split(', ')[0];
+      if (trimmed.endsWith(":")) {
+        const header = trimmed.slice(0, -1);
+        const firstSpec = header.split(", ")[0];
         currentName = isBerry
-          ? (trimmed !== '__metadata:' ? parseBerrySpecifier(firstSpec) : null)
+          ? trimmed !== "__metadata:"
+            ? parseBerrySpecifier(firstSpec)
+            : null
           : parseClassicSpecifier(firstSpec);
       }
     } else if (indent === 2 && currentName) {
       if (isBerry) {
-        const mVer  = trimmed.match(/^version:\s+(\S+)/);
-        if (mVer) { currentVersion  = mVer[1].replace(/^["']|["']$/g, ''); continue; }
+        const mVer = trimmed.match(/^version:\s+(\S+)/);
+        if (mVer) {
+          currentVersion = mVer[1].replace(/^["']|["']$/g, "");
+          continue;
+        }
         const mLink = trimmed.match(/^linkType:\s+(\S+)/);
-        if (mLink)  { currentLinkType = mLink[1]; }
+        if (mLink) {
+          currentLinkType = mLink[1];
+        }
       } else {
         const mVer = trimmed.match(/^version "([^"]+)"/);
-        if (mVer) { currentVersion = mVer[1]; continue; }
+        if (mVer) {
+          currentVersion = mVer[1];
+          continue;
+        }
         const mRes = trimmed.match(/^resolved "([^"]+)"/);
         if (mRes) {
-          const url      = mRes[1];
-          const hashIdx  = url.indexOf('#');
+          const url = mRes[1];
+          const hashIdx = url.indexOf("#");
           const stripped = hashIdx === -1 ? url : url.slice(0, hashIdx);
           // Only accept https:// URLs — rejects file:, git+, and other schemes.
           // Normalise registry.yarnpkg.com → registry.npmjs.org: the two are
           // equivalent (yarnpkg.com is a CDN alias). Custom private registries
           // would require parsing .yarnrc.yml which is not yet supported.
-          currentResolved = stripped.startsWith('https://')
-            ? stripped.replace('https://registry.yarnpkg.com/', 'https://registry.npmjs.org/')
+          currentResolved = stripped.startsWith("https://")
+            ? stripped.replace("https://registry.yarnpkg.com/", "https://registry.npmjs.org/")
             : null;
         }
       }

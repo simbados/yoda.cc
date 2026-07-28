@@ -11,8 +11,10 @@
  * @returns {string}
  */
 export function domainOf(str) {
-  try { return new URL(str).hostname; } catch {
-    const first = str.split('/')[0];
+  try {
+    return new URL(str).hostname;
+  } catch {
+    const first = str.split("/")[0];
     // Reject bare relative-path segments (., ..) that are not valid domain labels.
     return /^\.\.?$/.test(first) ? str : first;
   }

@@ -10,8 +10,8 @@
  * @returns {{ epoch: number, release: number[], pre: [number,number]|null, post: number|null, dev: number|null }}
  */
 function parseVersion(vStr) {
-  let v = String(vStr).toLowerCase().trim().replace(/^v/, '');
-  v = v.split('+')[0]; // strip local version identifier
+  let v = String(vStr).toLowerCase().trim().replace(/^v/, "");
+  v = v.split("+")[0]; // strip local version identifier
 
   let epoch = 0;
   const epochMatch = v.match(/^(\d+)!/);
@@ -23,7 +23,7 @@ function parseVersion(vStr) {
   let dev = null;
   const devMatch = v.match(/[._-]?dev(\d*)$/);
   if (devMatch) {
-    dev = parseInt(devMatch[1] || '0', 10);
+    dev = parseInt(devMatch[1] || "0", 10);
     v = v.slice(0, v.length - devMatch[0].length);
   }
 
@@ -38,14 +38,17 @@ function parseVersion(vStr) {
   const preMatch = v.match(/[._-]?(a|alpha|b|beta|c|rc|preview)\.?(\d*)$/i);
   if (preMatch) {
     const kind = preMatch[1].toLowerCase();
-    const num = parseInt(preMatch[2] || '0', 10);
+    const num = parseInt(preMatch[2] || "0", 10);
     // a/alpha=0, b/beta=1, c/rc/preview=2
-    const typeNum = (kind === 'a' || kind === 'alpha') ? 0 : (kind === 'b' || kind === 'beta') ? 1 : 2;
+    const typeNum = kind === "a" || kind === "alpha" ? 0 : kind === "b" || kind === "beta" ? 1 : 2;
     pre = [typeNum, num];
     v = v.slice(0, v.length - preMatch[0].length);
   }
 
-  const release = v.split('.').map(p => parseInt(p, 10) || 0).filter((_, i) => i < 10);
+  const release = v
+    .split(".")
+    .map((p) => parseInt(p, 10) || 0)
+    .filter((_, i) => i < 10);
   if (release.length === 0) release.push(0);
 
   return { epoch, release, pre, post, dev };
@@ -123,12 +126,12 @@ function isPreRelease(vStr) {
  */
 function satisfiesConstraint(versionStr, operator, constraintStr) {
   // Wildcard equality / inequality: ==1.0.* or !=1.0.*
-  if (constraintStr.endsWith('.*')) {
+  if (constraintStr.endsWith(".*")) {
     const prefix = constraintStr.slice(0, -2);
-    const prefixParts = prefix.split('.');
-    const vParts = versionStr.split('.');
-    const matches = prefixParts.every((p, i) => (vParts[i] ?? '').split(/[a-zA-Z]/)[0] === p);
-    return operator === '!=' ? !matches : matches;
+    const prefixParts = prefix.split(".");
+    const vParts = versionStr.split(".");
+    const matches = prefixParts.every((p, i) => (vParts[i] ?? "").split(/[a-zA-Z]/)[0] === p);
+    return operator === "!=" ? !matches : matches;
   }
 
   let v, c;
@@ -142,13 +145,19 @@ function satisfiesConstraint(versionStr, operator, constraintStr) {
   const cmp = compareVersions(v, c);
 
   switch (operator) {
-    case '==': return cmp === 0;
-    case '!=': return cmp !== 0;
-    case '>=': return cmp >= 0;
-    case '<=': return cmp <= 0;
-    case '>':  return cmp > 0;
-    case '<':  return cmp < 0;
-    case '~=': {
+    case "==":
+      return cmp === 0;
+    case "!=":
+      return cmp !== 0;
+    case ">=":
+      return cmp >= 0;
+    case "<=":
+      return cmp <= 0;
+    case ">":
+      return cmp > 0;
+    case "<":
+      return cmp < 0;
+    case "~=": {
       // Lower bound: version >= constraint
       if (cmp < 0) return false;
       // Upper bound: increment the second-to-last release segment of the constraint
@@ -171,11 +180,12 @@ function satisfiesConstraint(versionStr, operator, constraintStr) {
  * @returns {Array<[string, string]>} list of [operator, constraintVersion] tuples
  */
 function parseVersionSpec(spec) {
-  if (!spec || spec.trim() === '' || spec.trim() === '*') return [];
-  return spec.split(',')
-    .map(s => s.trim())
+  if (!spec || spec.trim() === "" || spec.trim() === "*") return [];
+  return spec
+    .split(",")
+    .map((s) => s.trim())
     .filter(Boolean)
-    .map(s => {
+    .map((s) => {
       const m = s.match(/^(==|!=|>=|<=|~=|>|<)\s*(.+)$/);
       return m ? [m[1], m[2].trim()] : null;
     })
@@ -193,19 +203,22 @@ function parseVersionSpec(spec) {
  */
 function resolveVersion(versionSpec, allVersions) {
   if (!allVersions || allVersions.length === 0) {
-    return { version: 'unknown', isLatest: true };
+    return { version: "unknown", isLatest: true };
   }
 
   /** @param {string[]} versions */
   const sortedDesc = (versions) =>
     [...versions].sort((a, b) => {
-      try { return compareVersions(parseVersion(b), parseVersion(a)); }
-      catch { return 0; }
+      try {
+        return compareVersions(parseVersion(b), parseVersion(a));
+      } catch {
+        return 0;
+      }
     });
 
   const constraints = parseVersionSpec(versionSpec);
 
-  const stableVersions = allVersions.filter(v => !isPreRelease(v));
+  const stableVersions = allVersions.filter((v) => !isPreRelease(v));
   const candidatePool = stableVersions.length > 0 ? stableVersions : allVersions;
   const sorted = sortedDesc(candidatePool);
 

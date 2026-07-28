@@ -1,6 +1,6 @@
 /*
   # Block everything by default; allow only what the app actually needs.
-  Content-Security-Policy: default-src 'none'; script-src 'self' 'sha256-LkPHGndQDfbL7p9NeNHZnDZyEJvrI6JL48GN9qI60+o='; style-src 'self'; connect-src 'self' https://formulae.brew.sh https://api.github.com; img-src 'self'; font-src 'none'; object-src 'none'; worker-src 'none'; manifest-src 'none'; form-action 'none'; frame-ancestors 'none'; base-uri 'self'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'none'; script-src 'self' 'sha256-QiJQQrv49f3NxMBnZsy2IzIGsERbAET3e+JtFOJ1/EA='; style-src 'self'; connect-src 'self' https://formulae.brew.sh https://api.github.com; img-src 'self'; font-src 'none'; object-src 'none'; worker-src 'none'; manifest-src 'none'; form-action 'none'; frame-ancestors 'none'; base-uri 'self'; upgrade-insecure-requests
 
   # Prevent MIME-type sniffing.
   X-Content-Type-Options: nosniff

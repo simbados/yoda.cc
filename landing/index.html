@@ -1,139 +1,152 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Yoda — Developer Tools</title>
-  <meta name="description" content="Open-source developer tools by simbados — dependency analysis for Python, npm, and Go, and a Homebrew dependency viewer with supply chain scores.">
-  <link rel="canonical" href="https://yoda.cc/">
-  <meta property="og:type"        content="website">
-  <meta property="og:url"         content="https://yoda.cc/">
-  <meta property="og:title"       content="Yoda — Developer Tools">
-  <meta property="og:description" content="Open-source developer tools by simbados — dependency analysis for Python, npm, and Go, and a Homebrew dependency viewer with supply chain scores.">
-  <meta name="twitter:card"        content="summary">
-  <meta name="twitter:title"       content="Yoda — Developer Tools">
-  <meta name="twitter:description" content="Open-source developer tools by simbados — dependency analysis for Python, npm, and Go, and a Homebrew dependency viewer with supply chain scores.">
-  <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <link rel="stylesheet" href="style.css">
-  <script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@graph": [
-    {
-      "@type": "WebSite",
-      "@id": "https://yoda.cc/#website",
-      "url": "https://yoda.cc/",
-      "name": "Yoda — Developer Tools",
-      "description": "Open-source developer tools by simbados — dependency analysis for Python, npm, and Go, and a Homebrew dependency viewer with supply chain scores.",
-      "inLanguage": "en",
-      "publisher": { "@id": "https://yoda.cc/#person" }
-    },
-    {
-      "@type": "Person",
-      "@id": "https://yoda.cc/#person",
-      "name": "simbados",
-      "url": "https://simbados.com",
-      "sameAs": ["https://github.com/simbados"]
-    },
-    {
-      "@type": "ItemList",
-      "name": "Developer Tools",
-      "itemListElement": [
-        {
-          "@type": "ListItem",
-          "position": 1,
-          "url": "https://deps.yoda.cc/",
-          "name": "depsview",
-          "description": "Analyse Python, npm, and Go dependencies from any public GitHub repository."
-        },
-        {
-          "@type": "ListItem",
-          "position": 2,
-          "url": "https://brew.yoda.cc/",
-          "name": "brewview",
-          "description": "Resolve the full transitive dependency tree of any Homebrew formula."
-        }
-      ]
-    }
-  ]
-}
-  </script>
-</head>
-<body class="pg-landing">
-
-  <header class="site-header">
-    <div class="container">
-      <a class="logo" href="/">~/yoda</a>
-      <nav class="header-links">
-        <a href="https://simbados.com" target="_blank" rel="noopener noreferrer">portfolio</a>
-        <a href="https://github.com/simbados" target="_blank" rel="noopener noreferrer">github</a>
-      </nav>
-    </div>
-  </header>
-
-  <main class="container">
-
-    <section class="hero">
-      <h1>Developer Tools</h1>
-      <p class="tagline">
-        Open-source tools built by <a href="https://simbados.com" target="_blank" rel="noopener noreferrer">simbados</a> —
-        focused on security, transparency, and keeping your data in your browser.
-      </p>
-    </section>
-
-    <section>
-      <p class="section-label">Projects</p>
-      <h2 class="section-heading">What's inside</h2>
-      <p class="section-intro">
-        Two zero-dependency developer tools that run entirely in your browser: a multi-ecosystem
-        dependency analyser for npm, Python, and Go projects, and a macOS Homebrew dependency tree
-        viewer. No installs and no accounts — everything is computed client-side from public
-        registry data.
-      </p>
-      <div class="project-grid">
-
-        <a class="project-card" href="https://deps.yoda.cc">
-          <div class="project-header">
-            <span class="project-name">depsview</span>
-            <span class="project-tag">dependency analysis</span>
-          </div>
-          <p class="project-desc">
-            Analyse Python, npm, and Go dependencies from any public GitHub repository.
-            See release dates, supply chain security scores (cli), and download statistics (cli) —
-            all in your browser, with no install and no account required.
-          </p>
-          <p class="card-formats">package-lock.json · pnpm-lock.yaml · yarn.lock · bun.lock · requirements.txt · pyproject.toml · setup.cfg · Pipfile · go.mod · go.sum</p>
-          <span class="project-link">Open tool ↗</span>
-        </a>
-
-        <a class="project-card" href="https://brew.yoda.cc">
-          <div class="project-header">
-            <span class="project-name">brewview</span>
-            <span class="project-tag">homebrew dependencies</span>
-          </div>
-          <p class="project-desc">
-            Resolve the full transitive dependency tree of any Homebrew formula.
-            See pinned versions, last-updated dates, and yearly install counts —
-            fetched directly from formulae.brew.sh in your browser.
-          </p>
-          <p class="card-formats">macOS Homebrew dependency tree viewer · formulae &amp; casks · transitive deps · install counts</p>
-          <span class="project-link">Open tool ↗</span>
-        </a>
-
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Yoda — Developer Tools</title>
+    <meta
+      name="description"
+      content="Open-source developer tools by simbados — dependency analysis for Python, npm, and Go, and a Homebrew dependency viewer with supply chain scores."
+    />
+    <link rel="canonical" href="https://yoda.cc/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://yoda.cc/" />
+    <meta property="og:title" content="Yoda — Developer Tools" />
+    <meta
+      property="og:description"
+      content="Open-source developer tools by simbados — dependency analysis for Python, npm, and Go, and a Homebrew dependency viewer with supply chain scores."
+    />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Yoda — Developer Tools" />
+    <meta
+      name="twitter:description"
+      content="Open-source developer tools by simbados — dependency analysis for Python, npm, and Go, and a Homebrew dependency viewer with supply chain scores."
+    />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="stylesheet" href="style.css" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://yoda.cc/#website",
+            "url": "https://yoda.cc/",
+            "name": "Yoda — Developer Tools",
+            "description": "Open-source developer tools by simbados — dependency analysis for Python, npm, and Go, and a Homebrew dependency viewer with supply chain scores.",
+            "inLanguage": "en",
+            "publisher": { "@id": "https://yoda.cc/#person" }
+          },
+          {
+            "@type": "Person",
+            "@id": "https://yoda.cc/#person",
+            "name": "simbados",
+            "url": "https://simbados.com",
+            "sameAs": ["https://github.com/simbados"]
+          },
+          {
+            "@type": "ItemList",
+            "name": "Developer Tools",
+            "itemListElement": [
+              {
+                "@type": "ListItem",
+                "position": 1,
+                "url": "https://deps.yoda.cc/",
+                "name": "depsview",
+                "description": "Analyse Python, npm, and Go dependencies from any public GitHub repository."
+              },
+              {
+                "@type": "ListItem",
+                "position": 2,
+                "url": "https://brew.yoda.cc/",
+                "name": "brewview",
+                "description": "Resolve the full transitive dependency tree of any Homebrew formula."
+              }
+            ]
+          }
+        ]
+      }
+    </script>
+  </head>
+  <body class="pg-landing">
+    <header class="site-header">
+      <div class="container">
+        <a class="logo" href="/">~/yoda</a>
+        <nav class="header-links">
+          <a href="https://simbados.com" target="_blank" rel="noopener noreferrer">portfolio</a>
+          <a href="https://github.com/simbados" target="_blank" rel="noopener noreferrer">github</a>
+        </nav>
       </div>
-    </section>
+    </header>
 
-  </main>
+    <main class="container">
+      <section class="hero">
+        <h1>Developer Tools</h1>
+        <p class="tagline">
+          Open-source tools built by
+          <a href="https://simbados.com" target="_blank" rel="noopener noreferrer">simbados</a> —
+          focused on security, transparency, and keeping your data in your browser.
+        </p>
+      </section>
 
-  <footer class="site-footer">
-    <div class="container">
-      <p>
-        built by <a href="https://simbados.com" target="_blank" rel="noopener noreferrer">simbados</a>
-        &nbsp;·&nbsp;
-        <a href="https://github.com/simbados" target="_blank" rel="noopener noreferrer">github.com/simbados</a>
-      </p>
-    </div>
-  </footer>
+      <section>
+        <p class="section-label">Projects</p>
+        <h2 class="section-heading">What's inside</h2>
+        <p class="section-intro">
+          Two zero-dependency developer tools that run entirely in your browser: a multi-ecosystem
+          dependency analyser for npm, Python, and Go projects, and a macOS Homebrew dependency tree
+          viewer. No installs and no accounts — everything is computed client-side from public
+          registry data.
+        </p>
+        <div class="project-grid">
+          <a class="project-card" href="https://deps.yoda.cc">
+            <div class="project-header">
+              <span class="project-name">depsview</span>
+              <span class="project-tag">dependency analysis</span>
+            </div>
+            <p class="project-desc">
+              Analyse Python, npm, and Go dependencies from any public GitHub repository. See
+              release dates, supply chain security scores (cli), and download statistics (cli) — all
+              in your browser, with no install and no account required.
+            </p>
+            <p class="card-formats">
+              package-lock.json · pnpm-lock.yaml · yarn.lock · bun.lock · requirements.txt ·
+              pyproject.toml · setup.cfg · Pipfile · go.mod · go.sum
+            </p>
+            <span class="project-link">Open tool ↗</span>
+          </a>
 
-</body>
+          <a class="project-card" href="https://brew.yoda.cc">
+            <div class="project-header">
+              <span class="project-name">brewview</span>
+              <span class="project-tag">homebrew dependencies</span>
+            </div>
+            <p class="project-desc">
+              Resolve the full transitive dependency tree of any Homebrew formula. See pinned
+              versions, last-updated dates, and yearly install counts — fetched directly from
+              formulae.brew.sh in your browser.
+            </p>
+            <p class="card-formats">
+              macOS Homebrew dependency tree viewer · formulae &amp; casks · transitive deps ·
+              install counts
+            </p>
+            <span class="project-link">Open tool ↗</span>
+          </a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container">
+        <p>
+          built by
+          <a href="https://simbados.com" target="_blank" rel="noopener noreferrer">simbados</a>
+          &nbsp;·&nbsp;
+          <a href="https://github.com/simbados" target="_blank" rel="noopener noreferrer"
+            >github.com/simbados</a
+          >
+        </p>
+      </div>
+    </footer>
+  </body>
 </html>

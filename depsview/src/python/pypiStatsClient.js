@@ -7,14 +7,14 @@
  * When debug mode is enabled via src/debug.js, HTTP errors are logged to stderr.
  */
 
-import { fetchWithRetry } from '../util/http.js';
-import { normalizePackageName } from './pypiClient.js';
-import { debugLog } from '../util/debugging.js';
+import { fetchWithRetry } from "../util/http.js";
+import { normalizePackageName } from "./pypiClient.js";
+import { debugLog } from "../util/debugging.js";
 
 /** @type {Map<string, { lastMonth: number }|null>} cache keyed by normalized package name */
 const cache = new Map();
 
-const STATS_BASE = 'https://pypistats.org/api/packages';
+const STATS_BASE = "https://pypistats.org/api/packages";
 
 /**
  * Fetches recent download statistics for a package from pypistats.org (or a proxy).
@@ -30,14 +30,16 @@ const STATS_BASE = 'https://pypistats.org/api/packages';
  * @returns {Promise<{ lastMonth: number }|null>} download stats, or null if unavailable
  */
 async function fetchDownloadStats(packageName, { baseUrl = STATS_BASE } = {}) {
-  if (!baseUrl.startsWith('https://')) throw new Error(`fetchDownloadStats: baseUrl must use https, got: ${baseUrl}`);
+  if (!baseUrl.startsWith("https://"))
+    throw new Error(`fetchDownloadStats: baseUrl must use https, got: ${baseUrl}`);
   const key = normalizePackageName(packageName);
   if (cache.has(key)) return cache.get(key);
 
-  const data = await fetchWithRetry(`${baseUrl}/${key}/recent`, { serviceName: 'pypistats', throwOnError: false });
-  const result = (data?.data?.last_month != null)
-    ? { lastMonth: data.data.last_month }
-    : null;
+  const data = await fetchWithRetry(`${baseUrl}/${key}/recent`, {
+    serviceName: "pypistats",
+    throwOnError: false,
+  });
+  const result = data?.data?.last_month != null ? { lastMonth: data.data.last_month } : null;
   if (data !== null && result === null) {
     debugLog(`pypistats: no last_month field in response for ${key}: ${JSON.stringify(data)}`);
   }

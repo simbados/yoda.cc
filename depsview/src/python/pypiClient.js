@@ -6,12 +6,12 @@
  * When debug mode is enabled via src/debug.js, HTTP errors are logged to stderr.
  */
 
-import { fetchWithRetry } from '../util/http.js';
+import { fetchWithRetry } from "../util/http.js";
 
 /** @type {Map<string, object|null>} In-memory cache keyed by "name" or "name@version" */
 const cache = new Map();
 
-const PYPI_BASE = 'https://pypi.org/pypi';
+const PYPI_BASE = "https://pypi.org/pypi";
 
 /**
  * Normalizes a Python package name to its PyPI canonical form:
@@ -21,7 +21,7 @@ const PYPI_BASE = 'https://pypi.org/pypi';
  * @returns {string} normalized name
  */
 function normalizePackageName(name) {
-  return name.toLowerCase().replace(/[-_.]+/g, '-');
+  return name.toLowerCase().replace(/[-_.]+/g, "-");
 }
 
 /**
@@ -36,7 +36,7 @@ async function fetchPackageInfo(packageName) {
   const key = normalizePackageName(packageName);
   if (cache.has(key)) return cache.get(key);
 
-  const data = await fetchWithRetry(`${PYPI_BASE}/${key}/json`, { serviceName: 'PyPI' });
+  const data = await fetchWithRetry(`${PYPI_BASE}/${key}/json`, { serviceName: "PyPI" });
   cache.set(key, data);
   return data;
 }
@@ -53,7 +53,10 @@ async function fetchVersionInfo(packageName, version) {
   const key = `${normalizePackageName(packageName)}@${version}`;
   if (cache.has(key)) return cache.get(key);
 
-  const data = await fetchWithRetry(`${PYPI_BASE}/${normalizePackageName(packageName)}/${version}/json`, { serviceName: 'PyPI' });
+  const data = await fetchWithRetry(
+    `${PYPI_BASE}/${normalizePackageName(packageName)}/${version}/json`,
+    { serviceName: "PyPI" },
+  );
   cache.set(key, data);
   return data;
 }
@@ -81,9 +84,12 @@ function getVersionList(packageData) {
  */
 function getReleaseDate(packageData, version) {
   const files = packageData?.releases?.[version];
-  if (!Array.isArray(files) || files.length === 0) return 'unknown';
-  const times = files.map(f => f.upload_time).filter(Boolean).sort();
-  return times.length > 0 ? times[0].split('T')[0] : 'unknown';
+  if (!Array.isArray(files) || files.length === 0) return "unknown";
+  const times = files
+    .map((f) => f.upload_time)
+    .filter(Boolean)
+    .sort();
+  return times.length > 0 ? times[0].split("T")[0] : "unknown";
 }
 
 /**
@@ -96,9 +102,9 @@ function getReleaseDate(packageData, version) {
  */
 function getReleaseCount(packageData) {
   if (!packageData?.releases) return 0;
-  return Object.values(packageData.releases)
-    .filter(files => Array.isArray(files) && files.length > 0)
-    .length;
+  return Object.values(packageData.releases).filter(
+    (files) => Array.isArray(files) && files.length > 0,
+  ).length;
 }
 
 /**
@@ -111,13 +117,21 @@ function getReleaseCount(packageData) {
  * @returns {string} ISO date string like "2011-02-14", or "unknown" if no data exists
  */
 function getFirstReleaseDate(packageData) {
-  if (!packageData?.releases) return 'unknown';
+  if (!packageData?.releases) return "unknown";
   const times = Object.values(packageData.releases)
     .flat()
-    .map(f => f.upload_time)
+    .map((f) => f.upload_time)
     .filter(Boolean)
     .sort();
-  return times.length > 0 ? times[0].split('T')[0] : 'unknown';
+  return times.length > 0 ? times[0].split("T")[0] : "unknown";
 }
 
-export { fetchPackageInfo, fetchVersionInfo, getVersionList, getReleaseDate, getReleaseCount, getFirstReleaseDate, normalizePackageName };
+export {
+  fetchPackageInfo,
+  fetchVersionInfo,
+  getVersionList,
+  getReleaseDate,
+  getReleaseCount,
+  getFirstReleaseDate,
+  normalizePackageName,
+};

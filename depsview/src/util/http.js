@@ -4,9 +4,9 @@
  * duplicated across npmClient.js, pypiClient.js, and pypiStatsClient.js.
  */
 
-import { debugLog } from './debugging.js';
+import { debugLog } from "./debugging.js";
 
-const DEFAULT_MAX_RETRIES  = 3;
+const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_RETRY_BASE_MS = 1000;
 
 /**
@@ -15,7 +15,7 @@ const DEFAULT_RETRY_BASE_MS = 1000;
  * @returns {Promise<void>}
  */
 function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -43,14 +43,14 @@ function sleep(ms) {
  */
 async function fetchWithRetry(url, opts = {}) {
   const {
-    serviceName  = 'HTTP',
+    serviceName = "HTTP",
     throwOnError = true,
-    maxRetries   = DEFAULT_MAX_RETRIES,
-    retryBaseMs  = DEFAULT_RETRY_BASE_MS,
-    headers      = {},
-    method       = 'GET',
+    maxRetries = DEFAULT_MAX_RETRIES,
+    retryBaseMs = DEFAULT_RETRY_BASE_MS,
+    headers = {},
+    method = "GET",
     body,
-    responseType = 'json',
+    responseType = "json",
   } = opts;
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -70,11 +70,14 @@ async function fetchWithRetry(url, opts = {}) {
     if (response.status === 404) return null;
 
     if (response.status === 429) {
-      const retryAfter = response.headers.get('retry-after');
+      const retryAfter = response.headers.get("retry-after");
       const waitMs = retryAfter ? parseInt(retryAfter, 10) * 1000 : retryBaseMs * 2 ** attempt;
-      debugLog(`${serviceName} rate-limited (429) for ${url}, waiting ${waitMs}ms (attempt ${attempt + 1}/${maxRetries})`);
+      debugLog(
+        `${serviceName} rate-limited (429) for ${url}, waiting ${waitMs}ms (attempt ${attempt + 1}/${maxRetries})`,
+      );
       if (attempt === maxRetries - 1) {
-        if (throwOnError) throw new Error(`Rate limited by ${serviceName} after ${maxRetries} attempts`);
+        if (throwOnError)
+          throw new Error(`Rate limited by ${serviceName} after ${maxRetries} attempts`);
         return null;
       }
       await sleep(waitMs);
@@ -83,11 +86,12 @@ async function fetchWithRetry(url, opts = {}) {
 
     if (!response.ok) {
       debugLog(`${serviceName} HTTP ${response.status} for ${url}`);
-      if (throwOnError) throw new Error(`${serviceName} returned HTTP ${response.status} for ${url}`);
+      if (throwOnError)
+        throw new Error(`${serviceName} returned HTTP ${response.status} for ${url}`);
       return null;
     }
 
-    return responseType === 'text' ? response.text() : response.json();
+    return responseType === "text" ? response.text() : response.json();
   }
   return null;
 }

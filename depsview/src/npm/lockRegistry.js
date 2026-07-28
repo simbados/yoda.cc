@@ -11,11 +11,10 @@
  * browser (Cloudflare Worker / web UI).
  */
 
-import { parsePackageLock                      } from './lockParser.js';
-import { parsePnpmLock, getPnpmMajorVersion,
-         parsePnpmDangerousDeps                } from './pnpmLockParser.js';
-import { parseBunLock, parseBunDangerousDeps   } from './bunLockParser.js';
-import { parseYarnLock, getYarnMajorVersion    } from './yarnLockParser.js';
+import { parsePackageLock } from "./lockParser.js";
+import { parsePnpmLock, getPnpmMajorVersion, parsePnpmDangerousDeps } from "./pnpmLockParser.js";
+import { parseBunLock, parseBunDangerousDeps } from "./bunLockParser.js";
+import { parseYarnLock, getYarnMajorVersion } from "./yarnLockParser.js";
 
 /**
  * Ordered list of npm lock file descriptors. Priority = array order; first
@@ -40,35 +39,38 @@ import { parseYarnLock, getYarnMajorVersion    } from './yarnLockParser.js';
  */
 export const NPM_LOCK_FILES = [
   {
-    filename:         'package-lock.json',
-    parse:            parsePackageLock,
-    getNote:          () => null,
-    getWarning:       () => null,
+    filename: "package-lock.json",
+    parse: parsePackageLock,
+    getNote: () => null,
+    getWarning: () => null,
     getDangerousDeps: () => [],
   },
   {
-    filename:         'pnpm-lock.yaml',
-    parse:            parsePnpmLock,
-    getNote:    (content) => getPnpmMajorVersion(content) >= 9
-      ? 'pnpm-lock.yaml v9 does not flag transitive packages as dev-only — dev classification is derived from direct devDependencies across every importer.'
-      : null,
-    getWarning:       () => null,
+    filename: "pnpm-lock.yaml",
+    parse: parsePnpmLock,
+    getNote: (content) =>
+      getPnpmMajorVersion(content) >= 9
+        ? "pnpm-lock.yaml v9 does not flag transitive packages as dev-only — dev classification is derived from direct devDependencies across every importer."
+        : null,
+    getWarning: () => null,
     getDangerousDeps: parsePnpmDangerousDeps,
   },
   {
-    filename:         'bun.lock',
-    parse:            parseBunLock,
-    getNote:          () => null,
-    getWarning:       () => null,
+    filename: "bun.lock",
+    parse: parseBunLock,
+    getNote: () => null,
+    getWarning: () => null,
     getDangerousDeps: parseBunDangerousDeps,
   },
   {
-    filename:         'yarn.lock',
-    parse:            parseYarnLock,
-    getNote:    () => 'yarn.lock does not flag packages as dev-only — all installed packages are listed, including test and dev dependencies.',
-    getWarning: (content) => getYarnMajorVersion(content) === 2
-      ? 'Yarn Berry (v2+) does not store registry URLs in yarn.lock — private registry packages cannot be detected and will be looked up against the public npm registry. This may expose internal package names to npm\'s servers. Private registry support requires parsing .yarnrc.yml, which is not yet supported.'
-      : null,
+    filename: "yarn.lock",
+    parse: parseYarnLock,
+    getNote: () =>
+      "yarn.lock does not flag packages as dev-only — all installed packages are listed, including test and dev dependencies.",
+    getWarning: (content) =>
+      getYarnMajorVersion(content) === 2
+        ? "Yarn Berry (v2+) does not store registry URLs in yarn.lock — private registry packages cannot be detected and will be looked up against the public npm registry. This may expose internal package names to npm's servers. Private registry support requires parsing .yarnrc.yml, which is not yet supported."
+        : null,
     getDangerousDeps: () => [],
   },
 ];
@@ -78,4 +80,4 @@ export const NPM_LOCK_FILES = [
  * Use this for ecosystem detection and isLockFile checks instead of
  * hardcoding individual filenames.
  */
-export const NPM_LOCK_FILENAMES = new Set(NPM_LOCK_FILES.map(e => e.filename));
+export const NPM_LOCK_FILENAMES = new Set(NPM_LOCK_FILES.map((e) => e.filename));

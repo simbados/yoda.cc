@@ -20,18 +20,18 @@ Optionally check **Include build dependencies** to include packages that are onl
 
 ## Output columns
 
-| Column | Description |
-|---|---|
-| Package | Formula name (links to formulae.brew.sh) |
-| Version | Current stable version |
-| Updated | Date of the most recent BrewTestBot commit (author or committer) to the formula — last release |
-| Installs/year | Total installs over the past 365 days (all versions combined) |
+| Column        | Description                                                                                    |
+| ------------- | ---------------------------------------------------------------------------------------------- |
+| Package       | Formula name (links to formulae.brew.sh)                                                       |
+| Version       | Current stable version                                                                         |
+| Updated       | Date of the most recent BrewTestBot commit (author or committer) to the formula — last release |
+| Installs/year | Total installs over the past 365 days (all versions combined)                                  |
 
 ### Color coding
 
-| Color | Column | Meaning |
-|---|---|---|
-| Red | Updated | Formula updated within the last 7 days |
+| Color  | Column  | Meaning                                   |
+| ------ | ------- | ----------------------------------------- |
+| Red    | Updated | Formula updated within the last 7 days    |
 | Yellow | Updated | Formula updated within the last 8–30 days |
 
 Click any column header to sort by that column. Clicking an active header toggles between ascending and descending. Null values always sort to the bottom.

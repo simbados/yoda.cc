@@ -17,9 +17,9 @@
  *   GET /api/v1/crates/{name}/{version}/dependencies     transitive deps for a version
  */
 
-import { fetchWithRetry } from '../util/http.js';
+import { fetchWithRetry } from "../util/http.js";
 
-const CRATES_BASE = 'https://crates.io/api/v1/crates';
+const CRATES_BASE = "https://crates.io/api/v1/crates";
 
 /**
  * User-Agent sent on every crates.io request. crates.io's data-access policy
@@ -28,10 +28,10 @@ const CRATES_BASE = 'https://crates.io/api/v1/crates';
  * than the website because a CLI user (the only runtime where this header is
  * actually applied) is not using the web app.
  */
-const CRATES_USER_AGENT = 'depsview (https://github.com/simbados/yoda.cc)';
+const CRATES_USER_AGENT = "depsview (https://github.com/simbados/yoda.cc)";
 
 /** Common request headers for crates.io JSON endpoints. */
-const CRATES_HEADERS = { 'Accept': 'application/json', 'User-Agent': CRATES_USER_AGENT };
+const CRATES_HEADERS = { Accept: "application/json", "User-Agent": CRATES_USER_AGENT };
 
 /**
  * Validates a crate name for safe interpolation into a crates.io URL.
@@ -42,7 +42,7 @@ const CRATES_HEADERS = { 'Accept': 'application/json', 'User-Agent': CRATES_USER
  * @returns {string|null}
  */
 function encodedCrateName(name) {
-  if (typeof name !== 'string' || name.length === 0) return null;
+  if (typeof name !== "string" || name.length === 0) return null;
   if (!/^[A-Za-z0-9_-]+$/.test(name)) return null;
   return name;
 }
@@ -67,11 +67,11 @@ export async function fetchCrateInfo(name) {
 
   const url = `${CRATES_BASE}/${encodeURIComponent(encoded)}`;
   const data = await fetchWithRetry(url, {
-    serviceName:  'crates.io',
+    serviceName: "crates.io",
     throwOnError: false,
-    headers:      CRATES_HEADERS,
+    headers: CRATES_HEADERS,
   });
-  if (!data || typeof data !== 'object') return null;
+  if (!data || typeof data !== "object") return null;
 
   const crateField = data.crate ?? {};
   const versionsField = Array.isArray(data.versions) ? data.versions : [];
@@ -98,22 +98,24 @@ export async function fetchCrateInfo(name) {
 export async function fetchCrateVersionDeps(name, version) {
   const encoded = encodedCrateName(name);
   if (!encoded) return [];
-  if (typeof version !== 'string' || version.length === 0) return [];
+  if (typeof version !== "string" || version.length === 0) return [];
 
   const url = `${CRATES_BASE}/${encodeURIComponent(encoded)}/${encodeURIComponent(version)}/dependencies`;
   const data = await fetchWithRetry(url, {
-    serviceName:  'crates.io',
+    serviceName: "crates.io",
     throwOnError: false,
-    headers:      CRATES_HEADERS,
+    headers: CRATES_HEADERS,
   });
   if (!data || !Array.isArray(data.dependencies)) return [];
 
-  return data.dependencies.map(d => ({
-    crate_id: String(d.crate_id ?? ''),
-    req:      String(d.req      ?? ''),
-    kind:     d.kind === 'build' || d.kind === 'dev' ? d.kind : 'normal',
-    optional: Boolean(d.optional),
-  })).filter(d => d.crate_id.length > 0);
+  return data.dependencies
+    .map((d) => ({
+      crate_id: String(d.crate_id ?? ""),
+      req: String(d.req ?? ""),
+      kind: d.kind === "build" || d.kind === "dev" ? d.kind : "normal",
+      optional: Boolean(d.optional),
+    }))
+    .filter((d) => d.crate_id.length > 0);
 }
 
 /**
@@ -125,9 +127,9 @@ export async function fetchCrateVersionDeps(name, version) {
  * @returns {string}
  */
 export function getReleaseDate(versions, version) {
-  if (!Array.isArray(versions)) return 'unknown';
-  const entry = versions.find(v => v.num === version);
-  if (!entry?.created_at) return 'unknown';
+  if (!Array.isArray(versions)) return "unknown";
+  const entry = versions.find((v) => v.num === version);
+  if (!entry?.created_at) return "unknown";
   return String(entry.created_at).slice(0, 10);
 }
 
@@ -141,9 +143,12 @@ export function getReleaseDate(versions, version) {
  * @returns {string}
  */
 export function getFirstReleaseDate(versions) {
-  if (!Array.isArray(versions) || versions.length === 0) return 'unknown';
-  const times = versions.map(v => v.created_at).filter(Boolean).sort();
-  return times.length === 0 ? 'unknown' : String(times[0]).slice(0, 10);
+  if (!Array.isArray(versions) || versions.length === 0) return "unknown";
+  const times = versions
+    .map((v) => v.created_at)
+    .filter(Boolean)
+    .sort();
+  return times.length === 0 ? "unknown" : String(times[0]).slice(0, 10);
 }
 
 /**
@@ -154,7 +159,7 @@ export function getFirstReleaseDate(versions) {
  */
 export function getReleaseCount(versions) {
   if (!Array.isArray(versions)) return 0;
-  return versions.filter(v => !v.yanked).length;
+  return versions.filter((v) => !v.yanked).length;
 }
 
 /**
@@ -174,9 +179,9 @@ export function getReleaseCount(versions) {
  * @returns {number|null}
  */
 export function getRecentDownloads(crate) {
-  if (!crate || typeof crate !== 'object') return null;
+  if (!crate || typeof crate !== "object") return null;
   const value = crate.recent_downloads;
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return null;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return null;
   return Math.floor(value);
 }
 
@@ -188,5 +193,5 @@ export function getRecentDownloads(crate) {
  */
 export function getVersionList(versions) {
   if (!Array.isArray(versions)) return [];
-  return versions.filter(v => !v.yanked && typeof v.num === 'string').map(v => v.num);
+  return versions.filter((v) => !v.yanked && typeof v.num === "string").map((v) => v.num);
 }

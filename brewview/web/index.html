@@ -1,131 +1,152 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Homebrew Dependency Viewer — brewview</title>
-  <meta name="description" content="Resolve the full transitive dependency tree of any Homebrew formula or cask. See pinned versions, last-updated dates, and yearly install counts.">
-  <link rel="canonical" href="https://brew.yoda.cc/">
-  <meta property="og:type"        content="website">
-  <meta property="og:url"         content="https://brew.yoda.cc/">
-  <meta property="og:title"       content="Homebrew Dependency Viewer — brewview">
-  <meta property="og:description" content="Resolve the full transitive dependency tree of any Homebrew formula or cask. See pinned versions, last-updated dates, and yearly install counts.">
-  <meta name="twitter:card"        content="summary">
-  <meta name="twitter:title"       content="Homebrew Dependency Viewer — brewview">
-  <meta name="twitter:description" content="Resolve the full transitive dependency tree of any Homebrew formula or cask. See pinned versions, last-updated dates, and yearly install counts.">
-  <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <link rel="stylesheet" href="style.css">
-  <script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "WebApplication",
-  "name": "brewview",
-  "alternateName": "Homebrew Dependency Viewer",
-  "url": "https://brew.yoda.cc/",
-  "description": "Resolve the full transitive dependency tree of any macOS Homebrew formula. See pinned versions, last-updated dates, and yearly install counts — fetched directly from formulae.brew.sh in your browser.",
-  "applicationCategory": "DeveloperApplication",
-  "operatingSystem": "macOS",
-  "browserRequirements": "Requires JavaScript",
-  "isAccessibleForFree": true,
-  "offers": {
-    "@type": "Offer",
-    "price": "0",
-    "priceCurrency": "USD"
-  },
-  "author": {
-    "@type": "Person",
-    "name": "simbados",
-    "url": "https://simbados.com",
-    "sameAs": ["https://github.com/simbados"]
-  },
-  "sameAs": "https://github.com/simbados/yoda.cc/tree/main/brewview",
-  "featureList": [
-    "Recursive Homebrew formula dependency resolution",
-    "Pinned version tracking",
-    "Yearly install count statistics",
-    "Last-updated date lookups via GitHub",
-    "Browser-only — data fetched directly from formulae.brew.sh"
-  ]
-}
-  </script>
-</head>
-<body class="pg-tool">
-  <main>
-    <header class="site-header">
-      <div class="header-top">
-        <a class="logo" href="https://yoda.cc">~/yoda</a>
-        <a class="header-crosslink" href="https://deps.yoda.cc">depsview ↗</a>
-        <a href="https://github.com/simbados/yoda.cc/tree/main/brewview" target="_blank" rel="noopener noreferrer">
-          <img src="github-mark.png" alt="GitHub" class="header-github">
-        </a>
-      </div>
-      <h1>Brewview</h1>
-    </header>
-    <p class="tagline">Analyse Homebrew formula dependencies.</p>
-    <p class="tagline-sub">All processing happens in your browser. Data is fetched directly from <code>formulae.brew.sh</code> — no data is sent to any other server.</p>
-
-    <form id="form" autocomplete="off">
-      <div class="brew-input-row">
-        <textarea
-          id="formula-input"
-          spellcheck="false"
-          maxlength="4096"
-          placeholder="ffmpeg, wget, openssl@3&#10;vim \&#10;git&#10;fzf (0.72.0) < 0.73.0"
-        ></textarea>
-        <button id="submit-btn" type="submit">Analyse</button>
-      </div>
-      <div class="option-row">
-        <input id="include-build" type="checkbox">
-        <label for="include-build">Include build dependencies</label>
-      </div>
-
-      <!-- ── GitHub authentication ───────────────────────────────────────── -->
-      <div class="form-card">
-        <p class="form-card-label">GitHub authentication <span class="form-card-optional">optional</span></p>
-        <div class="input-row token-row">
-          <input
-            id="token-input"
-            type="password"
-            placeholder="Personal access token"
-            spellcheck="false"
-            autocomplete="off"
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Homebrew Dependency Viewer — brewview</title>
+    <meta
+      name="description"
+      content="Resolve the full transitive dependency tree of any Homebrew formula or cask. See pinned versions, last-updated dates, and yearly install counts."
+    />
+    <link rel="canonical" href="https://brew.yoda.cc/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://brew.yoda.cc/" />
+    <meta property="og:title" content="Homebrew Dependency Viewer — brewview" />
+    <meta
+      property="og:description"
+      content="Resolve the full transitive dependency tree of any Homebrew formula or cask. See pinned versions, last-updated dates, and yearly install counts."
+    />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Homebrew Dependency Viewer — brewview" />
+    <meta
+      name="twitter:description"
+      content="Resolve the full transitive dependency tree of any Homebrew formula or cask. See pinned versions, last-updated dates, and yearly install counts."
+    />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="stylesheet" href="style.css" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "brewview",
+        "alternateName": "Homebrew Dependency Viewer",
+        "url": "https://brew.yoda.cc/",
+        "description": "Resolve the full transitive dependency tree of any macOS Homebrew formula. See pinned versions, last-updated dates, and yearly install counts — fetched directly from formulae.brew.sh in your browser.",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "macOS",
+        "browserRequirements": "Requires JavaScript",
+        "isAccessibleForFree": true,
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        },
+        "author": {
+          "@type": "Person",
+          "name": "simbados",
+          "url": "https://simbados.com",
+          "sameAs": ["https://github.com/simbados"]
+        },
+        "sameAs": "https://github.com/simbados/yoda.cc/tree/main/brewview",
+        "featureList": [
+          "Recursive Homebrew formula dependency resolution",
+          "Pinned version tracking",
+          "Yearly install count statistics",
+          "Last-updated date lookups via GitHub",
+          "Browser-only — data fetched directly from formulae.brew.sh"
+        ]
+      }
+    </script>
+  </head>
+  <body class="pg-tool">
+    <main>
+      <header class="site-header">
+        <div class="header-top">
+          <a class="logo" href="https://yoda.cc">~/yoda</a>
+          <a class="header-crosslink" href="https://deps.yoda.cc">depsview ↗</a>
+          <a
+            href="https://github.com/simbados/yoda.cc/tree/main/brewview"
+            target="_blank"
+            rel="noopener noreferrer"
           >
+            <img src="github-mark.png" alt="GitHub" class="header-github" />
+          </a>
+        </div>
+        <h1>Brewview</h1>
+      </header>
+      <p class="tagline">Analyse Homebrew formula dependencies.</p>
+      <p class="tagline-sub">
+        All processing happens in your browser. Data is fetched directly from
+        <code>formulae.brew.sh</code> — no data is sent to any other server.
+      </p>
+
+      <form id="form" autocomplete="off">
+        <div class="brew-input-row">
+          <textarea
+            id="formula-input"
+            spellcheck="false"
+            maxlength="4096"
+            placeholder="ffmpeg, wget, openssl@3&#10;vim \&#10;git&#10;fzf (0.72.0) < 0.73.0"
+          ></textarea>
+          <button id="submit-btn" type="submit">Analyse</button>
         </div>
         <div class="option-row">
-          <input id="remember-token" type="checkbox">
-          <label for="remember-token">Remember token <span class="option-hint">· local storage only</span></label>
+          <input id="include-build" type="checkbox" />
+          <label for="include-build">Include build dependencies</label>
         </div>
-        <p class="storage-note" id="storage-note" hidden>
-          Saved in your browser's <strong>local storage</strong> — readable by any JavaScript on this page. Uncheck and submit to remove.
-        </p>
-        <p class="form-card-note">
-          60 req/hr without a token · 5 000 req/hr with one · used only for "Updated" date lookups ·
-          token sent only to <code>api.github.com</code>
-        </p>
-      </div>
 
-    </form>
+        <!-- ── GitHub authentication ───────────────────────────────────────── -->
+        <div class="form-card">
+          <p class="form-card-label">
+            GitHub authentication <span class="form-card-optional">optional</span>
+          </p>
+          <div class="input-row token-row">
+            <input
+              id="token-input"
+              type="password"
+              placeholder="Personal access token"
+              spellcheck="false"
+              autocomplete="off"
+            />
+          </div>
+          <div class="option-row">
+            <input id="remember-token" type="checkbox" />
+            <label for="remember-token"
+              >Remember token <span class="option-hint">· local storage only</span></label
+            >
+          </div>
+          <p class="storage-note" id="storage-note" hidden>
+            Saved in your browser's <strong>local storage</strong> — readable by any JavaScript on
+            this page. Uncheck and submit to remove.
+          </p>
+          <p class="form-card-note">
+            60 req/hr without a token · 5 000 req/hr with one · used only for "Updated" date lookups
+            · token sent only to <code>api.github.com</code>
+          </p>
+        </div>
+      </form>
 
-    <!-- ── What brewview does (indexable copy) ────────────────────────────── -->
-    <section class="supported">
-      <h2>What brewview does</h2>
-      <p>
-        brewview is a browser-based macOS Homebrew dependency tree viewer: paste any formula or cask
-        and it resolves the full transitive dependency graph, pinned versions, and yearly install
-        counts from <code>formulae.brew.sh</code>, with last-updated dates looked up via the GitHub API.
+      <!-- ── What brewview does (indexable copy) ────────────────────────────── -->
+      <section class="supported">
+        <h2>What brewview does</h2>
+        <p>
+          brewview is a browser-based macOS Homebrew dependency tree viewer: paste any formula or
+          cask and it resolves the full transitive dependency graph, pinned versions, and yearly
+          install counts from <code>formulae.brew.sh</code>, with last-updated dates looked up via
+          the GitHub API.
+        </p>
+      </section>
+
+      <p class="note">
+        Install counts are sourced from the Homebrew analytics API and reflect the number of
+        installs over the past 365 days across all versions of the formula.
       </p>
-    </section>
 
-    <p class="note">
-      Install counts are sourced from the Homebrew analytics API and reflect the number of
-      installs over the past 365 days across all versions of the formula.
-    </p>
+      <div id="error" hidden></div>
+      <div id="progress" hidden></div>
+      <div id="results" hidden></div>
+    </main>
 
-    <div id="error" hidden></div>
-    <div id="progress" hidden></div>
-    <div id="results" hidden></div>
-  </main>
-
-  <script type="module" src="app.js"></script>
-</body>
+    <script type="module" src="app.js"></script>
+  </body>
 </html>

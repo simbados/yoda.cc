@@ -7,11 +7,19 @@
  * A Semaphore limits concurrent HTTP requests to avoid overwhelming PyPI.
  */
 
-import { fetchPackageInfo, fetchVersionInfo, getVersionList, getReleaseDate, getReleaseCount, getFirstReleaseDate, normalizePackageName } from './pypiClient.js';
-import { fetchDownloadStats } from './pypiStatsClient.js';
-import { resolveVersion } from './versionResolver.js';
-import { parseRequiresDist } from './parserCore.js';
-import { Semaphore } from '../util/semaphore.js';
+import {
+  fetchPackageInfo,
+  fetchVersionInfo,
+  getVersionList,
+  getReleaseDate,
+  getReleaseCount,
+  getFirstReleaseDate,
+  normalizePackageName,
+} from "./pypiClient.js";
+import { fetchDownloadStats } from "./pypiStatsClient.js";
+import { resolveVersion } from "./versionResolver.js";
+import { parseRequiresDist } from "./parserCore.js";
+import { Semaphore } from "../util/semaphore.js";
 
 const CONCURRENCY = 5;
 
@@ -71,12 +79,12 @@ async function resolveDependencies(directDeps, opts = {}) {
         onProgress?.(`  [warn] Package not found on PyPI: ${dep.name}`);
         results.set(key, {
           name: dep.name,
-          version: 'not found',
-          releaseDate: 'unknown',
-          firstReleaseDate: 'unknown',
+          version: "not found",
+          releaseDate: "unknown",
+          firstReleaseDate: "unknown",
           releaseCount: 0,
           link: `https://pypi.org/project/${dep.name}/`,
-          error: 'Package not found on PyPI',
+          error: "Package not found on PyPI",
         });
         return;
       }
@@ -85,16 +93,16 @@ async function resolveDependencies(directDeps, opts = {}) {
       const { version } = resolveVersion(dep.versionSpec, allVersions);
 
       if (version === null) {
-        const specLabel = dep.versionSpec ?? '(unknown spec)';
+        const specLabel = dep.versionSpec ?? "(unknown spec)";
         onProgress?.(`  [warn] No version matching "${specLabel}" found for ${dep.name}`);
         results.set(key, {
-          name:             dep.name,
-          version:          'not found',
-          releaseDate:      'unknown',
-          firstReleaseDate: 'unknown',
-          releaseCount:     getReleaseCount(packageData),
-          link:             `https://pypi.org/project/${dep.name}/`,
-          error:            `No version matching "${specLabel}" found on PyPI`,
+          name: dep.name,
+          version: "not found",
+          releaseDate: "unknown",
+          firstReleaseDate: "unknown",
+          releaseCount: getReleaseCount(packageData),
+          link: `https://pypi.org/project/${dep.name}/`,
+          error: `No version matching "${specLabel}" found on PyPI`,
         });
         return;
       }
@@ -131,17 +139,17 @@ async function resolveDependencies(directDeps, opts = {}) {
 
       // Parse and enqueue transitive dependencies (skip already-pending ones)
       const transitiveDeps = requiresDist
-        .map(d => parseRequiresDist(d))
+        .map((d) => parseRequiresDist(d))
         .filter(Boolean)
-        .filter(d => !pending.has(normalizePackageName(d.name)));
+        .filter((d) => !pending.has(normalizePackageName(d.name)));
 
-      await Promise.all(transitiveDeps.map(d => fetchOne(d)));
-    })().catch(err => {
+      await Promise.all(transitiveDeps.map((d) => fetchOne(d)));
+    })().catch((err) => {
       results.set(key, {
         name: dep.name,
-        version: 'error',
-        releaseDate: 'unknown',
-        firstReleaseDate: 'unknown',
+        version: "error",
+        releaseDate: "unknown",
+        firstReleaseDate: "unknown",
         releaseCount: 0,
         link: `https://pypi.org/project/${dep.name}/`,
         error: err.message,
@@ -152,26 +160,31 @@ async function resolveDependencies(directDeps, opts = {}) {
     return promise;
   }
 
-  await Promise.all(directDeps.map(d => fetchOne(d)));
+  await Promise.all(directDeps.map((d) => fetchOne(d)));
 
   // ── Post-resolution pass: fetch download stats from pypistats.org ──────────
   // Only runs when the caller opts in via downloadStats: true.
   // Runs after the BFS so all packages are known upfront and every stats request
   // can fire in parallel without competing with the critical-path resolution work.
   if (downloadStats) {
-    onProgress?.('\nFetching download statistics...');
+    onProgress?.("\nFetching download statistics...");
     const statsSemaphore = new Semaphore(CONCURRENCY);
 
-    await Promise.all([...results.values()].map(async (result) => {
-      await statsSemaphore.acquire();
-      let stats;
-      try {
-        stats = await fetchDownloadStats(result.name, pypiStatsBaseUrl ? { baseUrl: pypiStatsBaseUrl } : undefined);
-      } finally {
-        statsSemaphore.release();
-      }
-      result.downloadsLastMonth = stats?.lastMonth ?? null;
-    }));
+    await Promise.all(
+      [...results.values()].map(async (result) => {
+        await statsSemaphore.acquire();
+        let stats;
+        try {
+          stats = await fetchDownloadStats(
+            result.name,
+            pypiStatsBaseUrl ? { baseUrl: pypiStatsBaseUrl } : undefined,
+          );
+        } finally {
+          statsSemaphore.release();
+        }
+        result.downloadsLastMonth = stats?.lastMonth ?? null;
+      }),
+    );
   } else {
     // Explicitly mark every result so downstream formatters see null rather than undefined.
     for (const result of results.values()) {

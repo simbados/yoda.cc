@@ -22,9 +22,9 @@
  * resolution of the same crate (cycle guard).
  */
 
-import { Semaphore } from '../util/semaphore.js';
-import { resolveVersion } from './versionResolver.js';
-import { normalizeCrateName } from './parserCore.js';
+import { Semaphore } from "../util/semaphore.js";
+import { resolveVersion } from "./versionResolver.js";
+import { normalizeCrateName } from "./parserCore.js";
 import {
   fetchCrateInfo,
   fetchCrateVersionDeps,
@@ -33,7 +33,7 @@ import {
   getReleaseCount,
   getRecentDownloads,
   getVersionList,
-} from './cratesClient.js';
+} from "./cratesClient.js";
 
 const CONCURRENCY = 8;
 
@@ -61,8 +61,8 @@ const CONCURRENCY = 8;
  */
 export async function resolveDependencies(directDeps, opts = {}) {
   const { onProgress } = opts;
-  const results   = new Map();
-  const pending   = new Map();
+  const results = new Map();
+  const pending = new Map();
   const semaphore = new Semaphore(CONCURRENCY);
 
   /**
@@ -75,7 +75,7 @@ export async function resolveDependencies(directDeps, opts = {}) {
    * @returns {Promise<void>}
    */
   function resolveOne(name, version, versionSpec) {
-    const exact = typeof version === 'string' && version.length > 0;
+    const exact = typeof version === "string" && version.length > 0;
     const norm = normalizeCrateName(name);
     const pendingKey = exact ? `${norm}@${version}` : norm;
     if (pending.has(pendingKey)) return pending.get(pendingKey);
@@ -94,13 +94,13 @@ export async function resolveDependencies(directDeps, opts = {}) {
           onProgress?.(`  [warn] Crate not found on crates.io: ${name}`);
           results.set(pendingKey, {
             name,
-            version:            version ?? (versionSpec ?? 'unknown'),
-            releaseDate:        'unknown',
-            firstReleaseDate:   'unknown',
-            releaseCount:       0,
+            version: version ?? versionSpec ?? "unknown",
+            releaseDate: "unknown",
+            firstReleaseDate: "unknown",
+            releaseCount: 0,
             downloadsLastMonth: null,
-            link:               `https://crates.io/crates/${name}`,
-            error:              'Crate not found on crates.io',
+            link: `https://crates.io/crates/${name}`,
+            error: "Crate not found on crates.io",
           });
           return;
         }
@@ -116,34 +116,36 @@ export async function resolveDependencies(directDeps, opts = {}) {
           const allVersions = getVersionList(crateData.versions);
           const { version: chosen } = resolveVersion(versionSpec ?? null, allVersions);
           if (chosen === null) {
-            const specLabel = versionSpec ?? '(unknown spec)';
+            const specLabel = versionSpec ?? "(unknown spec)";
             onProgress?.(`  [warn] No version matching "${specLabel}" found for ${name}`);
             results.set(pendingKey, {
-              name:               crateData.crate.name,
-              version:            'not found',
-              releaseDate:        'unknown',
-              firstReleaseDate:   getFirstReleaseDate(crateData.versions),
-              releaseCount:       getReleaseCount(crateData.versions),
+              name: crateData.crate.name,
+              version: "not found",
+              releaseDate: "unknown",
+              firstReleaseDate: getFirstReleaseDate(crateData.versions),
+              releaseCount: getReleaseCount(crateData.versions),
               downloadsLastMonth: recentDownloads,
-              link:               `https://crates.io/crates/${crateData.crate.name}`,
-              error:              `No version matching "${specLabel}" found on crates.io`,
+              link: `https://crates.io/crates/${crateData.crate.name}`,
+              error: `No version matching "${specLabel}" found on crates.io`,
             });
             return;
           }
           resolvedVersion = chosen;
         }
 
-        const resolvedName     = crateData.crate.name;
-        const releaseDate      = getReleaseDate(crateData.versions, resolvedVersion);
+        const resolvedName = crateData.crate.name;
+        const releaseDate = getReleaseDate(crateData.versions, resolvedVersion);
         const firstReleaseDate = getFirstReleaseDate(crateData.versions);
-        const releaseCount     = getReleaseCount(crateData.versions);
-        const link             = `https://crates.io/crates/${resolvedName}/${resolvedVersion}`;
+        const releaseCount = getReleaseCount(crateData.versions);
+        const link = `https://crates.io/crates/${resolvedName}/${resolvedVersion}`;
 
-        const resultKey = exact ? `${normalizeCrateName(resolvedName)}@${resolvedVersion}` : normalizeCrateName(resolvedName);
+        const resultKey = exact
+          ? `${normalizeCrateName(resolvedName)}@${resolvedVersion}`
+          : normalizeCrateName(resolvedName);
         if (!results.has(resultKey)) {
           results.set(resultKey, {
-            name:               resolvedName,
-            version:            resolvedVersion,
+            name: resolvedName,
+            version: resolvedVersion,
             releaseDate,
             firstReleaseDate,
             releaseCount,
@@ -163,25 +165,25 @@ export async function resolveDependencies(directDeps, opts = {}) {
             semaphore.release();
           }
 
-          const followable = (transitive ?? []).filter(d =>
-            (d.kind === 'normal' || d.kind === 'build') && !d.optional
+          const followable = (transitive ?? []).filter(
+            (d) => (d.kind === "normal" || d.kind === "build") && !d.optional,
           );
-          await Promise.all(followable.map(d =>
-            resolveOne(d.crate_id, undefined, d.req || null)
-          ));
+          await Promise.all(
+            followable.map((d) => resolveOne(d.crate_id, undefined, d.req || null)),
+          );
         }
       } catch (err) {
         const fallbackKey = pendingKey;
         if (!results.has(fallbackKey)) {
           results.set(fallbackKey, {
             name,
-            version:            version ?? (versionSpec ?? 'error'),
-            releaseDate:        'unknown',
-            firstReleaseDate:   'unknown',
-            releaseCount:       0,
+            version: version ?? versionSpec ?? "error",
+            releaseDate: "unknown",
+            firstReleaseDate: "unknown",
+            releaseCount: 0,
             downloadsLastMonth: null,
-            link:               `https://crates.io/crates/${name}`,
-            error:              err.message,
+            link: `https://crates.io/crates/${name}`,
+            error: err.message,
           });
         }
       }
@@ -191,8 +193,6 @@ export async function resolveDependencies(directDeps, opts = {}) {
     return promise;
   }
 
-  await Promise.all(directDeps.map(dep =>
-    resolveOne(dep.name, dep.version, dep.versionSpec)
-  ));
+  await Promise.all(directDeps.map((dep) => resolveOne(dep.name, dep.version, dep.versionSpec)));
   return results;
 }

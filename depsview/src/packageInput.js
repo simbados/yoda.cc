@@ -13,11 +13,11 @@
  * @returns {{ name: string, version: string }}
  */
 function parseNpm(input) {
-  const searchFrom = input.startsWith('@') ? 1 : 0;
-  const atIdx = input.indexOf('@', searchFrom);
-  if (atIdx === -1) return { name: input, version: 'latest' };
+  const searchFrom = input.startsWith("@") ? 1 : 0;
+  const atIdx = input.indexOf("@", searchFrom);
+  if (atIdx === -1) return { name: input, version: "latest" };
   const version = input.slice(atIdx + 1);
-  return { name: input.slice(0, atIdx), version: version || 'latest' };
+  return { name: input.slice(0, atIdx), version: version || "latest" };
 }
 
 /**
@@ -41,10 +41,10 @@ function parsePython(input) {
  * @returns {{ name: string, version: string }}
  */
 function parseGo(input) {
-  const atIdx = input.indexOf('@');
-  if (atIdx === -1) return { name: input, version: 'latest' };
+  const atIdx = input.indexOf("@");
+  if (atIdx === -1) return { name: input, version: "latest" };
   const version = input.slice(atIdx + 1);
-  return { name: input.slice(0, atIdx), version: version || 'latest' };
+  return { name: input.slice(0, atIdx), version: version || "latest" };
 }
 
 /**
@@ -57,10 +57,10 @@ function parseGo(input) {
  * @returns {{ name: string, version: string }}
  */
 function parseRust(input) {
-  const atIdx = input.indexOf('@');
-  if (atIdx === -1) return { name: input, version: 'latest' };
+  const atIdx = input.indexOf("@");
+  if (atIdx === -1) return { name: input, version: "latest" };
   const version = input.slice(atIdx + 1);
-  return { name: input.slice(0, atIdx), version: version || 'latest' };
+  return { name: input.slice(0, atIdx), version: version || "latest" };
 }
 
 /**
@@ -76,8 +76,8 @@ function parseRust(input) {
  */
 export function parsePackageInput(raw, ecosystem) {
   const input = raw.trim();
-  if (ecosystem === 'npm')    return parseNpm(input);
-  if (ecosystem === 'go')     return parseGo(input);
-  if (ecosystem === 'rust')   return parseRust(input);
+  if (ecosystem === "npm") return parseNpm(input);
+  if (ecosystem === "go") return parseGo(input);
+  if (ecosystem === "rust") return parseRust(input);
   return parsePython(input);
 }

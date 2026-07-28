@@ -11,7 +11,7 @@
  * packages) are treated as public so they still go through resolution.
  */
 
-const PUBLIC_NPM_REGISTRY = 'https://registry.npmjs.org/';
+const PUBLIC_NPM_REGISTRY = "https://registry.npmjs.org/";
 
 /**
  * Returns true when a package's resolved URL points to the public npm registry,
@@ -40,7 +40,7 @@ export function isPublicNpmResolved(resolved) {
  * }}
  */
 export function partitionNpmPackages(packages) {
-  const publicPkgs  = [];
+  const publicPkgs = [];
   const privatePkgs = [];
 
   for (const pkg of packages) {

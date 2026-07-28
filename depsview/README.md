@@ -17,7 +17,7 @@ node src/main.js <path-to-project|github-url> [options]
 node src/main.js --package|-p <name> --npm|--python|--go|--rust
 ```
 
-Every ecosystem detected at the project root is resolved and rendered as its own section, in the fixed order **npm → python → go → rust**. Pass any combination of `--npm`, `--python`, `--go`, `--rust` to *filter* — with no flags all detected ecosystems are included.
+Every ecosystem detected at the project root is resolved and rendered as its own section, in the fixed order **npm → python → go → rust**. Pass any combination of `--npm`, `--python`, `--go`, `--rust` to _filter_ — with no flags all detected ecosystems are included.
 
 ```bash
 # Auto-detect every ecosystem present
@@ -95,10 +95,10 @@ When a specific ecosystem is selected (npm, Python, or Go), the URL field is rep
 
 **Supported separator formats** — all of these are equivalent:
 
-| Style | Example |
-|---|---|
-| One per line | `eslint` ↵ `eslint@9` |
-| Comma-separated | `eslint, eslint@9` or `eslint,eslint@9` |
+| Style                           | Example                                    |
+| ------------------------------- | ------------------------------------------ |
+| One per line                    | `eslint` ↵ `eslint@9`                      |
+| Comma-separated                 | `eslint, eslint@9` or `eslint,eslint@9`    |
 | Any character flanked by spaces | `eslint \| eslint@9` · `eslint ; eslint@9` |
 
 Characters that are part of package identifiers (`@`, `.`, `-`, `/`, `=`, `>`, `<`, `~`, `!`, `+`) are never treated as separators, so Go module paths (`github.com/gin-gonic/gin`) and Python specifiers (`requests>=2.0`) are always kept intact.
@@ -122,20 +122,20 @@ When `--socket-key` / `--socket-org` are supplied, a **single** batched request 
 
 ## Flags
 
-| Flag | Description |
-|---|---|
-| `--npm` | Restrict the run to npm sections |
-| `--python` | Restrict the run to Python sections |
-| `--go` | Restrict the run to Go sections |
-| `--rust` | Restrict the run to Rust sections |
+| Flag                             | Description                                                                                                                                                                                                                                                                                               |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--npm`                          | Restrict the run to npm sections                                                                                                                                                                                                                                                                          |
+| `--python`                       | Restrict the run to Python sections                                                                                                                                                                                                                                                                       |
+| `--go`                           | Restrict the run to Go sections                                                                                                                                                                                                                                                                           |
+| `--rust`                         | Restrict the run to Rust sections                                                                                                                                                                                                                                                                         |
 | `--package <name>` / `-p <name>` | Resolve a single package by name instead of reading dep files. Requires exactly one ecosystem flag. Accepts `name`, `name@version`, PEP 440 specifiers for Python, `module@version` for Go, and Cargo requirements (`crate@^1.2`) for Rust. Transitive dependencies are followed for all four ecosystems. |
-| `--include-tests` | Include dev/test dependencies (npm / Python / Rust `[dev-dependencies]`, Cargo.toml source only) |
-| `--json` | Machine-readable JSON output |
-| `--download-stats` / `--ds` | Fetch Python download counts from pypistats.org (Python only) |
-| `--socket-key=<key>` | Socket.dev API key — enables the Supply Chain column |
-| `--socket-org=<slug>` | Socket.dev organisation slug (required with `--socket-key`) |
-| `--report[=<file>]` | Write a self-contained HTML report (default: `depsview-report.html`) |
-| `--debug` | Print API errors and warnings to stderr |
+| `--include-tests`                | Include dev/test dependencies (npm / Python / Rust `[dev-dependencies]`, Cargo.toml source only)                                                                                                                                                                                                          |
+| `--json`                         | Machine-readable JSON output                                                                                                                                                                                                                                                                              |
+| `--download-stats` / `--ds`      | Fetch Python download counts from pypistats.org (Python only)                                                                                                                                                                                                                                             |
+| `--socket-key=<key>`             | Socket.dev API key — enables the Supply Chain column                                                                                                                                                                                                                                                      |
+| `--socket-org=<slug>`            | Socket.dev organisation slug (required with `--socket-key`)                                                                                                                                                                                                                                               |
+| `--report[=<file>]`              | Write a self-contained HTML report (default: `depsview-report.html`)                                                                                                                                                                                                                                      |
+| `--debug`                        | Print API errors and warnings to stderr                                                                                                                                                                                                                                                                   |
 
 Both socket flags can also be supplied as environment variables `SOCKET_KEY` and `SOCKET_ORG`; the `--socket-key` / `--socket-org` flags take precedence when both are present.
 
@@ -161,24 +161,24 @@ When a `pnpm-lock.yaml` is present, depsview reads the flat package list from th
 
 Supports lockfile versions 5, 6, and 9:
 
-| Version | pnpm | Dev-package detection |
-|---|---|---|
-| 5 | ≤6 | `dev: true` flag inside each entry |
-| 6 | 7/8 | `dev: true` flag inside each entry |
-| 9 | 9+ | `devDependencies` across every importer (see workspace handling below) |
+| Version | pnpm | Dev-package detection                                                  |
+| ------- | ---- | ---------------------------------------------------------------------- |
+| 5       | ≤6   | `dev: true` flag inside each entry                                     |
+| 6       | 7/8  | `dev: true` flag inside each entry                                     |
+| 9       | 9+   | `devDependencies` across every importer (see workspace handling below) |
 
 **depPath parsing (v6/v9)** follows pnpm's own [`@pnpm/deps.path`](https://github.com/pnpm/pnpm/blob/main/deps/path/src/index.ts) algorithm: `indexOf('@', 1)` for the name/version boundary (so npm aliases and `git+ssh://` URLs in the spec don't break splitting) and a backwards paren-counting walk for the outermost peer-deps and `(patch_hash=…)` suffix groups. Keys like `@tanstack/react-query@5.0.0(react@18.0.0)(react-dom@18.0.0)` are stripped correctly even with multiple peer groups, nested parens, or a patch-hash suffix.
 
 **Non-tarball resolutions** — pnpm's `Resolution` union allows variants other than the implicit `TarballResolution`:
 
-| `resolution.type` | Example | Handling |
-|---|---|---|
-| *(absent)* | `resolution: {tarball: https://registry.npmjs.org/…}` | Resolved against the public registry |
-| *(absent)* | `resolution: {tarball: https://other-host/…}` | Listed under "non-public registry packages" (ℹ) — skipped from resolution, never sent to `registry.npmjs.org` |
-| `directory` | `resolution: {directory: packages/local, type: directory}` | Listed in non-standard sources (⚠) |
-| `git` | `resolution: {commit: abc, repo: 'git+ssh://…', type: git}` | Listed in non-standard sources (⚠) |
-| `binary` | `resolution: {type: binary, url: …}` | Listed in non-standard sources (⚠) |
-| `custom:…` | `resolution: {type: custom:foo}` | Listed in non-standard sources (⚠) |
+| `resolution.type` | Example                                                     | Handling                                                                                                      |
+| ----------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| _(absent)_        | `resolution: {tarball: https://registry.npmjs.org/…}`       | Resolved against the public registry                                                                          |
+| _(absent)_        | `resolution: {tarball: https://other-host/…}`               | Listed under "non-public registry packages" (ℹ) — skipped from resolution, never sent to `registry.npmjs.org` |
+| `directory`       | `resolution: {directory: packages/local, type: directory}`  | Listed in non-standard sources (⚠)                                                                            |
+| `git`             | `resolution: {commit: abc, repo: 'git+ssh://…', type: git}` | Listed in non-standard sources (⚠)                                                                            |
+| `binary`          | `resolution: {type: binary, url: …}`                        | Listed in non-standard sources (⚠)                                                                            |
+| `custom:…`        | `resolution: {type: custom:foo}`                            | Listed in non-standard sources (⚠)                                                                            |
 
 Tarball URLs pointing to anywhere other than `registry.npmjs.org` are dropped before the resolver and surfaced grouped by hostname, so a corporate mirror, an internal CDN, or an attacker-controlled host all show up as ℹ rows for human review rather than being silently resolved. Entries with an explicit `resolution.type` are routed into the stronger ⚠ category to reflect the intentional non-registry source declaration.
 
@@ -190,17 +190,17 @@ When a `bun.lock` is present, depsview reads the flat package list from the `pac
 
 Each `packages` entry's canonical `value[0]` is classified by Bun's `Resolution.Tag` taxonomy and routed accordingly:
 
-| Variant | Example `value[0]` | Handling |
-|---|---|---|
-| npm registry | `lodash@4.17.21` | Resolved against the public registry |
-| workspace | `my-app@workspace:packages/web` | Silently skipped (monorepo cross-link) |
-| root | `my-app@root:` | Silently skipped (the project itself) |
-| npm alias | `my-alias@npm:lodash@4.17.21` | Silently skipped (alias resolution not yet supported) |
-| file folder | `pkg@file:./local` | Listed in non-standard sources (⚠) |
-| symlink | `pkg@link:../sibling` | Listed in non-standard sources (⚠) |
-| git | `pkg@git+https://…` | Listed in non-standard sources (⚠) |
-| github shorthand | `pkg@github:owner/repo#sha` | Listed in non-standard sources (⚠) |
-| tarball URL | `pkg@https://example.com/p.tgz` | Listed in non-standard sources (⚠) |
+| Variant          | Example `value[0]`              | Handling                                              |
+| ---------------- | ------------------------------- | ----------------------------------------------------- |
+| npm registry     | `lodash@4.17.21`                | Resolved against the public registry                  |
+| workspace        | `my-app@workspace:packages/web` | Silently skipped (monorepo cross-link)                |
+| root             | `my-app@root:`                  | Silently skipped (the project itself)                 |
+| npm alias        | `my-alias@npm:lodash@4.17.21`   | Silently skipped (alias resolution not yet supported) |
+| file folder      | `pkg@file:./local`              | Listed in non-standard sources (⚠)                    |
+| symlink          | `pkg@link:../sibling`           | Listed in non-standard sources (⚠)                    |
+| git              | `pkg@git+https://…`             | Listed in non-standard sources (⚠)                    |
+| github shorthand | `pkg@github:owner/repo#sha`     | Listed in non-standard sources (⚠)                    |
+| tarball URL      | `pkg@https://example.com/p.tgz` | Listed in non-standard sources (⚠)                    |
 
 Format reference: [`src/install/lockfile.zig`](https://github.com/oven-sh/bun/blob/main/src/install/lockfile.zig) in the Bun source.
 
@@ -210,10 +210,10 @@ Dev dependencies are detected from the `devDependencies` field across all `works
 
 Both Yarn Classic (v1) and Yarn Berry (v2+) use the same `yarn.lock` filename. The format is auto-detected:
 
-| Format | Detection | Dev filtering | Private registry detection |
-|---|---|---|---|
-| Classic v1 | `# yarn lockfile v1` comment | Not possible — note shown | Yes — via `resolved` URL |
-| Berry v2+ | `__metadata:` block | Not possible — note shown | Not possible — see below |
+| Format     | Detection                    | Dev filtering             | Private registry detection |
+| ---------- | ---------------------------- | ------------------------- | -------------------------- |
+| Classic v1 | `# yarn lockfile v1` comment | Not possible — note shown | Yes — via `resolved` URL   |
+| Berry v2+  | `__metadata:` block          | Not possible — note shown | Not possible — see below   |
 
 **Yarn Classic** resolved URLs use `registry.yarnpkg.com` (Yarn's CDN alias for npm), which depsview normalises to `registry.npmjs.org` for filtering purposes. Packages from any other host are treated as private and skipped.
 
@@ -265,14 +265,14 @@ Packages from private or custom registries are **automatically skipped**. When a
 
 ### Supported dependency file formats
 
-| File | Format | Notes |
-|---|---|---|
-| `pyproject.toml` | PEP 621 `[project] dependencies` or Poetry `[tool.poetry.dependencies]` | Optional deps excluded |
-| `manifest.json` | Home Assistant integration manifest | Reads `requirements` array |
-| `requirements.txt` | pip requirements format | Supports `-r` file includes |
-| `requirements_all.txt` | pip requirements format | Same as `requirements.txt`; both are parsed when present |
-| `setup.cfg` | `[options] install_requires` | |
-| `Pipfile` | Pipenv | Reads `[packages]` only |
+| File                   | Format                                                                  | Notes                                                    |
+| ---------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------- |
+| `pyproject.toml`       | PEP 621 `[project] dependencies` or Poetry `[tool.poetry.dependencies]` | Optional deps excluded                                   |
+| `manifest.json`        | Home Assistant integration manifest                                     | Reads `requirements` array                               |
+| `requirements.txt`     | pip requirements format                                                 | Supports `-r` file includes                              |
+| `requirements_all.txt` | pip requirements format                                                 | Same as `requirements.txt`; both are parsed when present |
+| `setup.cfg`            | `[options] install_requires`                                            |                                                          |
+| `Pipfile`              | Pipenv                                                                  | Reads `[packages]` only                                  |
 
 All matching files are parsed and merged. When the same package appears in multiple files its version constraints are combined.
 
@@ -361,12 +361,12 @@ Dependencies declared in `Cargo.toml` with a `git = …`, `path = …`, or alter
 
 When any non-standard package sources are detected, a collapsible **non-standard sources** block appears below the dependency table (web UI, HTML report, and CLI). It contains two categories:
 
-| Symbol | Category | Meaning |
-|---|---|---|
-| ⚠ | Non-registry dependency specs | Explicitly declared in the manifest with a non-registry spec — `file:`, `git+`, direct URL, local `replace`, etc. These are flagged because they bypass the public registry and may introduce supply-chain risk. |
-| ℹ | Non-public registry packages | Resolved from a non-public registry or skipped because their path/URL hostname is not a known public host. Listed with the source URL or module path, grouped by domain. |
+| Symbol | Category                      | Meaning                                                                                                                                                                                                          |
+| ------ | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ⚠      | Non-registry dependency specs | Explicitly declared in the manifest with a non-registry spec — `file:`, `git+`, direct URL, local `replace`, etc. These are flagged because they bypass the public registry and may introduce supply-chain risk. |
+| ℹ      | Non-public registry packages  | Resolved from a non-public registry or skipped because their path/URL hostname is not a known public host. Listed with the source URL or module path, grouped by domain.                                         |
 
-The block summarises the total count in the collapsed header (e.g. *"3 non-standard sources"*) and expands to show per-package details on click.
+The block summarises the total count in the collapsed header (e.g. _"3 non-standard sources"_) and expands to show per-package details on click.
 
 ## GitHub URL support
 
@@ -388,30 +388,30 @@ GITHUB_TOKEN=ghp_... node src/main.js https://github.com/owner/private-repo
 
 ## Output columns
 
-| Column | Description |
-|---|---|
-| Package | Package name (links to registry page in web UI) |
-| Version | Resolved version |
-| Released | Date the resolved version was published |
-| First Release | Date the package first appeared on its registry |
-| Releases | Total number of published versions |
-| Downloads/mo | npm: always shown for unscoped packages (last-month count from api.npmjs.org); scoped packages show `—`. Python: only with `--download-stats` (monthly count from pypistats) |
-| Downloads (90d) | Rust only, always shown (last-90-days count from crates.io) |
-| Supply Chain | Score 0–100 % from socket.dev (requires `--socket-key` + `--socket-org`) |
-| Link | Registry page URL (CLI only) |
+| Column          | Description                                                                                                                                                                  |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Package         | Package name (links to registry page in web UI)                                                                                                                              |
+| Version         | Resolved version                                                                                                                                                             |
+| Released        | Date the resolved version was published                                                                                                                                      |
+| First Release   | Date the package first appeared on its registry                                                                                                                              |
+| Releases        | Total number of published versions                                                                                                                                           |
+| Downloads/mo    | npm: always shown for unscoped packages (last-month count from api.npmjs.org); scoped packages show `—`. Python: only with `--download-stats` (monthly count from pypistats) |
+| Downloads (90d) | Rust only, always shown (last-90-days count from crates.io)                                                                                                                  |
+| Supply Chain    | Score 0–100 % from socket.dev (requires `--socket-key` + `--socket-org`)                                                                                                     |
+| Link            | Registry page URL (CLI only)                                                                                                                                                 |
 
 ### Color coding (CLI)
 
 Date cells use the same scheme in both the `Released` and `First Release` columns:
 
-| Color | Cell | Meaning |
-|---|---|---|
-| Red    | Released / First Release | 3 days ago or less    |
-| Orange | Released / First Release | 7 days ago or less    |
-| Yellow | Released / First Release | 30 days ago or less   |
-| Green  | Supply Chain | Score ≥ 80 % |
-| Yellow | Supply Chain | Score 50–79 % |
-| Red    | Supply Chain | Score < 50 % |
+| Color  | Cell                     | Meaning             |
+| ------ | ------------------------ | ------------------- |
+| Red    | Released / First Release | 3 days ago or less  |
+| Orange | Released / First Release | 7 days ago or less  |
+| Yellow | Released / First Release | 30 days ago or less |
+| Green  | Supply Chain             | Score ≥ 80 %        |
+| Yellow | Supply Chain             | Score 50–79 %       |
+| Red    | Supply Chain             | Score < 50 %        |
 
 No color codes are emitted when output is piped or redirected.
 
@@ -448,6 +448,7 @@ Output is a top-level object keyed by ecosystem (always in the fixed order `npm`
 ```
 
 Per-ecosystem field rules:
+
 - `firstReleased` is **omitted for Go entries** (the Go module proxy does not expose a cheap first-release timestamp).
 - `downloadsLastMonth` is included for **npm entries always** (api.npmjs.org last-month count), for **Rust entries always** (crates.io `recent_downloads`, a last-90-days count), and for **Python entries when `--download-stats` is passed** (pypistats monthly count). The JSON key is shared, but the counting window differs per ecosystem as noted; `null` when unavailable.
 - `supplyChainScore` is included on every entry when socket.dev credentials are provided.
@@ -519,11 +520,11 @@ Use the **Ecosystem** segmented control to restrict analysis to a single ecosyst
 
 When a specific ecosystem is selected, you can type a package name directly instead of a GitHub URL:
 
-| Ecosystem | Example input |
-|---|---|
-| npm | `eslint` · `eslint@8` · `@babel/core@7` |
-| Python | `requests` · `requests>=2.0` · `requests==2.31.0` |
-| Go | `github.com/gin-gonic/gin` · `github.com/gin-gonic/gin@v1.9.1` · `golang.org/x/lint/golint@latest` |
+| Ecosystem | Example input                                                                                      |
+| --------- | -------------------------------------------------------------------------------------------------- |
+| npm       | `eslint` · `eslint@8` · `@babel/core@7`                                                            |
+| Python    | `requests` · `requests>=2.0` · `requests==2.31.0`                                                  |
+| Go        | `github.com/gin-gonic/gin` · `github.com/gin-gonic/gin@v1.9.1` · `golang.org/x/lint/golint@latest` |
 
 For Go, tool package paths (e.g. `golang.org/x/lint/golint`) are automatically resolved to their containing module root (`golang.org/x/lint`), mirroring what `go install` does.
 
@@ -551,7 +552,7 @@ pnpx wrangler deploy   # prints your Worker URL, e.g. https://socket-proxy.yourn
 Set `SOCKET_PROXY_BASE` in `web/app.js` to your deployed Worker URL (no trailing slash):
 
 ```js
-const SOCKET_PROXY_BASE = 'https://socket-proxy.yourname.workers.dev';
+const SOCKET_PROXY_BASE = "https://socket-proxy.yourname.workers.dev";
 ```
 
 After that, all visitors can use the supply chain feature — they only need their own API key and org slug.

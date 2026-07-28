@@ -45,16 +45,16 @@
  * @returns {{ peersIndex: number, patchHashIndex: number }} -1 for absent
  */
 function indexOfDepPathSuffix(s) {
-  if (!s.endsWith(')')) return { peersIndex: -1, patchHashIndex: -1 };
+  if (!s.endsWith(")")) return { peersIndex: -1, patchHashIndex: -1 };
   let open = 1;
   for (let i = s.length - 2; i >= 0; i--) {
-    if      (s[i] === '(') open--;
-    else if (s[i] === ')') open++;
+    if (s[i] === "(") open--;
+    else if (s[i] === ")") open++;
     else if (open === 0) {
-      if (s.substring(i + 1).startsWith('(patch_hash=')) {
+      if (s.substring(i + 1).startsWith("(patch_hash=")) {
         return {
           patchHashIndex: i + 1,
-          peersIndex:     s.indexOf('(', i + 2),
+          peersIndex: s.indexOf("(", i + 2),
         };
       }
       return { patchHashIndex: -1, peersIndex: i + 1 };
@@ -73,7 +73,7 @@ function indexOfDepPathSuffix(s) {
 function stripPnpmSuffix(s) {
   const { peersIndex, patchHashIndex } = indexOfDepPathSuffix(s);
   if (patchHashIndex !== -1) return s.substring(0, patchHashIndex);
-  if (peersIndex     !== -1) return s.substring(0, peersIndex);
+  if (peersIndex !== -1) return s.substring(0, peersIndex);
   return s;
 }
 
@@ -91,19 +91,19 @@ function stripPnpmSuffix(s) {
  * @returns {{ name: string, version: string }|null} null when the key cannot be parsed
  */
 function parsePackageKey(key, majorVersion) {
-  let s = key.startsWith('/') ? key.slice(1) : key;
+  let s = key.startsWith("/") ? key.slice(1) : key;
 
   if (majorVersion <= 5) {
-    const lastSlash = s.lastIndexOf('/');
+    const lastSlash = s.lastIndexOf("/");
     if (lastSlash === -1) return null;
     return { name: s.slice(0, lastSlash), version: s.slice(lastSlash + 1) };
   }
 
   s = stripPnpmSuffix(s);
 
-  const atIdx = s.indexOf('@', 1);
+  const atIdx = s.indexOf("@", 1);
   if (atIdx === -1) return null;
-  const name    = s.slice(0, atIdx);
+  const name = s.slice(0, atIdx);
   const version = s.slice(atIdx + 1);
   if (!name || !version) return null;
   return { name, version };
@@ -116,7 +116,7 @@ function parsePackageKey(key, majorVersion) {
  * @returns {number}
  */
 function getPnpmMajorVersion(content) {
-  for (const line of content.split('\n')) {
+  for (const line of content.split("\n")) {
     const m = line.match(/^lockfileVersion:\s*['"]?(\d+)/);
     if (m) return parseInt(m[1], 10);
   }
@@ -172,20 +172,20 @@ function extractResolutionType(resolutionLine) {
  * @returns {Array<{ name: string, version: string, resolved: string|null }>}
  */
 function parsePnpmLock(content, includeTests = false) {
-  const lines = content.split('\n');
+  const lines = content.split("\n");
   const majorVersion = getPnpmMajorVersion(content);
 
   /** @type {Map<string, { name: string, version: string, dev: boolean, resolved: string|null }>} */
-  const pkgMap            = new Map();
+  const pkgMap = new Map();
   /** @type {Set<string>} direct prod/optional dep names across every importer (v9) */
   const prodImporterNames = new Set();
   /** @type {Set<string>} direct devDependency names across every importer (v9) */
-  const devImporterNames  = new Set();
+  const devImporterNames = new Set();
 
-  let section         = 'other';
-  let currentEntry    = null;
-  let nonRegistry     = false;   // current entry has a non-tarball resolution.type — drop it
-  let importerDepType = null;    // 'prod' | 'dev' | null (v9 importer sub-section)
+  let section = "other";
+  let currentEntry = null;
+  let nonRegistry = false; // current entry has a non-tarball resolution.type — drop it
+  let importerDepType = null; // 'prod' | 'dev' | null (v9 importer sub-section)
 
   /** Commits currentEntry into pkgMap; deduplicates by name@version only. */
   function flushEntry() {
@@ -194,59 +194,59 @@ function parsePnpmLock(content, includeTests = false) {
       if (!pkgMap.has(dedupeKey)) pkgMap.set(dedupeKey, currentEntry);
     }
     currentEntry = null;
-    nonRegistry  = false;
+    nonRegistry = false;
   }
 
   for (const rawLine of lines) {
     const trimmed = rawLine.trim();
-    if (!trimmed || trimmed === '---') continue;
+    if (!trimmed || trimmed === "---") continue;
 
     const indent = rawLine.length - rawLine.trimStart().length;
 
     if (indent === 0) {
       flushEntry();
       importerDepType = null;
-      if      (trimmed === 'packages:')  section = 'packages';
-      else if (trimmed === 'importers:') section = 'importers';
-      else if (trimmed === 'snapshots:') section = 'snapshots';
-      else                               section = 'other';
+      if (trimmed === "packages:") section = "packages";
+      else if (trimmed === "importers:") section = "importers";
+      else if (trimmed === "snapshots:") section = "snapshots";
+      else section = "other";
       continue;
     }
 
-    if (section === 'packages') {
-      if (indent === 2 && trimmed.endsWith(':')) {
+    if (section === "packages") {
+      if (indent === 2 && trimmed.endsWith(":")) {
         flushEntry();
-        const key    = trimmed.slice(0, -1).replace(/^['"]|['"]$/g, '');
+        const key = trimmed.slice(0, -1).replace(/^['"]|['"]$/g, "");
         const parsed = parsePackageKey(key, majorVersion);
         currentEntry = parsed ? { ...parsed, dev: false, resolved: null } : null;
       } else if (indent === 4 && currentEntry) {
-        if      (trimmed === 'dev: true')  currentEntry.dev = true;
-        else if (trimmed === 'dev: false') currentEntry.dev = false;
-        else if (trimmed.startsWith('resolution:')) {
+        if (trimmed === "dev: true") currentEntry.dev = true;
+        else if (trimmed === "dev: false") currentEntry.dev = false;
+        else if (trimmed.startsWith("resolution:")) {
           const type = extractResolutionType(trimmed);
           // Anything with a `type:` field is a non-TarballResolution variant
           // (directory / git / binary / custom:*) and is not resolvable via
           // registry.npmjs.org — drop it from the resolver pipeline.
           if (type) nonRegistry = true;
           const tarballMatch = trimmed.match(/^resolution:\s*\{[^}]*tarball:\s*([^,}\s]+)/);
-          if (tarballMatch) currentEntry.resolved = tarballMatch[1].replace(/^['"]|['"]$/g, '');
+          if (tarballMatch) currentEntry.resolved = tarballMatch[1].replace(/^['"]|['"]$/g, "");
         }
       }
       continue;
     }
 
-    if (section === 'importers') {
-      if (indent === 2 && trimmed.endsWith(':')) {
+    if (section === "importers") {
+      if (indent === 2 && trimmed.endsWith(":")) {
         importerDepType = null;
-      } else if (indent === 4 && trimmed.endsWith(':')) {
+      } else if (indent === 4 && trimmed.endsWith(":")) {
         const key = trimmed.slice(0, -1);
-        if      (key === 'dependencies' || key === 'optionalDependencies') importerDepType = 'prod';
-        else if (key === 'devDependencies')                                importerDepType = 'dev';
-        else                                                               importerDepType = null;
-      } else if (indent === 6 && importerDepType && trimmed.endsWith(':')) {
-        const name = trimmed.slice(0, -1).replace(/^['"]|['"]$/g, '');
-        if (importerDepType === 'prod') prodImporterNames.add(name);
-        else                            devImporterNames.add(name);
+        if (key === "dependencies" || key === "optionalDependencies") importerDepType = "prod";
+        else if (key === "devDependencies") importerDepType = "dev";
+        else importerDepType = null;
+      } else if (indent === 6 && importerDepType && trimmed.endsWith(":")) {
+        const name = trimmed.slice(0, -1).replace(/^['"]|['"]$/g, "");
+        if (importerDepType === "prod") prodImporterNames.add(name);
+        else devImporterNames.add(name);
       }
     }
   }
@@ -287,47 +287,49 @@ function parsePnpmLock(content, includeTests = false) {
  * @returns {Array<{ name: string, spec: string, reason: string }>}
  */
 function parsePnpmDangerousDeps(content) {
-  const lines = content.split('\n');
+  const lines = content.split("\n");
   const majorVersion = getPnpmMajorVersion(content);
 
   /** Human-readable reason strings per Resolution.type variant. */
   const REASONS = {
-    directory: 'local folder (resolution.type: directory)',
-    git:       'git source (resolution.type: git)',
-    binary:    'binary download (resolution.type: binary)',
+    directory: "local folder (resolution.type: directory)",
+    git: "git source (resolution.type: git)",
+    binary: "binary download (resolution.type: binary)",
   };
 
-  let section = 'other';
+  let section = "other";
   let pending = null; // { name, version } from the most recent key seen
-  const seen  = new Set();
-  const out   = [];
+  const seen = new Set();
+  const out = [];
 
   for (const rawLine of lines) {
     const trimmed = rawLine.trim();
-    if (!trimmed || trimmed === '---') continue;
+    if (!trimmed || trimmed === "---") continue;
     const indent = rawLine.length - rawLine.trimStart().length;
 
     if (indent === 0) {
       pending = null;
-      section = trimmed === 'packages:' ? 'packages' : 'other';
+      section = trimmed === "packages:" ? "packages" : "other";
       continue;
     }
 
-    if (section !== 'packages') continue;
+    if (section !== "packages") continue;
 
-    if (indent === 2 && trimmed.endsWith(':')) {
-      const key = trimmed.slice(0, -1).replace(/^['"]|['"]$/g, '');
+    if (indent === 2 && trimmed.endsWith(":")) {
+      const key = trimmed.slice(0, -1).replace(/^['"]|['"]$/g, "");
       pending = parsePackageKey(key, majorVersion);
       continue;
     }
 
-    if (indent === 4 && pending && trimmed.startsWith('resolution:')) {
+    if (indent === 4 && pending && trimmed.startsWith("resolution:")) {
       const type = extractResolutionType(trimmed);
-      if (!type) { pending = null; continue; }
+      if (!type) {
+        pending = null;
+        continue;
+      }
 
-      const reason = REASONS[type] ?? (type.startsWith('custom:')
-        ? `custom resolver (${type})`
-        : null);
+      const reason =
+        REASONS[type] ?? (type.startsWith("custom:") ? `custom resolver (${type})` : null);
 
       if (reason) {
         const dedupeKey = `${pending.name}|${pending.version}`;

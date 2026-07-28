@@ -20,9 +20,14 @@
  * same module@version (cycle guard).
  */
 
-import { fetchModuleInfo, fetchModuleVersionList, fetchModuleMod, getReleaseDate } from './goClient.js';
-import { parseGoMod } from './parserCore.js';
-import { Semaphore } from '../util/semaphore.js';
+import {
+  fetchModuleInfo,
+  fetchModuleVersionList,
+  fetchModuleMod,
+  getReleaseDate,
+} from "./goClient.js";
+import { parseGoMod } from "./parserCore.js";
+import { Semaphore } from "../util/semaphore.js";
 
 const CONCURRENCY = 10;
 
@@ -40,8 +45,8 @@ const CONCURRENCY = 10;
  */
 export async function resolveDependencies(directDeps, opts = {}) {
   const { onProgress } = opts;
-  const results   = new Map();
-  const pending   = new Map();
+  const results = new Map();
+  const pending = new Map();
   const semaphore = new Semaphore(CONCURRENCY);
 
   /**
@@ -52,9 +57,9 @@ export async function resolveDependencies(directDeps, opts = {}) {
   async function resolveModuleInfo(name, version) {
     const info = await fetchModuleInfo(name, version);
     if (info) return { moduleName: name, info };
-    const segments = name.split('/');
+    const segments = name.split("/");
     for (let i = segments.length - 1; i >= 2; i--) {
-      const candidate = segments.slice(0, i).join('/');
+      const candidate = segments.slice(0, i).join("/");
       const parentInfo = await fetchModuleInfo(candidate, version);
       if (parentInfo) return { moduleName: candidate, info: parentInfo };
     }
@@ -74,22 +79,23 @@ export async function resolveDependencies(directDeps, opts = {}) {
           const moduleResolution = await resolveModuleInfo(name, version);
           if (moduleResolution) {
             moduleName = moduleResolution.moduleName;
-            info       = moduleResolution.info;
-            const resolvedVersionForMod = (version === 'latest' && info.Version) ? info.Version : version;
+            info = moduleResolution.info;
+            const resolvedVersionForMod =
+              version === "latest" && info.Version ? info.Version : version;
             [versions, modText] = await Promise.all([
               fetchModuleVersionList(moduleName),
               fetchModuleMod(moduleName, resolvedVersionForMod),
             ]);
           } else {
             versions = [];
-            modText  = null;
+            modText = null;
           }
         } finally {
           semaphore.release();
         }
 
-        const resolvedVersion = (version === 'latest' && info?.Version) ? info.Version : version;
-        const key  = `${moduleName.toLowerCase()}@${resolvedVersion}`;
+        const resolvedVersion = version === "latest" && info?.Version ? info.Version : version;
+        const key = `${moduleName.toLowerCase()}@${resolvedVersion}`;
         const link = `https://pkg.go.dev/${moduleName}@${resolvedVersion}`;
 
         if (!info) {
@@ -97,12 +103,12 @@ export async function resolveDependencies(directDeps, opts = {}) {
           results.set(`${name.toLowerCase()}@${version}`, {
             name,
             version,
-            releaseDate:        'unknown',
-            firstReleaseDate:   'unknown',
-            releaseCount:       0,
+            releaseDate: "unknown",
+            firstReleaseDate: "unknown",
+            releaseCount: 0,
             downloadsLastMonth: null,
-            link:               `https://pkg.go.dev/${name}@${version}`,
-            error:              'Module not found on proxy.golang.org',
+            link: `https://pkg.go.dev/${name}@${version}`,
+            error: "Module not found on proxy.golang.org",
           });
           return;
         }
@@ -113,20 +119,22 @@ export async function resolveDependencies(directDeps, opts = {}) {
         onProgress?.(`  ${moduleName} ${resolvedVersion}`);
 
         results.set(key, {
-          name:               moduleName,
-          version:            resolvedVersion,
+          name: moduleName,
+          version: resolvedVersion,
           releaseDate,
-          firstReleaseDate:   'unknown',
-          releaseCount:       versions.length,
+          firstReleaseDate: "unknown",
+          releaseCount: versions.length,
           downloadsLastMonth: null,
           link,
         });
 
         if (modText) {
           const transitive = parseGoMod(modText);
-          await Promise.all(transitive.map(({ name: depName, version: depVersion }) =>
-            resolveOne(depName, depVersion)
-          ));
+          await Promise.all(
+            transitive.map(({ name: depName, version: depVersion }) =>
+              resolveOne(depName, depVersion),
+            ),
+          );
         }
       } catch (err) {
         const fallbackKey = `${name.toLowerCase()}@${version}`;
@@ -134,12 +142,12 @@ export async function resolveDependencies(directDeps, opts = {}) {
           results.set(fallbackKey, {
             name,
             version,
-            releaseDate:        'unknown',
-            firstReleaseDate:   'unknown',
-            releaseCount:       0,
+            releaseDate: "unknown",
+            firstReleaseDate: "unknown",
+            releaseCount: 0,
             downloadsLastMonth: null,
             link: `https://pkg.go.dev/${name}@${version}`,
-            error:              err.message,
+            error: err.message,
           });
         }
       }

@@ -31,7 +31,7 @@ function setDebug(flag) {
 function debugLog(message) {
   if (!enabled) return;
   const line = `[debug] ${message}\n`;
-  if (typeof process !== 'undefined' && process.stderr) {
+  if (typeof process !== "undefined" && process.stderr) {
     process.stderr.write(line);
   } else {
     console.error(line);

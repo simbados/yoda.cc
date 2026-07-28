@@ -14,7 +14,7 @@
  * (requests>=2.0), and scoped npm packages (@babel/core) from being split incorrectly.
  */
 
-import { parsePackageInput } from './packageInput.js';
+import { parsePackageInput } from "./packageInput.js";
 
 /**
  * Splits raw multi-package text into individual trimmed token strings.
@@ -24,23 +24,23 @@ import { parsePackageInput } from './packageInput.js';
  * @returns {string[]}
  */
 export function splitPackageTokens(rawText) {
-  const text = String(rawText).replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const text = String(rawText).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 
   // Commas separate entries; \s* on both sides also consumes any surrounding
   // whitespace including newlines, so "eslint,\neslint@9" works correctly.
   const commaSplit = text.split(/\s*,\s*/);
 
   // After comma-splitting, newlines still separate any remaining adjacent entries.
-  const lines = commaSplit.flatMap(chunk => chunk.split(/\n+/));
+  const lines = commaSplit.flatMap((chunk) => chunk.split(/\n+/));
 
   // A non-package character flanked by at least one space on each side is a separator.
   // The character set [^\w@.\-\/=><~!+\s] matches anything that is NOT a word char,
   // @, ., -, /, =, >, <, ~, !, +, or whitespace.
   const spacedSep = /\s+[^\w@.\-\/=><~!+\s]+\s+/g;
-  const tokens = lines.flatMap(line => line.split(spacedSep));
+  const tokens = lines.flatMap((line) => line.split(spacedSep));
 
   return tokens
-    .map(t => t.trim().replace(/^[^\w@.\-\/=><~!+]+|[^\w@.\-\/=><~!+]+$/g, ''))
+    .map((t) => t.trim().replace(/^[^\w@.\-\/=><~!+]+|[^\w@.\-\/=><~!+]+$/g, ""))
     .filter(Boolean);
 }
 
@@ -55,5 +55,5 @@ export function splitPackageTokens(rawText) {
  */
 export function parseMultiPackageInput(rawText, ecosystem) {
   const tokens = splitPackageTokens(rawText);
-  return tokens.map(token => parsePackageInput(token, ecosystem));
+  return tokens.map((token) => parsePackageInput(token, ecosystem));
 }

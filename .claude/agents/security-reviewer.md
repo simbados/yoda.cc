@@ -19,10 +19,12 @@ If a `<subproject>/CLAUDE.md` exists, skim its `# Architecture` section to learn
 ## Scope — what you review
 
 **Only review:**
+
 1. Code that was **added or changed** in the specified files (new functions, modified logic, new imports).
 2. The **direct data flow** from that changed code — one hop: if a new function returns data that is immediately consumed by a caller, check how the caller uses that return value.
 
 **Do not review:**
+
 - Unchanged code in the specified files — skip functions and blocks that were not modified.
 - Files that were not listed unless a new exported function from the changed files is called there and you need to verify the call site handles the output safely. Limit this to one additional file maximum.
 - Pre-existing code paths that the change does not touch.
@@ -31,6 +33,7 @@ If a `<subproject>/CLAUDE.md` exists, skim its `# Architecture` section to learn
 ## How to identify changed code
 
 When given file paths, read each file and focus on:
+
 - New `export`ed functions or constants
 - Modified function bodies
 - New `import` statements (new dependencies introduced)

@@ -5,10 +5,10 @@
  * a local project directory.
  */
 
-import fs from 'node:fs';
-import path from 'node:path';
-import { parseCargoLock, parseCargoToml, normalizeCrateName } from './parserCore.js';
-import { partitionCargoPackages } from './crateFilter.js';
+import fs from "node:fs";
+import path from "node:path";
+import { parseCargoLock, parseCargoToml, normalizeCrateName } from "./parserCore.js";
+import { partitionCargoPackages } from "./crateFilter.js";
 
 /**
  * Detects and parses the Cargo dependency file in a given project directory.
@@ -42,21 +42,26 @@ export function parseDependencyFile(projectPath, options = {}) {
 
   // Always read Cargo.toml (when present) for non-registry dependency specs.
   let dangerousDeps = [];
-  const cargoTomlPath = path.join(projectPath, 'Cargo.toml');
+  const cargoTomlPath = path.join(projectPath, "Cargo.toml");
   const hasCargoToml = fs.existsSync(cargoTomlPath) && !fs.statSync(cargoTomlPath).isDirectory();
   if (hasCargoToml) {
     try {
-      dangerousDeps = parseCargoToml(fs.readFileSync(cargoTomlPath, 'utf8'), includeTests).dangerousDeps;
-    } catch { /* ignore — dangerous-dep parsing is best-effort */ }
+      dangerousDeps = parseCargoToml(
+        fs.readFileSync(cargoTomlPath, "utf8"),
+        includeTests,
+      ).dangerousDeps;
+    } catch {
+      /* ignore — dangerous-dep parsing is best-effort */
+    }
   }
 
   // Cargo.lock preferred: full transitive closure with exact pinned versions.
-  const lockPath = path.join(projectPath, 'Cargo.lock');
+  const lockPath = path.join(projectPath, "Cargo.lock");
   if (fs.existsSync(lockPath) && !fs.statSync(lockPath).isDirectory()) {
     try {
-      const packages = parseCargoLock(fs.readFileSync(lockPath, 'utf8'));
+      const packages = parseCargoLock(fs.readFileSync(lockPath, "utf8"));
       const { publicPkgs, privateCount, privatePkgs } = partitionCargoPackages(packages);
-      return { deps: publicPkgs, source: 'Cargo.lock', privateCount, privatePkgs, dangerousDeps };
+      return { deps: publicPkgs, source: "Cargo.lock", privateCount, privatePkgs, dangerousDeps };
     } catch (err) {
       throw new Error(`Failed to parse Cargo.lock: ${err.message}`);
     }
@@ -65,14 +70,16 @@ export function parseDependencyFile(projectPath, options = {}) {
   // Cargo.toml fallback: declared deps resolved by a recursive crates.io crawl.
   if (hasCargoToml) {
     try {
-      const { deps } = parseCargoToml(fs.readFileSync(cargoTomlPath, 'utf8'), includeTests);
-      return { deps, source: 'Cargo.toml', privateCount: 0, privatePkgs: [], dangerousDeps };
+      const { deps } = parseCargoToml(fs.readFileSync(cargoTomlPath, "utf8"), includeTests);
+      return { deps, source: "Cargo.toml", privateCount: 0, privatePkgs: [], dangerousDeps };
     } catch (err) {
       throw new Error(`Failed to parse Cargo.toml: ${err.message}`);
     }
   }
 
-  throw new Error(`No Rust dependency file found in ${projectPath}. Looked for: Cargo.lock, Cargo.toml`);
+  throw new Error(
+    `No Rust dependency file found in ${projectPath}. Looked for: Cargo.lock, Cargo.toml`,
+  );
 }
 
 /**
@@ -87,9 +94,9 @@ export function parseDependencyFile(projectPath, options = {}) {
  */
 export function readDirectNamesFromCargoToml(dirPath, includeTests = false) {
   try {
-    const content = fs.readFileSync(path.join(dirPath, 'Cargo.toml'), 'utf8');
+    const content = fs.readFileSync(path.join(dirPath, "Cargo.toml"), "utf8");
     const { deps } = parseCargoToml(content, includeTests);
-    return new Set(deps.map(d => normalizeCrateName(d.name)));
+    return new Set(deps.map((d) => normalizeCrateName(d.name)));
   } catch {
     return new Set();
   }

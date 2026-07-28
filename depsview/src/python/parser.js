@@ -6,10 +6,10 @@
  * File-system imports must not be added to parserCore.js.
  */
 
-import fs from 'node:fs';
-import path from 'node:path';
-import { isTestRequirementsFile } from './testFilter.js';
-import { normalizePackageName } from './pypiClient.js';
+import fs from "node:fs";
+import path from "node:path";
+import { isTestRequirementsFile } from "./testFilter.js";
+import { normalizePackageName } from "./pypiClient.js";
 import {
   parseDependencyString,
   parseRequiresDist,
@@ -18,7 +18,7 @@ import {
   parsePipfile,
   parseManifestJson,
   parsePep508UrlRequirement,
-} from './parserCore.js';
+} from "./parserCore.js";
 
 /**
  * Recognised plain-text requirements filenames, in parse priority order.
@@ -26,7 +26,7 @@ import {
  * pulls `requirements.txt` in via a `-r` include, the shared `visited` set
  * stops the latter from being parsed a second time as a standalone file.
  */
-const REQUIREMENTS_FILES = ['requirements_all.txt', 'requirements.txt'];
+const REQUIREMENTS_FILES = ["requirements_all.txt", "requirements.txt"];
 
 /**
  * Parses a requirements.txt file into a list of dependencies.
@@ -50,22 +50,28 @@ const REQUIREMENTS_FILES = ['requirements_all.txt', 'requirements.txt'];
  *                                 a test-related keyword are silently skipped
  * @returns {{ deps: Array<{ name: string, versionSpec: string|null }>, dangerousDeps: Array<{ name: string, spec: string, reason: string }> }}
  */
-function parseRequirementsTxt(content, filePath, projectRoot, visited = new Set(), includeTests = false) {
+function parseRequirementsTxt(
+  content,
+  filePath,
+  projectRoot,
+  visited = new Set(),
+  includeTests = false,
+) {
   visited.add(filePath);
   const deps = [];
   const dangerousDeps = [];
   const dir = path.dirname(filePath);
 
-  for (let line of content.split('\n')) {
+  for (let line of content.split("\n")) {
     // Strip inline comments
-    line = line.split('#')[0].trim();
+    line = line.split("#")[0].trim();
     // Handle line continuation
-    while (line.endsWith('\\')) line = line.slice(0, -1).trim();
+    while (line.endsWith("\\")) line = line.slice(0, -1).trim();
     if (!line) continue;
 
     // Recurse into included files: -r other.txt or --requirement other.txt
     if (/^(-r|--requirement)\s+/.test(line)) {
-      const includePath = line.replace(/^(-r|--requirement)\s+/, '').trim();
+      const includePath = line.replace(/^(-r|--requirement)\s+/, "").trim();
 
       // Skip test requirement includes unless the caller opted in
       if (!includeTests && isTestRequirementsFile(path.basename(includePath))) continue;
@@ -73,17 +79,26 @@ function parseRequirementsTxt(content, filePath, projectRoot, visited = new Set(
       const fullPath = path.resolve(dir, includePath);
 
       // Security: skip includes that escape the project root (path traversal guard)
-      if (projectRoot && !fullPath.startsWith(projectRoot + path.sep) && fullPath !== projectRoot) continue;
+      if (projectRoot && !fullPath.startsWith(projectRoot + path.sep) && fullPath !== projectRoot)
+        continue;
 
       // Security: skip already-visited files (circular include guard)
       if (visited.has(fullPath)) continue;
 
       try {
-        const includeContent = fs.readFileSync(fullPath, 'utf8');
-        const sub = parseRequirementsTxt(includeContent, fullPath, projectRoot, visited, includeTests);
+        const includeContent = fs.readFileSync(fullPath, "utf8");
+        const sub = parseRequirementsTxt(
+          includeContent,
+          fullPath,
+          projectRoot,
+          visited,
+          includeTests,
+        );
         deps.push(...sub.deps);
         dangerousDeps.push(...sub.dangerousDeps);
-      } catch { /* missing include — skip silently */ }
+      } catch {
+        /* missing include — skip silently */
+      }
       continue;
     }
 
@@ -161,8 +176,14 @@ function parseRequirementsFiles(projectPath, includeTests) {
     // don't parse it again as a standalone source.
     if (visited.has(fullPath)) continue;
     try {
-      const content = fs.readFileSync(fullPath, 'utf8');
-      const { deps, dangerousDeps } = parseRequirementsTxt(content, fullPath, projectPath, visited, includeTests);
+      const content = fs.readFileSync(fullPath, "utf8");
+      const { deps, dangerousDeps } = parseRequirementsTxt(
+        content,
+        fullPath,
+        projectPath,
+        visited,
+        includeTests,
+      );
       allDeps.push(...deps);
       allDangerousDeps.push(...dangerousDeps);
       sources.push(file);
@@ -172,7 +193,11 @@ function parseRequirementsFiles(projectPath, includeTests) {
   }
 
   if (sources.length === 0) return null;
-  return { deps: mergeRequirementsDeps(allDeps), dangerousDeps: allDangerousDeps, source: sources.join(', ') };
+  return {
+    deps: mergeRequirementsDeps(allDeps),
+    dangerousDeps: allDangerousDeps,
+    source: sources.join(", "),
+  };
 }
 
 /**
@@ -202,25 +227,39 @@ function parseDependencyFile(projectPath, options = {}) {
     // Guard against a directory entry matching the filename (e.g. case-insensitive fs)
     if (!fs.existsSync(fullPath) || fs.statSync(fullPath).isDirectory()) return null;
     try {
-      return { deps: parse(fs.readFileSync(fullPath, 'utf8'), fullPath), dangerousDeps: [], source: file };
+      return {
+        deps: parse(fs.readFileSync(fullPath, "utf8"), fullPath),
+        dangerousDeps: [],
+        source: file,
+      };
     } catch (err) {
       throw new Error(`Failed to parse ${file}: ${err.message}`);
     }
   };
 
   const result =
-    tryFile('pyproject.toml', (c) => parsePyprojectToml(c, includeTests)) ??
-    tryFile('manifest.json',  (c) => parseManifestJson(c)) ??
+    tryFile("pyproject.toml", (c) => parsePyprojectToml(c, includeTests)) ??
+    tryFile("manifest.json", (c) => parseManifestJson(c)) ??
     parseRequirementsFiles(projectPath, includeTests) ??
-    tryFile('setup.cfg', (c) => parseSetupCfg(c)) ??
-    tryFile('Pipfile',   (c) => parsePipfile(c, includeTests));
+    tryFile("setup.cfg", (c) => parseSetupCfg(c)) ??
+    tryFile("Pipfile", (c) => parsePipfile(c, includeTests));
 
   if (result) return result;
 
   throw new Error(
     `No dependency file found in ${projectPath}. ` +
-    `Looked for: pyproject.toml, manifest.json, requirements.txt, requirements_all.txt, setup.cfg, Pipfile`
+      `Looked for: pyproject.toml, manifest.json, requirements.txt, requirements_all.txt, setup.cfg, Pipfile`,
   );
 }
 
-export { parseDependencyFile, parseRequirementsFiles, mergeRequirementsDeps, parseRequiresDist, parseDependencyString, parsePyprojectToml, parseManifestJson, parseSetupCfg, parsePipfile };
+export {
+  parseDependencyFile,
+  parseRequirementsFiles,
+  mergeRequirementsDeps,
+  parseRequiresDist,
+  parseDependencyString,
+  parsePyprojectToml,
+  parseManifestJson,
+  parseSetupCfg,
+  parsePipfile,
+};

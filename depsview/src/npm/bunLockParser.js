@@ -68,12 +68,12 @@
  */
 function findVersionDelimiter(canonical) {
   let searchStart = 0;
-  if (canonical.startsWith('@')) {
-    const slashIdx = canonical.indexOf('/');
+  if (canonical.startsWith("@")) {
+    const slashIdx = canonical.indexOf("/");
     if (slashIdx === -1) return -1;
     searchStart = slashIdx + 1;
   }
-  return canonical.indexOf('@', searchStart);
+  return canonical.indexOf("@", searchStart);
 }
 
 /**
@@ -95,18 +95,18 @@ function detectBunResolution(canonical) {
   const spec = canonical.slice(atIdx + 1);
   if (!name || !spec) return null;
 
-  if (spec.startsWith('workspace:')) return { name, kind: 'workspace', spec };
-  if (spec.startsWith('root:'))      return { name, kind: 'root',      spec };
-  if (spec.startsWith('npm:'))       return { name, kind: 'alias',     spec };
-  if (spec.startsWith('file:'))      return { name, kind: 'file',      spec };
-  if (spec.startsWith('link:'))      return { name, kind: 'link',      spec };
-  if (spec.startsWith('github:'))    return { name, kind: 'github',    spec };
-  if (spec.startsWith('git+'))       return { name, kind: 'git',       spec };
-  if (spec.startsWith('https://') || spec.startsWith('http://')) {
-    return { name, kind: 'tarball', spec };
+  if (spec.startsWith("workspace:")) return { name, kind: "workspace", spec };
+  if (spec.startsWith("root:")) return { name, kind: "root", spec };
+  if (spec.startsWith("npm:")) return { name, kind: "alias", spec };
+  if (spec.startsWith("file:")) return { name, kind: "file", spec };
+  if (spec.startsWith("link:")) return { name, kind: "link", spec };
+  if (spec.startsWith("github:")) return { name, kind: "github", spec };
+  if (spec.startsWith("git+")) return { name, kind: "git", spec };
+  if (spec.startsWith("https://") || spec.startsWith("http://")) {
+    return { name, kind: "tarball", spec };
   }
 
-  return { name, kind: 'npm', version: spec };
+  return { name, kind: "npm", version: spec };
 }
 
 /**
@@ -121,7 +121,7 @@ function detectBunResolution(canonical) {
  */
 function parseBunPackageKey(canonical) {
   const res = detectBunResolution(canonical);
-  if (!res || res.kind !== 'npm') return null;
+  if (!res || res.kind !== "npm") return null;
   return { name: res.name, version: res.version };
 }
 
@@ -133,7 +133,7 @@ function parseBunPackageKey(canonical) {
  * @returns {string}
  */
 function stripUrlHash(url) {
-  const hashIdx = url.indexOf('#');
+  const hashIdx = url.indexOf("#");
   return hashIdx === -1 ? url : url.slice(0, hashIdx);
 }
 
@@ -147,10 +147,10 @@ function stripUrlHash(url) {
  */
 function collectDevOnlyNames(workspaces) {
   const prodNames = new Set();
-  const devNames  = new Set();
+  const devNames = new Set();
 
   for (const ws of Object.values(workspaces)) {
-    for (const name of Object.keys(ws.dependencies    ?? {})) prodNames.add(name);
+    for (const name of Object.keys(ws.dependencies ?? {})) prodNames.add(name);
     for (const name of Object.keys(ws.devDependencies ?? {})) devNames.add(name);
   }
 
@@ -177,7 +177,7 @@ function collectDevOnlyNames(workspaces) {
  * @returns {string} string with trailing commas removed
  */
 function stripTrailingCommas(str) {
-  return str.replace(/,(\s*[}\]])/g, '$1');
+  return str.replace(/,(\s*[}\]])/g, "$1");
 }
 
 /**
@@ -208,7 +208,7 @@ function parseBunLock(content, includeTests = false) {
   const data = JSON.parse(stripTrailingCommas(content));
 
   const workspaces = data.workspaces ?? {};
-  const packages   = data.packages   ?? {};
+  const packages = data.packages ?? {};
 
   const devOnly = includeTests ? new Set() : collectDevOnlyNames(workspaces);
 
@@ -216,11 +216,11 @@ function parseBunLock(content, includeTests = false) {
   const pkgMap = new Map();
 
   for (const value of Object.values(packages)) {
-    const canonical = Array.isArray(value) && typeof value[0] === 'string' ? value[0] : null;
+    const canonical = Array.isArray(value) && typeof value[0] === "string" ? value[0] : null;
     if (!canonical) continue;
 
     const res = detectBunResolution(canonical);
-    if (!res || res.kind !== 'npm') continue;
+    if (!res || res.kind !== "npm") continue;
 
     const { name, version } = res;
     if (!includeTests && devOnly.has(name)) continue;
@@ -228,9 +228,9 @@ function parseBunLock(content, includeTests = false) {
     const dedupeKey = `${name}@${version}`;
     if (pkgMap.has(dedupeKey)) continue;
 
-    const rawUrl = Array.isArray(value) && typeof value[1] === 'string' ? value[1] : null;
+    const rawUrl = Array.isArray(value) && typeof value[1] === "string" ? value[1] : null;
     // Only accept https:// URLs — rejects file:, javascript:, and internal-network schemes.
-    const resolved = rawUrl && rawUrl.startsWith('https://') ? stripUrlHash(rawUrl) : null;
+    const resolved = rawUrl && rawUrl.startsWith("https://") ? stripUrlHash(rawUrl) : null;
 
     pkgMap.set(dedupeKey, { name, version, resolved });
   }
@@ -266,17 +266,17 @@ function parseBunDangerousDeps(content) {
 
   /** Human-readable reason strings shown beside each entry in the panel. */
   const REASON = {
-    file:    'local folder reference (file:)',
-    link:    'symlinked folder (link:)',
-    git:     'git source (git+)',
-    github:  'github shorthand (github:)',
-    tarball: 'direct tarball URL',
+    file: "local folder reference (file:)",
+    link: "symlinked folder (link:)",
+    git: "git source (git+)",
+    github: "github shorthand (github:)",
+    tarball: "direct tarball URL",
   };
 
   const seen = new Set();
   const out = [];
   for (const value of Object.values(packages)) {
-    const canonical = Array.isArray(value) && typeof value[0] === 'string' ? value[0] : null;
+    const canonical = Array.isArray(value) && typeof value[0] === "string" ? value[0] : null;
     if (!canonical) continue;
 
     const res = detectBunResolution(canonical);

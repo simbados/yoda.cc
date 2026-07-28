@@ -14,9 +14,9 @@
  */
 function normalizePoetrySpec(spec) {
   const s = spec.trim();
-  if (!s || s === '*') return null;
-  if (s.startsWith('^')) return `>=${s.slice(1)}`;
-  if (s.startsWith('~') && !s.startsWith('~=')) return `~=${s.slice(1)}`;
+  if (!s || s === "*") return null;
+  if (s.startsWith("^")) return `>=${s.slice(1)}`;
+  if (s.startsWith("~") && !s.startsWith("~=")) return `~=${s.slice(1)}`;
   return s;
 }
 
@@ -44,7 +44,7 @@ function extractTomlArrayDeps(text) {
  * @returns {{ name: string, versionSpec: string|null }|null} parsed dep, or null if unparseable / should skip
  */
 function parseDependencyString(depStr) {
-  if (!depStr || typeof depStr !== 'string') return null;
+  if (!depStr || typeof depStr !== "string") return null;
 
   const trimmed = depStr.trim();
   if (!trimmed) return null;
@@ -53,7 +53,7 @@ function parseDependencyString(depStr) {
   if (/^(https?:|git\+|file:|\.\/|\.\.\/|\/)/i.test(trimmed)) return null;
 
   // Strip extras like [security] or [socks]
-  const noExtras = trimmed.replace(/\[[^\]]*\]/g, '');
+  const noExtras = trimmed.replace(/\[[^\]]*\]/g, "");
 
   // Match package name (PEP 508: starts with letter/digit, may contain ._-)
   const nameMatch = noExtras.match(/^([A-Za-z0-9][A-Za-z0-9._-]*)\s*/);
@@ -63,10 +63,10 @@ function parseDependencyString(depStr) {
   let rest = noExtras.slice(nameMatch[0].length).trim();
 
   // Skip PEP 508 URL requirements: "requests @ https://..."
-  if (rest.startsWith('@')) return null;
+  if (rest.startsWith("@")) return null;
 
   // Strip wrapping parentheses: "requests (>=2.0)" → ">=2.0"
-  if (rest.startsWith('(') && rest.endsWith(')')) {
+  if (rest.startsWith("(") && rest.endsWith(")")) {
     rest = rest.slice(1, -1).trim();
   }
 
@@ -81,11 +81,11 @@ function parseDependencyString(depStr) {
  * @returns {{ name: string, versionSpec: string|null }|null}
  */
 function parseRequiresDist(dep) {
-  if (!dep || typeof dep !== 'string') return null;
+  if (!dep || typeof dep !== "string") return null;
 
-  const semicolonIdx = dep.indexOf(';');
+  const semicolonIdx = dep.indexOf(";");
   const depPart = semicolonIdx !== -1 ? dep.slice(0, semicolonIdx) : dep;
-  const markerPart = semicolonIdx !== -1 ? dep.slice(semicolonIdx + 1) : '';
+  const markerPart = semicolonIdx !== -1 ? dep.slice(semicolonIdx + 1) : "";
 
   // Skip dependencies that only apply when an optional extra is installed
   if (markerPart && /extra\s*==/.test(markerPart)) return null;
@@ -107,14 +107,14 @@ function parseRequiresDist(dep) {
  */
 function parsePyprojectToml(content, includeTests = false) {
   const deps = [];
-  const lines = content.split('\n');
-  let section = '';
+  const lines = content.split("\n");
+  let section = "";
   let inDepsArray = false;
   let arrayLines = [];
 
   const flushArray = () => {
     if (arrayLines.length > 0) {
-      deps.push(...extractTomlArrayDeps(arrayLines.join('\n')));
+      deps.push(...extractTomlArrayDeps(arrayLines.join("\n")));
       arrayLines = [];
     }
     inDepsArray = false;
@@ -134,15 +134,15 @@ function parsePyprojectToml(content, includeTests = false) {
     // Collect lines inside a multiline array
     if (inDepsArray) {
       arrayLines.push(rawLine);
-      if (line.includes(']')) flushArray();
+      if (line.includes("]")) flushArray();
       continue;
     }
 
     // ── PEP 621: [project] ──────────────────────────────────────────────────
-    if (section === 'project' && /^dependencies\s*=/.test(line)) {
-      const after = line.slice(line.indexOf('=') + 1).trim();
-      if (after.startsWith('[')) {
-        if (after.includes(']')) {
+    if (section === "project" && /^dependencies\s*=/.test(line)) {
+      const after = line.slice(line.indexOf("=") + 1).trim();
+      if (after.startsWith("[")) {
+        if (after.includes("]")) {
           deps.push(...extractTomlArrayDeps(after));
         } else {
           inDepsArray = true;
@@ -153,27 +153,27 @@ function parsePyprojectToml(content, includeTests = false) {
     }
 
     // ── Poetry: [tool.poetry.dependencies] and, when includeTests, dev/group sections
-    const isPoetryDeps = section === 'tool.poetry.dependencies'
-      || (includeTests && (
-        section === 'tool.poetry.dev-dependencies'
-        || /^tool\.poetry\.group\.[^.]+\.dependencies$/.test(section)
-      ));
+    const isPoetryDeps =
+      section === "tool.poetry.dependencies" ||
+      (includeTests &&
+        (section === "tool.poetry.dev-dependencies" ||
+          /^tool\.poetry\.group\.[^.]+\.dependencies$/.test(section)));
     if (isPoetryDeps) {
-      if (line.startsWith('#') || !line.includes('=')) continue;
-      const eqIdx = line.indexOf('=');
+      if (line.startsWith("#") || !line.includes("=")) continue;
+      const eqIdx = line.indexOf("=");
       const pkgName = line.slice(0, eqIdx).trim();
-      if (!pkgName || pkgName === 'python') continue;
+      if (!pkgName || pkgName === "python") continue;
 
       const value = line.slice(eqIdx + 1).trim();
 
       if (value.startsWith('"') || value.startsWith("'")) {
-        const raw = value.replace(/^["']|["']$/g, '');
+        const raw = value.replace(/^["']|["']$/g, "");
         const spec = normalizePoetrySpec(raw);
         deps.push({ name: pkgName, versionSpec: spec });
         continue;
       }
 
-      if (value.startsWith('{')) {
+      if (value.startsWith("{")) {
         // Inline table: {version = "^1.0", optional = true}
         if (/optional\s*=\s*true/i.test(value)) continue; // skip optional deps
         const vm = value.match(/version\s*=\s*["']([^"']+)["']/);
@@ -195,7 +195,7 @@ function parsePyprojectToml(content, includeTests = false) {
  */
 function parseSetupCfg(content) {
   const deps = [];
-  const lines = content.split('\n');
+  const lines = content.split("\n");
   let inInstallRequires = false;
 
   for (const rawLine of lines) {
@@ -210,7 +210,7 @@ function parseSetupCfg(content) {
     if (/^install_requires\s*=/.test(line)) {
       inInstallRequires = true;
       // Inline deps on the same line as the key
-      const after = line.slice(line.indexOf('=') + 1).trim();
+      const after = line.slice(line.indexOf("=") + 1).trim();
       if (after) {
         const dep = parseDependencyString(after);
         if (dep) deps.push(dep);
@@ -244,7 +244,7 @@ function parseSetupCfg(content) {
  */
 function parsePipfile(content, includeTests = false) {
   const deps = [];
-  const lines = content.split('\n');
+  const lines = content.split("\n");
   /**
    * True while the parser is positioned inside a dependency section
    * ([packages], or [dev-packages] when includeTests is true).
@@ -256,28 +256,28 @@ function parsePipfile(content, includeTests = false) {
     const line = rawLine.trim();
 
     if (/^\[.+\]$/.test(line)) {
-      inDepSection = line === '[packages]' || (includeTests && line === '[dev-packages]');
+      inDepSection = line === "[packages]" || (includeTests && line === "[dev-packages]");
       continue;
     }
 
-    if (!inDepSection || line.startsWith('#') || !line.includes('=')) continue;
+    if (!inDepSection || line.startsWith("#") || !line.includes("=")) continue;
 
-    const eqIdx = line.indexOf('=');
+    const eqIdx = line.indexOf("=");
     const pkgName = line.slice(0, eqIdx).trim();
     if (!pkgName) continue;
 
     const value = line.slice(eqIdx + 1).trim();
 
     if (value.startsWith('"') || value.startsWith("'")) {
-      const raw = value.replace(/^["']|["']$/g, '').trim();
-      const spec = raw === '*' ? null : raw;
+      const raw = value.replace(/^["']|["']$/g, "").trim();
+      const spec = raw === "*" ? null : raw;
       deps.push({ name: pkgName, versionSpec: spec });
       continue;
     }
 
-    if (value.startsWith('{')) {
+    if (value.startsWith("{")) {
       const vm = value.match(/version\s*=\s*["']([^"']+)["']/);
-      const spec = vm ? (vm[1] === '*' ? null : vm[1]) : null;
+      const spec = vm ? (vm[1] === "*" ? null : vm[1]) : null;
       deps.push({ name: pkgName, versionSpec: spec });
     }
   }
@@ -297,13 +297,11 @@ function parsePipfile(content, includeTests = false) {
 function parseManifestJson(content) {
   const data = JSON.parse(content);
   const requirements = Array.isArray(data.requirements) ? data.requirements : [];
-  return requirements
-    .map(r => parseDependencyString(r))
-    .filter(Boolean);
+  return requirements.map((r) => parseDependencyString(r)).filter(Boolean);
 }
 
 /** Hostnames considered safe PyPI sources — not flagged as non-standard. */
-const PYPI_HOSTS = new Set(['pypi.org', 'files.pythonhosted.org']);
+const PYPI_HOSTS = new Set(["pypi.org", "files.pythonhosted.org"]);
 
 /**
  * Parses a PEP 508 URL requirement (`name @ https://...`) and returns a
@@ -315,19 +313,31 @@ const PYPI_HOSTS = new Set(['pypi.org', 'files.pythonhosted.org']);
  * @returns {{ name: string, spec: string, reason: string }|null}
  */
 function parsePep508UrlRequirement(depStr) {
-  if (!depStr || typeof depStr !== 'string') return null;
+  if (!depStr || typeof depStr !== "string") return null;
   const trimmed = depStr.trim();
   // Must match: name @ https://...  (name as PEP 508 identifier)
   const m = trimmed.match(/^([A-Za-z0-9][A-Za-z0-9._-]*)\s*@\s*(https?:\/\/\S+)/i);
   if (!m) return null;
   const name = m[1];
-  const url  = m[2];
+  const url = m[2];
   let hostname;
-  try { hostname = new URL(url).hostname; } catch { return null; }
+  try {
+    hostname = new URL(url).hostname;
+  } catch {
+    return null;
+  }
   if (PYPI_HOSTS.has(hostname)) return null;
   // Cap hostname to the DNS maximum (253 chars) to avoid oversized reason strings.
-  const displayHost = hostname.length > 253 ? hostname.slice(0, 253) + '…' : hostname;
+  const displayHost = hostname.length > 253 ? hostname.slice(0, 253) + "…" : hostname;
   return { name, spec: `${name} @ ${url}`, reason: `direct URL install (${displayHost})` };
 }
 
-export { parseDependencyString, parseRequiresDist, parsePyprojectToml, parseSetupCfg, parsePipfile, parseManifestJson, parsePep508UrlRequirement };
+export {
+  parseDependencyString,
+  parseRequiresDist,
+  parsePyprojectToml,
+  parseSetupCfg,
+  parsePipfile,
+  parseManifestJson,
+  parsePep508UrlRequirement,
+};

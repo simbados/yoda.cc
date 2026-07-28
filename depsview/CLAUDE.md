@@ -86,15 +86,21 @@ The web app is served by Cloudflare Pages with a strict CSP defined in `web/_hea
 ## Parser contract
 
 Every lock file parser returns:
+
 ```js
 Array<{ name: string, version: string, resolved: string|null }>
 ```
+
 `resolved` must be `null` or a `https://` URL — non-https values are discarded at parse time.
 
 `parseDependencyFile()` (both CLI and web) returns:
+
 ```js
-{ deps, source, note, warning, privateCount, privatePkgs, dangerousDeps }
+{
+  (deps, source, note, warning, privateCount, privatePkgs, dangerousDeps);
+}
 ```
+
 where `deps` contains only public-registry packages (private ones are in `privatePkgs`).
 
 ## Browser-compatibility rule

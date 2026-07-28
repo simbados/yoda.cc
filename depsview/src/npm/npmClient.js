@@ -5,9 +5,9 @@
  * Implements exponential-backoff retry for 429 responses.
  */
 
-import { fetchWithRetry } from '../util/http.js';
+import { fetchWithRetry } from "../util/http.js";
 
-const REGISTRY = 'https://registry.npmjs.org';
+const REGISTRY = "https://registry.npmjs.org";
 
 /** @type {Map<string, object|null>} */
 const cache = new Map();
@@ -20,7 +20,7 @@ const cache = new Map();
  * @returns {string}
  */
 function encodePackageName(name) {
-  return name.startsWith('@') ? name.replace('/', '%2F') : name;
+  return name.startsWith("@") ? name.replace("/", "%2F") : name;
 }
 
 /**
@@ -34,7 +34,9 @@ function encodePackageName(name) {
 async function fetchPackageInfo(name) {
   const key = name.toLowerCase();
   if (cache.has(key)) return cache.get(key);
-  const data = await fetchWithRetry(`${REGISTRY}/${encodePackageName(name)}`, { serviceName: 'npm registry' });
+  const data = await fetchWithRetry(`${REGISTRY}/${encodePackageName(name)}`, {
+    serviceName: "npm registry",
+  });
   cache.set(key, data);
   return data;
 }
@@ -57,7 +59,7 @@ function getVersionList(packageData) {
  */
 function getReleaseDate(packageData, version) {
   const ts = packageData?.time?.[version];
-  return ts ? ts.split('T')[0] : 'unknown';
+  return ts ? ts.split("T")[0] : "unknown";
 }
 
 /**
@@ -68,14 +70,14 @@ function getReleaseDate(packageData, version) {
  */
 function getFirstReleaseDate(packageData) {
   const time = packageData?.time;
-  if (!time) return 'unknown';
-  if (time.created) return time.created.split('T')[0];
+  if (!time) return "unknown";
+  if (time.created) return time.created.split("T")[0];
   const times = Object.entries(time)
-    .filter(([k]) => k !== 'modified' && k !== 'created')
+    .filter(([k]) => k !== "modified" && k !== "created")
     .map(([, v]) => v)
     .filter(Boolean)
     .sort();
-  return times.length > 0 ? times[0].split('T')[0] : 'unknown';
+  return times.length > 0 ? times[0].split("T")[0] : "unknown";
 }
 
 /**
@@ -94,4 +96,11 @@ function _clearCache() {
   cache.clear();
 }
 
-export { fetchPackageInfo, getVersionList, getReleaseDate, getFirstReleaseDate, getReleaseCount, _clearCache };
+export {
+  fetchPackageInfo,
+  getVersionList,
+  getReleaseDate,
+  getFirstReleaseDate,
+  getReleaseCount,
+  _clearCache,
+};

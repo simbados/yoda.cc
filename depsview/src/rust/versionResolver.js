@@ -37,19 +37,17 @@
  * @returns {{ major: number, minor: number, patch: number, pre: Array<number|string>|null }}
  */
 export function parseSemver(v) {
-  const s = String(v).trim().split('+')[0];
-  const dashIdx = s.indexOf('-');
-  const core    = dashIdx === -1 ? s : s.slice(0, dashIdx);
-  const preStr  = dashIdx === -1 ? null : s.slice(dashIdx + 1);
+  const s = String(v).trim().split("+")[0];
+  const dashIdx = s.indexOf("-");
+  const core = dashIdx === -1 ? s : s.slice(0, dashIdx);
+  const preStr = dashIdx === -1 ? null : s.slice(dashIdx + 1);
 
-  const parts = core.split('.');
+  const parts = core.split(".");
   const major = parseInt(parts[0], 10) || 0;
   const minor = parseInt(parts[1], 10) || 0;
   const patch = parseInt(parts[2], 10) || 0;
 
-  const pre = preStr
-    ? preStr.split('.').map(p => /^\d+$/.test(p) ? parseInt(p, 10) : p)
-    : null;
+  const pre = preStr ? preStr.split(".").map((p) => (/^\d+$/.test(p) ? parseInt(p, 10) : p)) : null;
 
   return { major, minor, patch, pre };
 }
@@ -75,9 +73,14 @@ export function compareSemver(a, b) {
     for (let i = 0; i < len; i++) {
       if (i >= a.pre.length) return -1;
       if (i >= b.pre.length) return 1;
-      const ai = a.pre[i], bi = b.pre[i];
-      const aNum = typeof ai === 'number', bNum = typeof bi === 'number';
-      if (aNum && bNum) { if (ai !== bi) return ai - bi; continue; }
+      const ai = a.pre[i],
+        bi = b.pre[i];
+      const aNum = typeof ai === "number",
+        bNum = typeof bi === "number";
+      if (aNum && bNum) {
+        if (ai !== bi) return ai - bi;
+        continue;
+      }
       if (aNum) return -1;
       if (bNum) return 1;
       const cmp = String(ai).localeCompare(String(bi));
@@ -93,8 +96,11 @@ export function compareSemver(a, b) {
  * @returns {boolean}
  */
 export function isPreRelease(v) {
-  try { return parseSemver(v).pre !== null; }
-  catch { return false; }
+  try {
+    return parseSemver(v).pre !== null;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -103,8 +109,8 @@ export function isPreRelease(v) {
  * @returns {Array<{ op: string, ver: ReturnType<parseSemver> }>}
  */
 function expandCaret(s) {
-  const parts = s.split('.');
-  const isWild = p => !p || /^[xX*]$/.test(p);
+  const parts = s.split(".");
+  const isWild = (p) => !p || /^[xX*]$/.test(p);
 
   const major = parseInt(parts[0], 10) || 0;
   const minor = parts.length >= 2 && !isWild(parts[1]) ? parseInt(parts[1], 10) || 0 : null;
@@ -116,18 +122,21 @@ function expandCaret(s) {
   if (major > 0) {
     upper = parseSemver(`${major + 1}.0.0`);
   } else if (minor === null) {
-    upper = parseSemver('1.0.0');
+    upper = parseSemver("1.0.0");
   } else if (minor > 0) {
     upper = parseSemver(`0.${minor + 1}.0`);
   } else if (patch === null) {
-    upper = parseSemver('0.1.0');
+    upper = parseSemver("0.1.0");
   } else if (patch > 0) {
     upper = parseSemver(`0.0.${patch + 1}`);
   } else {
-    upper = parseSemver('0.0.1');
+    upper = parseSemver("0.0.1");
   }
 
-  return [{ op: '>=', ver: lower }, { op: '<', ver: upper }];
+  return [
+    { op: ">=", ver: lower },
+    { op: "<", ver: upper },
+  ];
 }
 
 /**
@@ -136,20 +145,21 @@ function expandCaret(s) {
  * @returns {Array<{ op: string, ver: ReturnType<parseSemver> }>}
  */
 function expandTilde(s) {
-  const parts = s.split('.');
-  const isWild = p => !p || /^[xX*]$/.test(p);
+  const parts = s.split(".");
+  const isWild = (p) => !p || /^[xX*]$/.test(p);
 
   const major = parseInt(parts[0], 10) || 0;
   const hasMinor = parts.length >= 2 && !isWild(parts[1]);
-  const minor = hasMinor ? (parseInt(parts[1], 10) || 0) : 0;
-  const patch = parts.length >= 3 && !isWild(parts[2]) ? (parseInt(parts[2], 10) || 0) : 0;
+  const minor = hasMinor ? parseInt(parts[1], 10) || 0 : 0;
+  const patch = parts.length >= 3 && !isWild(parts[2]) ? parseInt(parts[2], 10) || 0 : 0;
 
   const lower = parseSemver(`${major}.${minor}.${patch}`);
-  const upper = hasMinor
-    ? parseSemver(`${major}.${minor + 1}.0`)
-    : parseSemver(`${major + 1}.0.0`);
+  const upper = hasMinor ? parseSemver(`${major}.${minor + 1}.0`) : parseSemver(`${major + 1}.0.0`);
 
-  return [{ op: '>=', ver: lower }, { op: '<', ver: upper }];
+  return [
+    { op: ">=", ver: lower },
+    { op: "<", ver: upper },
+  ];
 }
 
 /**
@@ -160,8 +170,8 @@ function expandTilde(s) {
  * @returns {Array<{ op: string, ver: ReturnType<parseSemver> }>}
  */
 function expandWildcard(s) {
-  const parts = s.split('.');
-  const isWild = p => !p || /^[xX*]$/.test(p);
+  const parts = s.split(".");
+  const isWild = (p) => !p || /^[xX*]$/.test(p);
 
   if (isWild(parts[0])) return [];
 
@@ -169,8 +179,8 @@ function expandWildcard(s) {
 
   if (parts.length < 2 || isWild(parts[1])) {
     return [
-      { op: '>=', ver: parseSemver(`${major}.0.0`) },
-      { op: '<',  ver: parseSemver(`${major + 1}.0.0`) },
+      { op: ">=", ver: parseSemver(`${major}.0.0`) },
+      { op: "<", ver: parseSemver(`${major + 1}.0.0`) },
     ];
   }
 
@@ -178,12 +188,12 @@ function expandWildcard(s) {
 
   if (parts.length < 3 || isWild(parts[2])) {
     return [
-      { op: '>=', ver: parseSemver(`${major}.${minor}.0`) },
-      { op: '<',  ver: parseSemver(`${major}.${minor + 1}.0`) },
+      { op: ">=", ver: parseSemver(`${major}.${minor}.0`) },
+      { op: "<", ver: parseSemver(`${major}.${minor + 1}.0`) },
     ];
   }
 
-  return [{ op: '=', ver: parseSemver(s) }];
+  return [{ op: "=", ver: parseSemver(s) }];
 }
 
 /**
@@ -198,14 +208,17 @@ function expandWildcard(s) {
  */
 function parseComparatorToken(token) {
   const s = token.trim();
-  if (!s || s === '*') return [];
-  if (s.startsWith('^')) return expandCaret(s.slice(1).trim());
-  if (s.startsWith('~')) return expandTilde(s.slice(1).trim());
+  if (!s || s === "*") return [];
+  if (s.startsWith("^")) return expandCaret(s.slice(1).trim());
+  if (s.startsWith("~")) return expandTilde(s.slice(1).trim());
 
   const opMatch = s.match(/^(>=|<=|>|<|=)\s*(.+)$/);
   if (opMatch) {
-    try { return [{ op: opMatch[1], ver: parseSemver(opMatch[2]) }]; }
-    catch { return []; }
+    try {
+      return [{ op: opMatch[1], ver: parseSemver(opMatch[2]) }];
+    } catch {
+      return [];
+    }
   }
 
   if (/[xX*]/.test(s)) return expandWildcard(s);
@@ -223,12 +236,18 @@ function parseComparatorToken(token) {
 function satisfiesComparator(v, { op, ver }) {
   const cmp = compareSemver(v, ver);
   switch (op) {
-    case '=':  return cmp === 0;
-    case '>=': return cmp >= 0;
-    case '<=': return cmp <= 0;
-    case '>':  return cmp > 0;
-    case '<':  return cmp < 0;
-    default:   return true;
+    case "=":
+      return cmp === 0;
+    case ">=":
+      return cmp >= 0;
+    case "<=":
+      return cmp <= 0;
+    case ">":
+      return cmp > 0;
+    case "<":
+      return cmp < 0;
+    default:
+      return true;
   }
 }
 
@@ -241,13 +260,16 @@ function satisfiesComparator(v, { op, ver }) {
  * @returns {boolean}
  */
 export function satisfiesRequirement(versionStr, reqStr) {
-  if (!reqStr || reqStr.trim() === '' || reqStr.trim() === '*') return true;
+  if (!reqStr || reqStr.trim() === "" || reqStr.trim() === "*") return true;
   let v;
-  try { v = parseSemver(versionStr); }
-  catch { return false; }
+  try {
+    v = parseSemver(versionStr);
+  } catch {
+    return false;
+  }
 
-  const comparators = reqStr.split(',').flatMap(parseComparatorToken);
-  return comparators.every(c => satisfiesComparator(v, c));
+  const comparators = reqStr.split(",").flatMap(parseComparatorToken);
+  return comparators.every((c) => satisfiesComparator(v, c));
 }
 
 /**
@@ -264,25 +286,28 @@ export function satisfiesRequirement(versionStr, reqStr) {
  * @returns {{ version: string|null, isLatest: boolean }}
  */
 export function resolveVersion(versionSpec, allVersions) {
-  if (!allVersions || allVersions.length === 0) return { version: 'unknown', isLatest: true };
+  if (!allVersions || allVersions.length === 0) return { version: "unknown", isLatest: true };
 
   const sortedDesc = (versions) =>
     [...versions].sort((a, b) => {
-      try { return compareSemver(parseSemver(b), parseSemver(a)); }
-      catch { return 0; }
+      try {
+        return compareSemver(parseSemver(b), parseSemver(a));
+      } catch {
+        return 0;
+      }
     });
 
-  const spec = (versionSpec ?? '').trim();
-  const isAny = !spec || spec === '*' || spec === 'latest';
+  const spec = (versionSpec ?? "").trim();
+  const isAny = !spec || spec === "*" || spec === "latest";
 
   if (isAny) {
-    const stable = allVersions.filter(v => !isPreRelease(v));
-    const pool   = stable.length > 0 ? stable : allVersions;
+    const stable = allVersions.filter((v) => !isPreRelease(v));
+    const pool = stable.length > 0 ? stable : allVersions;
     const sorted = sortedDesc(pool);
     return { version: sorted[0], isLatest: true };
   }
 
-  const sortedStable = sortedDesc(allVersions.filter(v => !isPreRelease(v)));
+  const sortedStable = sortedDesc(allVersions.filter((v) => !isPreRelease(v)));
   for (const v of sortedStable) {
     if (satisfiesRequirement(v, spec)) return { version: v, isLatest: v === sortedStable[0] };
   }

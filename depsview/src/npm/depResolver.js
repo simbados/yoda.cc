@@ -12,11 +12,17 @@
  *   algorithm as python/depResolver.js for cycle detection and concurrency.
  */
 
-import { fetchPackageInfo, getVersionList, getReleaseDate, getFirstReleaseDate, getReleaseCount } from './npmClient.js';
-import { fetchDownloadCounts } from './npmStatsClient.js';
-import { resolveVersion } from './versionResolver.js';
-import { isNonRegistrySpec } from './parserCore.js';
-import { Semaphore } from '../util/semaphore.js';
+import {
+  fetchPackageInfo,
+  getVersionList,
+  getReleaseDate,
+  getFirstReleaseDate,
+  getReleaseCount,
+} from "./npmClient.js";
+import { fetchDownloadCounts } from "./npmStatsClient.js";
+import { resolveVersion } from "./versionResolver.js";
+import { isNonRegistrySpec } from "./parserCore.js";
+import { Semaphore } from "../util/semaphore.js";
 
 const CONCURRENCY = 10;
 
@@ -42,9 +48,9 @@ function buildResult(packageData, fallbackName, version) {
   return {
     name,
     version,
-    releaseDate:      getReleaseDate(packageData, version),
+    releaseDate: getReleaseDate(packageData, version),
     firstReleaseDate: getFirstReleaseDate(packageData),
-    releaseCount:     getReleaseCount(packageData),
+    releaseCount: getReleaseCount(packageData),
     downloadsLastMonth: null,
     link: `https://www.npmjs.com/package/${name}`,
   };
@@ -59,48 +65,56 @@ function buildResult(packageData, fallbackName, version) {
  */
 async function resolveFromLock(packages, opts) {
   const { onProgress } = opts;
-  const results   = new Map();
+  const results = new Map();
   const semaphore = new Semaphore(CONCURRENCY);
 
-  await Promise.all(packages.map(async ({ name, version }) => {
-    // Key includes version so multiple installed versions of the same package
-    // each get their own entry in the results Map.
-    const key = `${normalizePackageName(name)}@${version}`;
-    try {
-      await semaphore.acquire();
-      let packageData;
+  await Promise.all(
+    packages.map(async ({ name, version }) => {
+      // Key includes version so multiple installed versions of the same package
+      // each get their own entry in the results Map.
+      const key = `${normalizePackageName(name)}@${version}`;
       try {
-        packageData = await fetchPackageInfo(name);
-      } finally {
-        semaphore.release();
-      }
+        await semaphore.acquire();
+        let packageData;
+        try {
+          packageData = await fetchPackageInfo(name);
+        } finally {
+          semaphore.release();
+        }
 
-      if (!packageData) {
-        onProgress?.(`  [warn] Package not found on npm registry: ${name}`);
+        if (!packageData) {
+          onProgress?.(`  [warn] Package not found on npm registry: ${name}`);
+          results.set(key, {
+            name,
+            version,
+            releaseDate: "unknown",
+            firstReleaseDate: "unknown",
+            releaseCount: 0,
+            downloadsLastMonth: null,
+            link: `https://www.npmjs.com/package/${name}`,
+            error: "Package not found on npm registry",
+          });
+          return;
+        }
+
+        onProgress?.(`  ${packageData.name ?? name} ${version}`);
+        results.set(key, buildResult(packageData, name, version));
+      } catch (err) {
+        // A network error on one package must not abort the entire batch —
+        // store it as an error entry and continue resolving the rest.
         results.set(key, {
-          name, version,
-          releaseDate: 'unknown', firstReleaseDate: 'unknown',
-          releaseCount: 0, downloadsLastMonth: null,
+          name,
+          version,
+          releaseDate: "unknown",
+          firstReleaseDate: "unknown",
+          releaseCount: 0,
+          downloadsLastMonth: null,
           link: `https://www.npmjs.com/package/${name}`,
-          error: 'Package not found on npm registry',
+          error: err.message,
         });
-        return;
       }
-
-      onProgress?.(`  ${packageData.name ?? name} ${version}`);
-      results.set(key, buildResult(packageData, name, version));
-    } catch (err) {
-      // A network error on one package must not abort the entire batch —
-      // store it as an error entry and continue resolving the rest.
-      results.set(key, {
-        name, version,
-        releaseDate: 'unknown', firstReleaseDate: 'unknown',
-        releaseCount: 0, downloadsLastMonth: null,
-        link: `https://www.npmjs.com/package/${name}`,
-        error: err.message,
-      });
-    }
-  }));
+    }),
+  );
 
   return results;
 }
@@ -114,8 +128,8 @@ async function resolveFromLock(packages, opts) {
  */
 async function resolveFromRanges(directDeps, opts) {
   const { onProgress } = opts;
-  const results   = new Map();
-  const pending   = new Map();
+  const results = new Map();
+  const pending = new Map();
   const semaphore = new Semaphore(CONCURRENCY);
 
   function fetchOne(dep) {
@@ -134,11 +148,14 @@ async function resolveFromRanges(directDeps, opts) {
       if (!packageData) {
         onProgress?.(`  [warn] Package not found on npm registry: ${dep.name}`);
         results.set(key, {
-          name: dep.name, version: 'not found',
-          releaseDate: 'unknown', firstReleaseDate: 'unknown',
-          releaseCount: 0, downloadsLastMonth: null,
+          name: dep.name,
+          version: "not found",
+          releaseDate: "unknown",
+          firstReleaseDate: "unknown",
+          releaseCount: 0,
+          downloadsLastMonth: null,
           link: `https://www.npmjs.com/package/${dep.name}`,
-          error: 'Package not found on npm registry',
+          error: "Package not found on npm registry",
         });
         return;
       }
@@ -147,17 +164,17 @@ async function resolveFromRanges(directDeps, opts) {
       const { version } = resolveVersion(dep.versionSpec, allVersions);
 
       if (version === null) {
-        const specLabel = dep.versionSpec ?? '(unknown spec)';
+        const specLabel = dep.versionSpec ?? "(unknown spec)";
         onProgress?.(`  [warn] No version matching "${specLabel}" found for ${dep.name}`);
         results.set(key, {
-          name:             packageData.name ?? dep.name,
-          version:          'not found',
-          releaseDate:      'unknown',
-          firstReleaseDate: 'unknown',
-          releaseCount:     getReleaseCount(packageData),
+          name: packageData.name ?? dep.name,
+          version: "not found",
+          releaseDate: "unknown",
+          firstReleaseDate: "unknown",
+          releaseCount: getReleaseCount(packageData),
           downloadsLastMonth: null,
-          link:             `https://www.npmjs.com/package/${dep.name}`,
-          error:            `No version matching "${specLabel}" found on npm registry`,
+          link: `https://www.npmjs.com/package/${dep.name}`,
+          error: `No version matching "${specLabel}" found on npm registry`,
         });
         return;
       }
@@ -172,12 +189,15 @@ async function resolveFromRanges(directDeps, opts) {
         .filter(([n, s]) => !pending.has(normalizePackageName(n)) && !isNonRegistrySpec(s))
         .map(([n, s]) => ({ name: n, versionSpec: s }));
 
-      await Promise.all(transitive.map(d => fetchOne(d)));
-    })().catch(err => {
+      await Promise.all(transitive.map((d) => fetchOne(d)));
+    })().catch((err) => {
       results.set(key, {
-        name: dep.name, version: 'error',
-        releaseDate: 'unknown', firstReleaseDate: 'unknown',
-        releaseCount: 0, downloadsLastMonth: null,
+        name: dep.name,
+        version: "error",
+        releaseDate: "unknown",
+        firstReleaseDate: "unknown",
+        releaseCount: 0,
+        downloadsLastMonth: null,
         link: `https://www.npmjs.com/package/${dep.name}`,
         error: err.message,
       });
@@ -187,7 +207,7 @@ async function resolveFromRanges(directDeps, opts) {
     return promise;
   }
 
-  await Promise.all(directDeps.map(d => fetchOne(d)));
+  await Promise.all(directDeps.map((d) => fetchOne(d)));
   return results;
 }
 
@@ -209,11 +229,11 @@ async function resolveFromRanges(directDeps, opts) {
  */
 async function fillDownloadCounts(results, opts) {
   const { onProgress } = opts;
-  const resolved = [...results.values()].filter(r => !r.error);
+  const resolved = [...results.values()].filter((r) => !r.error);
   if (resolved.length === 0) return;
 
-  onProgress?.('\nFetching download counts...');
-  const counts = await fetchDownloadCounts(resolved.map(r => r.name));
+  onProgress?.("\nFetching download counts...");
+  const counts = await fetchDownloadCounts(resolved.map((r) => r.name));
   for (const result of resolved) {
     result.downloadsLastMonth = counts.get(result.name.toLowerCase()) ?? null;
   }
@@ -236,9 +256,8 @@ async function fillDownloadCounts(results, opts) {
 async function resolveDependencies(deps, opts = {}) {
   if (deps.length === 0) return new Map();
   const { downloads = true } = opts;
-  const results = 'version' in deps[0]
-    ? await resolveFromLock(deps, opts)
-    : await resolveFromRanges(deps, opts);
+  const results =
+    "version" in deps[0] ? await resolveFromLock(deps, opts) : await resolveFromRanges(deps, opts);
 
   if (downloads) await fillDownloadCounts(results, opts);
   return results;

@@ -10,9 +10,9 @@
  * When debug mode is active (src/debugging.js), API errors are logged to stderr.
  */
 
-import { debugLog } from '../util/debugging.js';
+import { debugLog } from "../util/debugging.js";
 
-const GITHUB_API = 'https://api.github.com';
+const GITHUB_API = "https://api.github.com";
 
 /**
  * Module-level token override. Set by setGithubToken() in browser contexts
@@ -40,7 +40,7 @@ function setGithubToken(token) {
  */
 function getGithubToken() {
   if (_tokenOverride) return _tokenOverride;
-  return typeof process !== 'undefined' ? process.env?.GITHUB_TOKEN : undefined;
+  return typeof process !== "undefined" ? process.env?.GITHUB_TOKEN : undefined;
 }
 
 /**
@@ -50,12 +50,12 @@ function getGithubToken() {
  * @returns {string} decoded UTF-8 string
  */
 function decodeBase64(b64) {
-  const clean = b64.replace(/\n/g, '');
-  if (typeof Buffer !== 'undefined') {
-    return Buffer.from(clean, 'base64').toString('utf8');
+  const clean = b64.replace(/\n/g, "");
+  if (typeof Buffer !== "undefined") {
+    return Buffer.from(clean, "base64").toString("utf8");
   }
   const binary = atob(clean);
-  const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+  const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
   return new TextDecoder().decode(bytes);
 }
 
@@ -67,13 +67,13 @@ function decodeBase64(b64) {
  */
 function buildHeaders() {
   const headers = {
-    'Accept': 'application/vnd.github+json',
-    'User-Agent': 'depsview',
-    'X-GitHub-Api-Version': '2022-11-28',
+    Accept: "application/vnd.github+json",
+    "User-Agent": "depsview",
+    "X-GitHub-Api-Version": "2022-11-28",
   };
   const token = getGithubToken();
   if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+    headers["Authorization"] = `Bearer ${token}`;
   }
   return headers;
 }
@@ -90,7 +90,7 @@ function buildHeaders() {
  * @returns {Promise<Array<{ name: string, type: string, path: string }>|null>}
  */
 async function listDirectory(owner, repo, dirPath, ref) {
-  const apiPath = dirPath ? `/${dirPath}` : '';
+  const apiPath = dirPath ? `/${dirPath}` : "";
   const url = `${GITHUB_API}/repos/${owner}/${repo}/contents${apiPath}?ref=${encodeURIComponent(ref)}`;
 
   let response;
@@ -106,9 +106,10 @@ async function listDirectory(owner, repo, dirPath, ref) {
     return null;
   }
   if (response.status === 403 || response.status === 401) {
-    const msg = response.status === 401
-      ? 'Unauthorized — set GITHUB_TOKEN for private repos'
-      : 'Forbidden — rate limit may be exceeded; set GITHUB_TOKEN to increase it';
+    const msg =
+      response.status === 401
+        ? "Unauthorized — set GITHUB_TOKEN for private repos"
+        : "Forbidden — rate limit may be exceeded; set GITHUB_TOKEN to increase it";
     debugLog(`GitHub ${response.status} for ${url}: ${msg}`);
     throw new Error(`GitHub API: ${msg}`);
   }
@@ -153,9 +154,10 @@ async function fetchFileContent(owner, repo, filePath, ref) {
     return null;
   }
   if (response.status === 403 || response.status === 401) {
-    const msg = response.status === 401
-      ? 'Unauthorized — set GITHUB_TOKEN for private repos'
-      : 'Forbidden — rate limit may be exceeded; set GITHUB_TOKEN to increase it';
+    const msg =
+      response.status === 401
+        ? "Unauthorized — set GITHUB_TOKEN for private repos"
+        : "Forbidden — rate limit may be exceeded; set GITHUB_TOKEN to increase it";
     debugLog(`GitHub ${response.status} for ${url}: ${msg}`);
     throw new Error(`GitHub API: ${msg}`);
   }
@@ -165,7 +167,7 @@ async function fetchFileContent(owner, repo, filePath, ref) {
   }
 
   const data = await response.json();
-  if (!data.content || data.encoding !== 'base64') {
+  if (!data.content || data.encoding !== "base64") {
     debugLog(`GitHub: unexpected response shape for ${url} (encoding=${data.encoding})`);
     return null;
   }

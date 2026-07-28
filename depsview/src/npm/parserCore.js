@@ -11,7 +11,7 @@
  * @returns {boolean}
  */
 function isNonRegistrySpec(spec) {
-  if (typeof spec !== 'string') return true;
+  if (typeof spec !== "string") return true;
   return /^(file:|link:|workspace:|git\+|git:|github:|https?:|[./])/.test(spec.trim());
 }
 
@@ -22,10 +22,10 @@ function isNonRegistrySpec(spec) {
  */
 function specReason(spec) {
   const s = String(spec).trim();
-  if (/^(file:|link:|\.\.?[/\\])/.test(s)) return 'local path';
-  if (/^(git\+|git:|github:)/.test(s))     return 'git reference';
-  if (/^https?:/.test(s))                  return 'direct URL';
-  return 'non-registry spec';
+  if (/^(file:|link:|\.\.?[/\\])/.test(s)) return "local path";
+  if (/^(git\+|git:|github:)/.test(s)) return "git reference";
+  if (/^https?:/.test(s)) return "direct URL";
+  return "non-registry spec";
 }
 
 /**
@@ -45,7 +45,7 @@ function parsePackageJson(content, includeTests = false) {
   const dangerousDeps = [];
 
   const collect = (obj) => {
-    if (!obj || typeof obj !== 'object') return;
+    if (!obj || typeof obj !== "object") return;
     for (const [name, spec] of Object.entries(obj)) {
       if (!isNonRegistrySpec(spec)) {
         deps.push({ name, versionSpec: String(spec).trim() || null });

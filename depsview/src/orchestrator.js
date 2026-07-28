@@ -15,31 +15,38 @@
  * sections from resolving and rendering.
  */
 
-import { parseDependencyFile    as parseNpmFile,
-         readDirectNamesFromPackageJson } from './npm/parser.js';
-import { NPM_LOCK_FILENAMES             } from './npm/lockRegistry.js';
-import { resolveDependencies    as resolveNpm,
-         normalizePackageName   as normalizeNpm } from './npm/depResolver.js';
+import {
+  parseDependencyFile as parseNpmFile,
+  readDirectNamesFromPackageJson,
+} from "./npm/parser.js";
+import { NPM_LOCK_FILENAMES } from "./npm/lockRegistry.js";
+import {
+  resolveDependencies as resolveNpm,
+  normalizePackageName as normalizeNpm,
+} from "./npm/depResolver.js";
 
-import { parseDependencyFile    as parsePythonFile } from './python/parser.js';
-import { resolveDependencies    as resolvePython }   from './python/depResolver.js';
-import { normalizePackageName   as normalizePython } from './python/pypiClient.js';
+import { parseDependencyFile as parsePythonFile } from "./python/parser.js";
+import { resolveDependencies as resolvePython } from "./python/depResolver.js";
+import { normalizePackageName as normalizePython } from "./python/pypiClient.js";
 
-import { parseDependencyFile    as parseGoFile,
-         readDirectNamesFromGoMod        } from './go/parser.js';
-import { resolveDependencies    as resolveGo } from './go/depResolver.js';
-import { parseGoMod                       } from './go/parserCore.js';
+import { parseDependencyFile as parseGoFile, readDirectNamesFromGoMod } from "./go/parser.js";
+import { resolveDependencies as resolveGo } from "./go/depResolver.js";
+import { parseGoMod } from "./go/parserCore.js";
 
-import { parseDependencyFile    as parseRustFile,
-         readDirectNamesFromCargoToml    } from './rust/parser.js';
-import { resolveDependencies    as resolveRust } from './rust/depResolver.js';
-import { normalizeCrateName, parseCargoToml    } from './rust/parserCore.js';
+import {
+  parseDependencyFile as parseRustFile,
+  readDirectNamesFromCargoToml,
+} from "./rust/parser.js";
+import { resolveDependencies as resolveRust } from "./rust/depResolver.js";
+import { normalizeCrateName, parseCargoToml } from "./rust/parserCore.js";
 
-import { parseGithubNpmDependencies,
-         parseGithubGoDependencies,
-         parseGithubRustDependencies,
-         parseGithubDependencies         } from './github/parser.js';
-import { fetchFileContent                } from './github/client.js';
+import {
+  parseGithubNpmDependencies,
+  parseGithubGoDependencies,
+  parseGithubRustDependencies,
+  parseGithubDependencies,
+} from "./github/parser.js";
+import { fetchFileContent } from "./github/client.js";
 
 /**
  * Normaliser used when matching resolved package names back to the directName
@@ -49,7 +56,7 @@ import { fetchFileContent                } from './github/client.js';
  * @returns {string}
  */
 function formatterNorm(name) {
-  return name.toLowerCase().replace(/[-_.]+/g, '-');
+  return name.toLowerCase().replace(/[-_.]+/g, "-");
 }
 
 /**
@@ -59,11 +66,15 @@ function formatterNorm(name) {
  * @returns {Promise<Set<string>>}
  */
 async function readDirectGoNamesFromGithub({ owner, repo, ref, subpath }) {
-  const filePath = subpath ? `${subpath}/go.mod` : 'go.mod';
+  const filePath = subpath ? `${subpath}/go.mod` : "go.mod";
   const content = await fetchFileContent(owner, repo, filePath, ref);
   if (!content) return new Set();
   try {
-    return new Set(parseGoMod(content).filter(d => !d.indirect).map(d => d.name.toLowerCase()));
+    return new Set(
+      parseGoMod(content)
+        .filter((d) => !d.indirect)
+        .map((d) => d.name.toLowerCase()),
+    );
   } catch {
     return new Set();
   }
@@ -78,11 +89,11 @@ async function readDirectGoNamesFromGithub({ owner, repo, ref, subpath }) {
  * @returns {Promise<Set<string>>}
  */
 async function readDirectRustNamesFromGithub({ owner, repo, ref, subpath }) {
-  const filePath = subpath ? `${subpath}/Cargo.toml` : 'Cargo.toml';
+  const filePath = subpath ? `${subpath}/Cargo.toml` : "Cargo.toml";
   const content = await fetchFileContent(owner, repo, filePath, ref);
   if (!content) return new Set();
   try {
-    return new Set(parseCargoToml(content).deps.map(d => normalizeCrateName(d.name)));
+    return new Set(parseCargoToml(content).deps.map((d) => normalizeCrateName(d.name)));
   } catch {
     return new Set();
   }
@@ -105,26 +116,22 @@ async function readDirectRustNamesFromGithub({ owner, repo, ref, subpath }) {
 async function parseSection(ecosystem, ctx, opts) {
   if (ctx.isPackage) {
     const { name, version } = ctx.packageDep;
-    const dep = ecosystem === 'go'
-      ? { name, version }
-      : { name, versionSpec: version };
-    return { deps: [dep], source: 'package search', note: null };
+    const dep = ecosystem === "go" ? { name, version } : { name, versionSpec: version };
+    return { deps: [dep], source: "package search", note: null };
   }
 
   const { isGithub, githubRef, absolutePath } = ctx;
   const { includeTests } = opts;
 
-  if (ecosystem === 'npm') {
+  if (ecosystem === "npm") {
     return isGithub
       ? await parseGithubNpmDependencies(githubRef, { includeTests })
       : parseNpmFile(absolutePath, { includeTests });
   }
-  if (ecosystem === 'go') {
-    return isGithub
-      ? await parseGithubGoDependencies(githubRef)
-      : parseGoFile(absolutePath);
+  if (ecosystem === "go") {
+    return isGithub ? await parseGithubGoDependencies(githubRef) : parseGoFile(absolutePath);
   }
-  if (ecosystem === 'rust') {
+  if (ecosystem === "rust") {
     return isGithub
       ? await parseGithubRustDependencies(githubRef)
       : parseRustFile(absolutePath, { includeTests });
@@ -144,9 +151,9 @@ async function parseSection(ecosystem, ctx, opts) {
  */
 async function resolveSectionDeps(ecosystem, deps, opts) {
   const { downloadStats, onProgress } = opts;
-  if (ecosystem === 'npm')    return resolveNpm(deps,    { onProgress });
-  if (ecosystem === 'go')     return resolveGo(deps,     { onProgress });
-  if (ecosystem === 'rust')   return resolveRust(deps,   { onProgress });
+  if (ecosystem === "npm") return resolveNpm(deps, { onProgress });
+  if (ecosystem === "go") return resolveGo(deps, { onProgress });
+  if (ecosystem === "rust") return resolveRust(deps, { onProgress });
   return resolvePython(deps, { onProgress, downloadStats });
 }
 
@@ -167,42 +174,42 @@ async function resolveSectionDeps(ecosystem, deps, opts) {
  */
 async function directNamesForSection(ecosystem, deps, source, ctx, opts) {
   if (ctx.isPackage) {
-    if (ecosystem === 'go')     return new Set([formatterNorm(ctx.packageDep.name)]);
-    if (ecosystem === 'npm')    return new Set([normalizeNpm(ctx.packageDep.name)]);
-    if (ecosystem === 'rust')   return new Set([normalizeCrateName(ctx.packageDep.name)]);
+    if (ecosystem === "go") return new Set([formatterNorm(ctx.packageDep.name)]);
+    if (ecosystem === "npm") return new Set([normalizeNpm(ctx.packageDep.name)]);
+    if (ecosystem === "rust") return new Set([normalizeCrateName(ctx.packageDep.name)]);
     return new Set([normalizePython(ctx.packageDep.name)]);
   }
 
   const { isGithub, githubRef, absolutePath } = ctx;
   const { includeTests } = opts;
 
-  if (ecosystem === 'npm') {
+  if (ecosystem === "npm") {
     const isLockFile = NPM_LOCK_FILENAMES.has(source);
-    if (!isLockFile) return new Set(deps.map(d => normalizeNpm(d.name)));
+    if (!isLockFile) return new Set(deps.map((d) => normalizeNpm(d.name)));
     return isGithub ? new Set() : readDirectNamesFromPackageJson(absolutePath, includeTests);
   }
 
-  if (ecosystem === 'go') {
-    if (source === 'go.sum') {
+  if (ecosystem === "go") {
+    if (source === "go.sum") {
       const raw = isGithub
         ? await readDirectGoNamesFromGithub(githubRef)
         : readDirectNamesFromGoMod(absolutePath);
       return new Set([...raw].map(formatterNorm));
     }
-    return new Set(deps.filter(d => !d.indirect).map(d => formatterNorm(d.name)));
+    return new Set(deps.filter((d) => !d.indirect).map((d) => formatterNorm(d.name)));
   }
 
-  if (ecosystem === 'rust') {
-    if (source === 'Cargo.lock') {
+  if (ecosystem === "rust") {
+    if (source === "Cargo.lock") {
       const raw = isGithub
         ? await readDirectRustNamesFromGithub(githubRef)
         : readDirectNamesFromCargoToml(absolutePath, includeTests);
       return new Set([...raw].map(formatterNorm));
     }
-    return new Set(deps.map(d => formatterNorm(d.name)));
+    return new Set(deps.map((d) => formatterNorm(d.name)));
   }
 
-  return new Set(deps.map(d => normalizePython(d.name)));
+  return new Set(deps.map((d) => normalizePython(d.name)));
 }
 
 /**
@@ -217,7 +224,15 @@ async function directNamesForSection(ecosystem, deps, source, ctx, opts) {
  */
 async function buildSection(ecosystem, ctx, opts) {
   try {
-    const { deps, source, note = null, warning = null, privateCount = 0, privatePkgs = [], dangerousDeps = [] } = await parseSection(ecosystem, ctx, opts);
+    const {
+      deps,
+      source,
+      note = null,
+      warning = null,
+      privateCount = 0,
+      privatePkgs = [],
+      dangerousDeps = [],
+    } = await parseSection(ecosystem, ctx, opts);
 
     // If the lock file carries a privacy/security warning (e.g. Yarn Berry), give
     // the caller a chance to confirm before resolution fires network requests.
@@ -226,12 +241,36 @@ async function buildSection(ecosystem, ctx, opts) {
     // up, abort the section rather than silently leaking private package names.
     if (warning) {
       const confirmed = opts.onWarning ? await opts.onWarning(warning) : false;
-      if (!confirmed) return { ecosystem, source, deps: [], results: new Map(), directNames: new Set(), note, warning, privateCount: 0, privatePkgs: [], dangerousDeps: [], aborted: true };
+      if (!confirmed)
+        return {
+          ecosystem,
+          source,
+          deps: [],
+          results: new Map(),
+          directNames: new Set(),
+          note,
+          warning,
+          privateCount: 0,
+          privatePkgs: [],
+          dangerousDeps: [],
+          aborted: true,
+        };
     }
 
-    const results       = await resolveSectionDeps(ecosystem, deps, opts);
-    const directNames   = await directNamesForSection(ecosystem, deps, source, ctx, opts);
-    return { ecosystem, source, deps, results, directNames, note, warning, privateCount, privatePkgs, dangerousDeps };
+    const results = await resolveSectionDeps(ecosystem, deps, opts);
+    const directNames = await directNamesForSection(ecosystem, deps, source, ctx, opts);
+    return {
+      ecosystem,
+      source,
+      deps,
+      results,
+      directNames,
+      note,
+      warning,
+      privateCount,
+      privatePkgs,
+      dangerousDeps,
+    };
   } catch (err) {
     return { ecosystem, error: err.message };
   }
@@ -256,7 +295,9 @@ async function orchestrate(ctx, opts) {
   const sections = new Map();
 
   const settled = await Promise.all(
-    list.map(eco => buildSection(eco, ctx, { includeTests, downloadStats, onProgress, onWarning }))
+    list.map((eco) =>
+      buildSection(eco, ctx, { includeTests, downloadStats, onProgress, onWarning }),
+    ),
   );
   for (const section of settled) sections.set(section.ecosystem, section);
   return sections;
@@ -274,7 +315,14 @@ function packagesForSocket(sections) {
   const all = [];
   for (const [ecosystem, section] of sections) {
     if (section.error || !section.results) continue;
-    const purl = ecosystem === 'python' ? 'pypi' : ecosystem === 'go' ? 'golang' : ecosystem === 'rust' ? 'cargo' : 'npm';
+    const purl =
+      ecosystem === "python"
+        ? "pypi"
+        : ecosystem === "go"
+          ? "golang"
+          : ecosystem === "rust"
+            ? "cargo"
+            : "npm";
     for (const r of section.results.values()) {
       if (r.error) continue;
       all.push({ name: r.name, version: r.version, ecosystem: purl });
@@ -283,4 +331,11 @@ function packagesForSocket(sections) {
   return all;
 }
 
-export { orchestrate, packagesForSocket, buildSection, parseSection, resolveSectionDeps, directNamesForSection };
+export {
+  orchestrate,
+  packagesForSocket,
+  buildSection,
+  parseSection,
+  resolveSectionDeps,
+  directNamesForSection,
+};

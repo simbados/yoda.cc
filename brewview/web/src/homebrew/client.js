@@ -6,7 +6,7 @@
  * token set via setGithubToken() to raise the rate limit from 60 to 5 000/hr.
  */
 
-const FORMULA_API = 'https://formulae.brew.sh/api/formula';
+const FORMULA_API = "https://formulae.brew.sh/api/formula";
 
 /** Currently active GitHub personal access token, or null when unauthenticated. */
 let githubToken = null;
@@ -19,7 +19,7 @@ let githubToken = null;
 export function setGithubToken(token) {
   githubToken = token ?? null;
 }
-const CASK_API    = 'https://formulae.brew.sh/api/cask';
+const CASK_API = "https://formulae.brew.sh/api/cask";
 
 /**
  * Encodes a formula or cask name for use in a URL path segment.
@@ -28,7 +28,7 @@ const CASK_API    = 'https://formulae.brew.sh/api/cask';
  * @returns {string}
  */
 function apiSafeName(name) {
-  return encodeURIComponent(name).replace(/%40/g, '@');
+  return encodeURIComponent(name).replace(/%40/g, "@");
 }
 
 /**
@@ -45,7 +45,7 @@ export async function fetchFormula(name) {
 }
 
 /** GitHub login of Homebrew's CI machine account that publishes releases. */
-const BREW_TEST_BOT = 'BrewTestBot';
+const BREW_TEST_BOT = "BrewTestBot";
 
 /** How many recent commits to scan when locating the latest BrewTestBot commit. */
 const COMMIT_PAGE_SIZE = 100;
@@ -56,9 +56,9 @@ const COMMIT_PAGE_SIZE = 100;
  * failures and surface a specific message to the user.
  */
 export class RateLimitError extends Error {
-  constructor(message = 'GitHub API rate limit reached') {
+  constructor(message = "GitHub API rate limit reached") {
     super(message);
-    this.name = 'RateLimitError';
+    this.name = "RateLimitError";
   }
 }
 
@@ -98,13 +98,13 @@ export async function fetchFormulaLastUpdated(rubySourcePath) {
   try {
     const res = await fetch(
       `https://api.github.com/repos/Homebrew/homebrew-core/commits` +
-      `?path=${encodeURIComponent(rubySourcePath)}&per_page=${COMMIT_PAGE_SIZE}`,
+        `?path=${encodeURIComponent(rubySourcePath)}&per_page=${COMMIT_PAGE_SIZE}`,
       {
         headers: {
-          Accept: 'application/vnd.github.v3+json',
+          Accept: "application/vnd.github.v3+json",
           ...(githubToken ? { Authorization: `Bearer ${githubToken}` } : {}),
         },
-      }
+      },
     );
     // 403/429 from GitHub means the rate limit was hit. Raise it distinctly so
     // resolve() can report it instead of letting the date silently go missing.
@@ -116,8 +116,8 @@ export async function fetchFormulaLastUpdated(rubySourcePath) {
     if (!Array.isArray(commits)) return null;
 
     // Commits come back newest-first; the first BrewTestBot match is the latest.
-    const hit = commits.find(c =>
-      c?.author?.login === BREW_TEST_BOT || c?.committer?.login === BREW_TEST_BOT
+    const hit = commits.find(
+      (c) => c?.author?.login === BREW_TEST_BOT || c?.committer?.login === BREW_TEST_BOT,
     );
     const date = hit?.commit?.committer?.date;
     return date ? date.slice(0, 10) : null;
@@ -158,20 +158,20 @@ export async function fetchCaskLastUpdated(rubySourcePath) {
   try {
     const res = await fetch(
       `https://api.github.com/repos/Homebrew/homebrew-cask/commits` +
-      `?path=${encodeURIComponent(rubySourcePath)}&per_page=${COMMIT_PAGE_SIZE}`,
+        `?path=${encodeURIComponent(rubySourcePath)}&per_page=${COMMIT_PAGE_SIZE}`,
       {
         headers: {
-          Accept: 'application/vnd.github.v3+json',
+          Accept: "application/vnd.github.v3+json",
           ...(githubToken ? { Authorization: `Bearer ${githubToken}` } : {}),
         },
-      }
+      },
     );
     if (res.status === 403 || res.status === 429) throw new RateLimitError();
     if (!res.ok) return null;
     const commits = await res.json();
     if (!Array.isArray(commits)) return null;
-    const hit = commits.find(c =>
-      c?.author?.login === BREW_TEST_BOT || c?.committer?.login === BREW_TEST_BOT
+    const hit = commits.find(
+      (c) => c?.author?.login === BREW_TEST_BOT || c?.committer?.login === BREW_TEST_BOT,
     );
     const date = hit?.commit?.committer?.date;
     return date ? date.slice(0, 10) : null;

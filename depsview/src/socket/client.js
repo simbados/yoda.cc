@@ -5,9 +5,9 @@
  * API reference: https://docs.socket.dev/reference/batchpackagefetchbyorg
  */
 
-import { fetchWithRetry } from '../util/http.js';
+import { fetchWithRetry } from "../util/http.js";
 
-const SOCKET_API = 'https://api.socket.dev/v0/orgs';
+const SOCKET_API = "https://api.socket.dev/v0/orgs";
 
 /**
  * Builds a Package URL (PURL) string for a given package.
@@ -31,12 +31,12 @@ function buildPurl(name, version, ecosystem) {
  * @returns {{ type: string, name: string, version: string }|null}
  */
 function parsePurl(purl) {
-  if (typeof purl !== 'string' || !purl.startsWith('pkg:')) return null;
+  if (typeof purl !== "string" || !purl.startsWith("pkg:")) return null;
   const body = purl.slice(4);
-  const at = body.lastIndexOf('@');
+  const at = body.lastIndexOf("@");
   if (at === -1) return null;
   const version = body.slice(at + 1);
-  const slash = body.indexOf('/');
+  const slash = body.indexOf("/");
   if (slash === -1) return null;
   const type = body.slice(0, slash);
   const name = body.slice(slash + 1, at);
@@ -53,7 +53,7 @@ function parsePurl(purl) {
  */
 function parseNdjson(text) {
   const results = [];
-  for (const line of text.split('\n')) {
+  for (const line of text.split("\n")) {
     const trimmed = line.trim();
     if (!trimmed) continue;
     try {
@@ -112,21 +112,21 @@ async function fetchSocketScores(packages, apiKey, orgSlug, opts = {}) {
     const apiBase = opts.proxyBase ?? SOCKET_API;
     const url =
       `${apiBase}/${encodeURIComponent(orgSlug)}/purl` +
-      '?alerts=false&compact=false&fixable=false&licenseattrib=false' +
-      '&licensedetails=false&purlErrors=false&poll=false' +
-      '&cachedResultsOnly=false&summary=false';
+      "?alerts=false&compact=false&fixable=false&licenseattrib=false" +
+      "&licensedetails=false&purlErrors=false&poll=false" +
+      "&cachedResultsOnly=false&summary=false";
 
     const text = await fetchWithRetry(url, {
-      serviceName:  'socket.dev',
+      serviceName: "socket.dev",
       throwOnError: false,
-      method:       'POST',
+      method: "POST",
       headers: {
-        'Accept':        'application/x-ndjson',
-        'Content-Type':  'application/json',
-        'Authorization': `Bearer ${apiKey}`,
+        Accept: "application/x-ndjson",
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
       },
-      body:         JSON.stringify({ components }),
-      responseType: 'text',
+      body: JSON.stringify({ components }),
+      responseType: "text",
     });
 
     if (!text) return new Map();
@@ -143,8 +143,8 @@ async function fetchSocketScores(packages, apiKey, orgSlug, opts = {}) {
         ({ type: ecosystem, name: fullName, version } = parsed);
       } else if (obj.type && obj.name && obj.version) {
         ecosystem = obj.type;
-        fullName  = obj.namespace ? `${obj.namespace}/${obj.name}` : obj.name;
-        version   = obj.version;
+        fullName = obj.namespace ? `${obj.namespace}/${obj.name}` : obj.name;
+        version = obj.version;
       } else {
         continue;
       }

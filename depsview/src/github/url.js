@@ -11,7 +11,7 @@
  * @returns {boolean}
  */
 function isGithubUrl(s) {
-  return typeof s === 'string' && /^https?:\/\/github\.com\//i.test(s);
+  return typeof s === "string" && /^https?:\/\/github\.com\//i.test(s);
 }
 
 /**
@@ -33,29 +33,29 @@ function isGithubUrl(s) {
  * @throws {Error} if the URL does not match the expected GitHub URL shape
  */
 function parseGithubUrl(url) {
-  const clean = url.trim().replace(/\/+$/, '');
+  const clean = url.trim().replace(/\/+$/, "");
 
   const match = clean.match(
-    /^https?:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?(?:\/tree\/(.+))?$/i
+    /^https?:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?(?:\/tree\/(.+))?$/i,
   );
 
   if (!match) {
     throw new Error(`Not a valid GitHub repository URL: ${url}`);
   }
 
-  const owner   = match[1];
-  const repo    = match[2];
-  const treePart = match[3] ?? '';
+  const owner = match[1];
+  const repo = match[2];
+  const treePart = match[3] ?? "";
 
-  let ref     = 'HEAD';
-  let subpath = '';
+  let ref = "HEAD";
+  let subpath = "";
 
   if (treePart) {
-    const slashIdx = treePart.indexOf('/');
+    const slashIdx = treePart.indexOf("/");
     if (slashIdx === -1) {
       ref = treePart;
     } else {
-      ref     = treePart.slice(0, slashIdx);
+      ref = treePart.slice(0, slashIdx);
       subpath = treePart.slice(slashIdx + 1);
     }
   }

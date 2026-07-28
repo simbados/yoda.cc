@@ -15,16 +15,16 @@
  * ecosystems are present.
  */
 
-import { domainOf, groupByDomain } from './nonStandardSources.js';
+import { domainOf, groupByDomain } from "./nonStandardSources.js";
 
-const ANSI_RED    = '\x1b[31m';
-const ANSI_ORANGE = '\x1b[38;5;208m';
-const ANSI_YELLOW = '\x1b[33m';
-const ANSI_GREEN  = '\x1b[32m';
-const ANSI_RESET  = '\x1b[0m';
+const ANSI_RED = "\x1b[31m";
+const ANSI_ORANGE = "\x1b[38;5;208m";
+const ANSI_YELLOW = "\x1b[33m";
+const ANSI_GREEN = "\x1b[32m";
+const ANSI_RESET = "\x1b[0m";
 
 /** Ecosystems are always rendered in this fixed order. */
-const ECOSYSTEM_ORDER = ['npm', 'python', 'go', 'rust'];
+const ECOSYSTEM_ORDER = ["npm", "python", "go", "rust"];
 
 /**
  * Maps a depsview ecosystem label to the corresponding socket.dev PURL type.
@@ -34,10 +34,13 @@ const ECOSYSTEM_ORDER = ['npm', 'python', 'go', 'rust'];
  * @returns {'npm'|'pypi'|'golang'|'cargo'}
  */
 function purlEcosystem(ecosystem) {
-  return ecosystem === 'python' ? 'pypi'
-       : ecosystem === 'go'     ? 'golang'
-       : ecosystem === 'rust'   ? 'cargo'
-       : 'npm';
+  return ecosystem === "python"
+    ? "pypi"
+    : ecosystem === "go"
+      ? "golang"
+      : ecosystem === "rust"
+        ? "cargo"
+        : "npm";
 }
 
 /**
@@ -49,7 +52,7 @@ function purlEcosystem(ecosystem) {
  * @returns {number} whole days elapsed, or Infinity if the date is unavailable
  */
 function daysSince(dateStr, now) {
-  if (!dateStr || dateStr === 'unknown') return Infinity;
+  if (!dateStr || dateStr === "unknown") return Infinity;
   const diffMs = now - new Date(dateStr);
   return Math.floor(diffMs / (1000 * 60 * 60 * 24));
 }
@@ -77,8 +80,8 @@ function applyColor(cell, color) {
  * @returns {{ text: string, color: string|null }}
  */
 function socketScoreDisplay(score) {
-  if (score == null) return { text: '-', color: null };
-  const pct  = Math.round(score * 100);
+  if (score == null) return { text: "-", color: null };
+  const pct = Math.round(score * 100);
   const color = score >= 0.8 ? ANSI_GREEN : score >= 0.5 ? ANSI_YELLOW : ANSI_RED;
   return { text: `${pct}%`, color };
 }
@@ -106,22 +109,22 @@ function sortedResults(results, socketScores = new Map(), opts = {}) {
   const purlEco = ecosystem ? purlEcosystem(ecosystem) : null;
 
   return [...results.values()]
-    .map(r => ({
-      name:               r.name,
-      version:            r.version,
-      released:           r.releaseDate,
-      firstReleased:      r.firstReleaseDate ?? 'unknown',
-      releases:           r.releaseCount ?? 0,
+    .map((r) => ({
+      name: r.name,
+      version: r.version,
+      released: r.releaseDate,
+      firstReleased: r.firstReleaseDate ?? "unknown",
+      releases: r.releaseCount ?? 0,
       downloadsLastMonth: r.downloadsLastMonth ?? null,
-      link:               r.link ?? `https://pypi.org/project/${r.name}/`,
-      error:              r.error,
-      supplyChain:        purlEco
+      link: r.link ?? `https://pypi.org/project/${r.name}/`,
+      error: r.error,
+      supplyChain: purlEco
         ? (socketScores.get(`${purlEco}:${r.name.toLowerCase()}@${r.version}`) ?? null)
         : (socketScores.get(`${r.name.toLowerCase()}@${r.version}`) ?? null),
     }))
     .sort((a, b) => {
-      const aUnknown = a.released === 'unknown';
-      const bUnknown = b.released === 'unknown';
+      const aUnknown = a.released === "unknown";
+      const bUnknown = b.released === "unknown";
       if (aUnknown !== bUnknown) return aUnknown ? 1 : -1;
       const dateCmp = b.released.localeCompare(a.released);
       if (dateCmp !== 0) return dateCmp;
@@ -139,7 +142,7 @@ function sortedResults(results, socketScores = new Map(), opts = {}) {
  * @returns {string}
  */
 function formatDownloads(count) {
-  return count !== null ? count.toLocaleString('en-US') : '-';
+  return count !== null ? count.toLocaleString("en-US") : "-";
 }
 
 /**
@@ -153,20 +156,20 @@ function formatDownloads(count) {
 function printNonStandardSources(dangerousDeps, privatePkgs) {
   if (!dangerousDeps.length && !privatePkgs.length) return;
 
-  console.log('');
-  console.log('Non-standard sources:');
+  console.log("");
+  console.log("Non-standard sources:");
 
   if (dangerousDeps.length) {
-    console.log('  ⚠ Non-registry dependency specs (declared in manifest):');
+    console.log("  ⚠ Non-registry dependency specs (declared in manifest):");
     for (const { name, spec, reason } of dangerousDeps) {
       console.log(`    ${name}  ${spec}  [${reason}]`);
     }
   }
 
   if (privatePkgs.length) {
-    console.log('  ℹ Non-public registry packages (skipped from resolution):');
+    console.log("  ℹ Non-public registry packages (skipped from resolution):");
     for (const [domain, names] of groupByDomain(privatePkgs)) {
-      console.log(`    ${domain}: ${names.join(', ')}`);
+      console.log(`    ${domain}: ${names.join(", ")}`);
     }
   }
 }
@@ -198,107 +201,128 @@ function printNonStandardSources(dangerousDeps, privatePkgs) {
  */
 function formatTable(results, directNames, opts = {}) {
   const {
-    ecosystem      = null,
-    downloadStats  = false,
-    downloadsLabel = 'Downloads/mo',
-    socketScores   = null,
-    source         = null,
-    note           = null,
-    privateCount   = 0,
-    privatePkgs    = [],
-    dangerousDeps  = [],
-    firstRelease   = true,
-    printHeader    = false,
+    ecosystem = null,
+    downloadStats = false,
+    downloadsLabel = "Downloads/mo",
+    socketScores = null,
+    source = null,
+    note = null,
+    privateCount = 0,
+    privatePkgs = [],
+    dangerousDeps = [],
+    firstRelease = true,
+    printHeader = false,
   } = opts;
 
   if (printHeader && ecosystem) {
     console.log(`=== ${ecosystem} ===`);
   }
   if (note) console.log(`[note] ${note}`);
-  if (privateCount > 0) console.log(`[note] ${privateCount} private package${privateCount === 1 ? '' : 's'} skipped (not on public registry).`);
+  if (privateCount > 0)
+    console.log(
+      `[note] ${privateCount} private package${privateCount === 1 ? "" : "s"} skipped (not on public registry).`,
+    );
 
   const rows = sortedResults(results, socketScores ?? new Map(), { ecosystem });
   if (rows.length === 0) {
-    console.log('No dependencies found.');
+    console.log("No dependencies found.");
     if (source) console.log(`Files: ${source}`);
-    if (printHeader) console.log('');
+    if (printHeader) console.log("");
     return;
   }
 
   const showSocket = socketScores != null;
-  const showFirst  = firstRelease;
+  const showFirst = firstRelease;
 
   // Compute column widths based on the widest value in each column
-  const colName   = Math.max(7,  ...rows.map(r => r.name.length))     + 2;
-  const colVer    = Math.max(7,  ...rows.map(r => r.version.length))   + 2;
-  const colRel    = Math.max(8,  ...rows.map(r => r.released.length))  + 2;
-  const colFirst  = showFirst
-    ? Math.max(13, ...rows.map(r => r.firstReleased.length)) + 2
-    : 0;
-  const colPop    = Math.max(8,  ...rows.map(r => String(r.releases).length)) + 2;
-  const colDl     = downloadStats
-    ? Math.max(downloadsLabel.length, ...rows.map(r => formatDownloads(r.downloadsLastMonth).length)) + 2
+  const colName = Math.max(7, ...rows.map((r) => r.name.length)) + 2;
+  const colVer = Math.max(7, ...rows.map((r) => r.version.length)) + 2;
+  const colRel = Math.max(8, ...rows.map((r) => r.released.length)) + 2;
+  const colFirst = showFirst ? Math.max(13, ...rows.map((r) => r.firstReleased.length)) + 2 : 0;
+  const colPop = Math.max(8, ...rows.map((r) => String(r.releases).length)) + 2;
+  const colDl = downloadStats
+    ? Math.max(
+        downloadsLabel.length,
+        ...rows.map((r) => formatDownloads(r.downloadsLastMonth).length),
+      ) + 2
     : 0;
   const colSocket = showSocket
-    ? Math.max(12, ...rows.map(r => socketScoreDisplay(r.supplyChain).text.length)) + 2
+    ? Math.max(12, ...rows.map((r) => socketScoreDisplay(r.supplyChain).text.length)) + 2
     : 0;
-  const colLink   = Math.max(4,  ...rows.map(r => r.link.length)) + 2;
+  const colLink = Math.max(4, ...rows.map((r) => r.link.length)) + 2;
 
   const pad = (s, n) => String(s).padEnd(n);
-  const divider = '-'.repeat(colName + colVer + colRel + colFirst + colPop + colDl + colSocket + colLink);
+  const divider = "-".repeat(
+    colName + colVer + colRel + colFirst + colPop + colDl + colSocket + colLink,
+  );
 
   console.log(
-    pad('Package', colName) + pad('Version', colVer) + pad('Released', colRel) +
-    (showFirst ? pad('First Release', colFirst) : '') +
-    pad('Releases', colPop) +
-    (downloadStats ? pad(downloadsLabel, colDl) : '') +
-    (showSocket    ? pad('Supply Chain', colSocket) : '') +
-    pad('Link', colLink)
+    pad("Package", colName) +
+      pad("Version", colVer) +
+      pad("Released", colRel) +
+      (showFirst ? pad("First Release", colFirst) : "") +
+      pad("Releases", colPop) +
+      (downloadStats ? pad(downloadsLabel, colDl) : "") +
+      (showSocket ? pad("Supply Chain", colSocket) : "") +
+      pad("Link", colLink),
   );
   console.log(divider);
 
   const now = new Date();
   for (const row of rows) {
-    const relAge   = daysSince(row.released, now);
-    const relColor = relAge <= 3 ? ANSI_RED : relAge <= 7 ? ANSI_ORANGE : relAge <= 30 ? ANSI_YELLOW : null;
+    const relAge = daysSince(row.released, now);
+    const relColor =
+      relAge <= 3 ? ANSI_RED : relAge <= 7 ? ANSI_ORANGE : relAge <= 30 ? ANSI_YELLOW : null;
     const releasedCell = applyColor(pad(row.released, colRel), relColor);
 
-    let firstRelCell = '';
+    let firstRelCell = "";
     if (showFirst) {
-      const firstAge   = daysSince(row.firstReleased, now);
-      const firstColor = firstAge <= 3 ? ANSI_RED : firstAge <= 7 ? ANSI_ORANGE : firstAge <= 30 ? ANSI_YELLOW : null;
+      const firstAge = daysSince(row.firstReleased, now);
+      const firstColor =
+        firstAge <= 3
+          ? ANSI_RED
+          : firstAge <= 7
+            ? ANSI_ORANGE
+            : firstAge <= 30
+              ? ANSI_YELLOW
+              : null;
       firstRelCell = applyColor(pad(row.firstReleased, colFirst), firstColor);
     }
 
-    let socketCell = '';
+    let socketCell = "";
     if (showSocket) {
       const { text, color } = socketScoreDisplay(row.supplyChain);
       socketCell = applyColor(pad(text, colSocket), color);
     }
 
-    let line = pad(row.name, colName)
-      + pad(row.version, colVer)
-      + releasedCell
-      + firstRelCell
-      + pad(row.releases, colPop)
-      + (downloadStats ? pad(formatDownloads(row.downloadsLastMonth), colDl) : '')
-      + socketCell
-      + pad(row.link, colLink);
+    let line =
+      pad(row.name, colName) +
+      pad(row.version, colVer) +
+      releasedCell +
+      firstRelCell +
+      pad(row.releases, colPop) +
+      (downloadStats ? pad(formatDownloads(row.downloadsLastMonth), colDl) : "") +
+      socketCell +
+      pad(row.link, colLink);
     if (row.error) line += `  [${row.error}]`;
     console.log(line);
   }
 
   console.log(divider);
   if (directNames.size > 0) {
-    const directCount     = rows.filter(r => directNames.has(r.name.toLowerCase().replace(/[-_.]+/g, '-'))).length;
+    const directCount = rows.filter((r) =>
+      directNames.has(r.name.toLowerCase().replace(/[-_.]+/g, "-")),
+    ).length;
     const transitiveCount = rows.length - directCount;
-    console.log(`${rows.length} packages total  (${directCount} direct, ${transitiveCount} transitive)`);
+    console.log(
+      `${rows.length} packages total  (${directCount} direct, ${transitiveCount} transitive)`,
+    );
   } else {
     console.log(`${rows.length} packages total`);
   }
   if (source) console.log(`Files: ${source}`);
   printNonStandardSources(dangerousDeps, privatePkgs);
-  if (printHeader) console.log('');
+  if (printHeader) console.log("");
 }
 
 /**
@@ -313,26 +337,35 @@ function formatTable(results, directNames, opts = {}) {
  */
 function formatMulti(sections, opts = {}) {
   const { downloadStats = false, socketScores = null } = opts;
-  const present = ECOSYSTEM_ORDER.filter(eco => sections.has(eco));
+  const present = ECOSYSTEM_ORDER.filter((eco) => sections.has(eco));
   const printHeader = present.length >= 2;
 
   for (const ecosystem of present) {
-    const { results, directNames, source, note, privateCount = 0, privatePkgs = [], dangerousDeps = [] } = sections.get(ecosystem);
+    const {
+      results,
+      directNames,
+      source,
+      note,
+      privateCount = 0,
+      privatePkgs = [],
+      dangerousDeps = [],
+    } = sections.get(ecosystem);
     formatTable(results, directNames, {
       ecosystem,
       // Per-ecosystem column rules. Rust (crates.io 90-day figure) and npm
       // (api.npmjs.org last-month figure) always show downloads — cheap bulk
       // fetches. Python shows them only when the user opted in with
       // --download-stats (pypistats is rate-limited and CORS-proxied).
-      downloadStats: ecosystem === 'rust' || ecosystem === 'npm' || (downloadStats && ecosystem === 'python'),
-      downloadsLabel: ecosystem === 'rust' ? 'Downloads (90d)' : 'Downloads/mo',
+      downloadStats:
+        ecosystem === "rust" || ecosystem === "npm" || (downloadStats && ecosystem === "python"),
+      downloadsLabel: ecosystem === "rust" ? "Downloads (90d)" : "Downloads/mo",
       socketScores,
       source,
       note,
       privateCount,
       privatePkgs,
       dangerousDeps,
-      firstRelease: ecosystem !== 'go',
+      firstRelease: ecosystem !== "go",
       printHeader,
     });
   }
@@ -363,15 +396,22 @@ function formatJson(sections, opts = {}) {
   for (const ecosystem of ECOSYSTEM_ORDER) {
     if (!sections.has(ecosystem)) continue;
     const { results } = sections.get(ecosystem);
-    const includeFirst    = ecosystem !== 'go';
-    const includeDownloads = ecosystem === 'rust' || ecosystem === 'npm' || (downloadStats && ecosystem === 'python');
+    const includeFirst = ecosystem !== "go";
+    const includeDownloads =
+      ecosystem === "rust" || ecosystem === "npm" || (downloadStats && ecosystem === "python");
 
-    out[ecosystem] = sortedResults(results, socketScores ?? new Map(), { ecosystem }).map(r => {
-      const obj = { name: r.name, version: r.version, released: r.released, releases: r.releases, link: r.link };
-      if (includeFirst)        obj.firstReleased       = r.firstReleased;
-      if (includeDownloads)    obj.downloadsLastMonth  = r.downloadsLastMonth;
-      if (socketScores != null) obj.supplyChainScore   = r.supplyChain;
-      if (r.error)             obj.error               = r.error;
+    out[ecosystem] = sortedResults(results, socketScores ?? new Map(), { ecosystem }).map((r) => {
+      const obj = {
+        name: r.name,
+        version: r.version,
+        released: r.released,
+        releases: r.releases,
+        link: r.link,
+      };
+      if (includeFirst) obj.firstReleased = r.firstReleased;
+      if (includeDownloads) obj.downloadsLastMonth = r.downloadsLastMonth;
+      if (socketScores != null) obj.supplyChainScore = r.supplyChain;
+      if (r.error) obj.error = r.error;
       return obj;
     });
   }
@@ -387,5 +427,9 @@ export {
   daysSince,
   purlEcosystem,
   ECOSYSTEM_ORDER,
-  ANSI_RED, ANSI_ORANGE, ANSI_YELLOW, ANSI_GREEN, ANSI_RESET,
+  ANSI_RED,
+  ANSI_ORANGE,
+  ANSI_YELLOW,
+  ANSI_GREEN,
+  ANSI_RESET,
 };
