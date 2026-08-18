@@ -741,7 +741,8 @@ th.th-sort-asc::after {
   margin-bottom: 0.5rem;
 }
 
-#pkg-input {
+#pkg-input,
+#paste-input {
   padding: 0.6rem 0.85rem;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -757,17 +758,24 @@ th.th-sort-asc::after {
     box-shadow 0.2s;
 }
 
-#pkg-input::placeholder {
+#paste-input {
+  min-height: 14rem;
+}
+
+#pkg-input::placeholder,
+#paste-input::placeholder {
   color: var(--muted);
 }
 
-#pkg-input:focus {
+#pkg-input:focus,
+#paste-input:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: var(--glow);
 }
 
-#pkg-submit-btn {
+#pkg-submit-btn,
+#paste-submit-btn {
   padding: 0.6rem 1.5rem;
   background: linear-gradient(135deg, var(--accent) 0%, var(--accent-deep) 100%);
   box-shadow: 0 2px 12px rgba(99, 102, 241, 0.35);
@@ -785,12 +793,14 @@ th.th-sort-asc::after {
     opacity 0.2s;
 }
 
-#pkg-submit-btn:hover:not(:disabled) {
+#pkg-submit-btn:hover:not(:disabled),
+#paste-submit-btn:hover:not(:disabled) {
   box-shadow: 0 4px 20px rgba(99, 102, 241, 0.55);
   opacity: 0.92;
 }
 
-#pkg-submit-btn:disabled {
+#pkg-submit-btn:disabled,
+#paste-submit-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
   box-shadow: none;

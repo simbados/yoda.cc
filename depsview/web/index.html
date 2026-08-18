@@ -89,10 +89,31 @@
 
       <form id="form" autocomplete="off">
         <!-- ── Main action ─────────────────────────────────────────────────── -->
+        <div class="option-row input-source-row">
+          <span class="option-label">Input source:</span>
+          <div class="ecosystem-picker" role="group" aria-label="Input source">
+            <label class="eco-btn"
+              ><input type="radio" name="input-source" value="github" checked /><span
+                >GitHub repo</span
+              ></label
+            >
+            <label class="eco-btn"
+              ><input type="radio" name="input-source" value="packages" /><span
+                >Package name(s)</span
+              ></label
+            >
+            <label class="eco-btn"
+              ><input type="radio" name="input-source" value="paste" /><span
+                >Paste file contents</span
+              ></label
+            >
+          </div>
+        </div>
+
         <div class="option-row ecosystem-row">
           <span class="option-label">Ecosystem:</span>
           <div class="ecosystem-picker" role="group" aria-label="Ecosystem filter">
-            <label class="eco-btn"
+            <label class="eco-btn" id="eco-all-option"
               ><input type="radio" name="ecosystem" value="all" checked /><span>All</span></label
             >
             <label class="eco-btn"
@@ -127,6 +148,15 @@
             placeholder="eslint, eslint@9, @babel/core  or  https://github.com/owner/repo"
           ></textarea>
           <button id="pkg-submit-btn" type="submit">Analyse</button>
+        </div>
+
+        <div class="pkg-input-row" id="paste-row" hidden>
+          <textarea
+            id="paste-input"
+            spellcheck="false"
+            placeholder="Paste the contents of package-lock.json, requirements.txt, go.sum, Cargo.toml, etc. — pick the ecosystem above so the format can be detected"
+          ></textarea>
+          <button id="paste-submit-btn" type="submit">Analyse</button>
         </div>
 
         <div class="option-row">
@@ -234,6 +264,13 @@
           <p class="note">
             Polyglot repos (e.g. both <code>package.json</code> and <code>go.mod</code>) are
             resolved per ecosystem and rendered as separate sections, sorted independently.
+          </p>
+          <p class="note">
+            "Paste file contents" analyses one pasted lockfile/manifest at a time for the selected
+            ecosystem — the exact format is auto-detected from the content. A pasted
+            <code>requirements.txt</code> that uses <code>-r other.txt</code> includes cannot
+            resolve those includes (there is no repository to fetch them from); paste each file's
+            contents together instead, or use GitHub URL mode.
           </p>
           <p class="note">
             npm, Go, and Rust packages from private registries are automatically skipped — the count

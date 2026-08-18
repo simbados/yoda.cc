@@ -6,6 +6,10 @@ External data sources: `pypi.org`, `pypistats.org` (optional Python download sta
 
 Cross-cutting rules (no third-party deps, plan-first, mandatory docstrings, coding style, the three project agents, Definition of Done) live in `yoda/CLAUDE.md` and apply here.
 
+## Formatting
+
+Always run `oxfmt` after finishing up a feature, before handing off to the Definition of Done agents.
+
 # Architecture
 
 ## Module map

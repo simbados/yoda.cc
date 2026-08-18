@@ -581,6 +581,5 @@ npm test
 
 Planned features (not yet implemented).
 
-- [ ] **Paste-to-parse (web UI).** Add a textarea to the web UI where a user can paste the raw contents of a lockfile or manifest (`package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `bun.lock`, `package.json`, `requirements.txt`, `Cargo.lock`/`Cargo.toml`, `go.sum`/`go.mod`) and have it parsed + resolved — an alternative input to the current GitHub-URL mode. Reuses the existing browser-safe parser cores; no new external host.
 - [ ] **Supply-chain score summary.** Aggregate, explainable risk-posture triage verdict across the resolved tree, built on the per-package socket.dev scores. Because socket's score is **0 for known-malware packages**, the summary flags malware too (when socket credentials are configured) — not just low-quality/immature/unpopular deps. (Broader than a summary line — envisioned with a scoring model, a skill, and an install gate.)
 - [ ] **Tarball diff viewer (`--diff <pkg> <v1> <v2>`).** Console diff of two published npm tarballs (what actually changed in the code between versions). Iteration 1: console-only but browser-safe core, public npm only, npm-only (`.tgz`), single package (no transitive-tree diff). Zero-dependency (`DecompressionStream` gunzip + hand-rolled tar reader + Myers diff).

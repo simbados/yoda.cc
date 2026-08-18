@@ -74,6 +74,54 @@ function parseDependencyString(depStr) {
 }
 
 /**
+ * Parses requirements.txt content with no `-r`/`--requirement` include resolution.
+ * Unlike parser.js's parseRequirementsTxt (filesystem includes) and
+ * github/parser.js's parseRequirementsTxtAsync (GitHub-fetched includes), this
+ * pure variant has no repository or filesystem context to resolve includes
+ * against — include lines are collected into `skippedIncludes` instead of
+ * being followed, so callers (e.g. pasted-text parsing) can surface a note
+ * rather than silently dropping or failing to resolve them.
+ * @param {string} content - raw requirements.txt content
+ * @param {boolean} [includeTests=false] - currently has no effect (there are no
+ *   include files to classify as test-only here); kept for signature symmetry
+ *   with the other parserCore functions.
+ * @returns {{
+ *   deps: Array<{ name: string, versionSpec: string|null }>,
+ *   dangerousDeps: Array<{ name: string, spec: string, reason: string }>,
+ *   skippedIncludes: string[]
+ * }}
+ */
+function parseRequirementsTxtLines(content, includeTests = false) {
+  void includeTests;
+  const deps = [];
+  const dangerousDeps = [];
+  const skippedIncludes = [];
+
+  for (let line of content.split("\n")) {
+    line = line.split("#")[0].trim();
+    while (line.endsWith("\\")) line = line.slice(0, -1).trim();
+    if (!line) continue;
+
+    if (/^(-r|--requirement)\s+/.test(line)) {
+      skippedIncludes.push(line.replace(/^(-r|--requirement)\s+/, "").trim());
+      continue;
+    }
+
+    if (/^-/.test(line)) continue;
+
+    const dep = parseDependencyString(line);
+    if (dep) {
+      deps.push(dep);
+    } else {
+      const danger = parsePep508UrlRequirement(line);
+      if (danger) dangerousDeps.push(danger);
+    }
+  }
+
+  return { deps, dangerousDeps, skippedIncludes };
+}
+
+/**
  * Parses a PEP 508 requires_dist entry from PyPI into a { name, versionSpec } pair.
  * Returns null for extras-conditional dependencies (e.g. `pytest; extra == "test"`)
  * and for environment markers that restrict to optional contexts.
@@ -334,6 +382,7 @@ function parsePep508UrlRequirement(depStr) {
 
 export {
   parseDependencyString,
+  parseRequirementsTxtLines,
   parseRequiresDist,
   parsePyprojectToml,
   parseSetupCfg,

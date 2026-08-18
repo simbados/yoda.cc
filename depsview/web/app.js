@@ -27,6 +27,7 @@ import { resolveDependencies as resolveRust } from "./src/rust/depResolver.js";
 import { setGithubToken } from "./src/github/client.js";
 import { listDirectory } from "./src/github/client.js";
 import { parseMultiPackageInput } from "./src/multiPackageParser.js";
+import { parsePastedDependencies } from "./src/pastedDepsParser.js";
 import { fetchSocketScores, scoreKey } from "./src/socket/client.js";
 import { groupByDomain } from "./src/output/nonStandardSources.js";
 import { NPM_LOCK_FILENAMES } from "./src/npm/lockRegistry.js";
@@ -509,21 +510,24 @@ function showWarningDialog(warning) {
 
 /**
  * Runs the parse → resolve pipeline for one ecosystem.
- * Supports two modes:
+ * Supports three modes:
  *   - GitHub mode (default): parses dependency files from a GitHub ref.
  *   - Package mode (opts.packageInputs set): skips GitHub I/O and resolves one
  *     or more packages by name using entries from parseMultiPackageInput.
+ *   - Pasted-text mode (opts.pastedSection set): skips GitHub I/O and uses a
+ *     precomputed { deps, source, note, warning, privateCount, privatePkgs,
+ *     dangerousDeps } produced by parsePastedDependencies.
  *
  * Returns the section's data needed to render it: deps, resolved results,
  * direct dep names, source filename, and any note.
  *
  * @param {'npm'|'python'|'go'|'rust'} ecosystem
  * @param {object|null} githubRef
- * @param {{ includeTests: boolean, onProgress: (msg: string) => void, packageInputs?: Array<{ name: string, version: string|null }>, downloadStats?: boolean }} opts
+ * @param {{ includeTests: boolean, onProgress: (msg: string) => void, packageInputs?: Array<{ name: string, version: string|null }>, pastedSection?: object, downloadStats?: boolean }} opts
  * @returns {Promise<object>}
  */
 async function resolveEcosystem(ecosystem, githubRef, opts) {
-  const { includeTests, onProgress, packageInputs, downloadStats = false } = opts;
+  const { includeTests, onProgress, packageInputs, pastedSection, downloadStats = false } = opts;
 
   let deps,
     source,
@@ -532,7 +536,17 @@ async function resolveEcosystem(ecosystem, githubRef, opts) {
     privateCount = 0,
     privatePkgs = [],
     dangerousDeps = [];
-  if (packageInputs && packageInputs.length > 0) {
+  if (pastedSection) {
+    ({ deps, source, note, warning, privateCount, privatePkgs, dangerousDeps } = pastedSection);
+    if (warning) {
+      const confirmed = await showWarningDialog(warning);
+      if (!confirmed) return null;
+    }
+    if (privateCount > 0)
+      onProgress(
+        `[${ecosystem}] Skipped ${privateCount} private package${privateCount === 1 ? "" : "s"} (not on public registry).\n`,
+      );
+  } else if (packageInputs && packageInputs.length > 0) {
     source = "package search";
     deps = packageInputs.map((p) =>
       ecosystem === "go"
@@ -650,6 +664,10 @@ if (typeof document !== "undefined") {
   const pkgInput = document.getElementById("pkg-input");
   const pkgRow = document.getElementById("pkg-row");
   const pkgSubmitBtn = document.getElementById("pkg-submit-btn");
+  const pasteInput = document.getElementById("paste-input");
+  const pasteRow = document.getElementById("paste-row");
+  const pasteSubmitBtn = document.getElementById("paste-submit-btn");
+  const ecoAllOption = document.getElementById("eco-all-option");
   const tokenInput = document.getElementById("token-input");
   const rememberTokenCb = document.getElementById("remember-token");
   const storageNote = document.getElementById("storage-note");
@@ -679,35 +697,65 @@ if (typeof document !== "undefined") {
   };
 
   /**
-   * Shows the URL input row for 'all' ecosystem and the package textarea for
-   * specific ecosystems, updating the textarea placeholder accordingly.
+   * Shows the row matching the current input source + ecosystem combination:
+   *   - 'github' + 'all' ecosystem  → the dedicated GitHub URL row (url-row).
+   *   - 'github' or 'packages' + a specific ecosystem → the shared textarea
+   *     (pkg-row), which accepts either a GitHub URL or package name(s) —
+   *     unchanged from the original single-picker behaviour.
+   *   - 'paste' → the paste textarea (paste-row); the ecosystem picker's
+   *     'All' option is unavailable in this mode (one paste is one file, so
+   *     the ecosystem must be picked to know which formats to check against).
    * The "Show Python download statistics" checkbox row stays visible for the
    * 'all' selection (Python may still be auto-detected) and for the explicit
    * 'python' selection, and is hidden for npm, Go, and Rust. The checkbox is
    * Python-specific because it toggles the opt-in pypistats fetch; Rust shows a
    * downloads column too, but it comes free with the crate record so it needs
    * no toggle.
-   * @param {string} eco - selected ecosystem value
    */
-  function applyEcosystem(eco) {
-    const isSpecific = eco !== "all";
-    urlRow.hidden = isSpecific;
-    pkgRow.hidden = !isSpecific;
-    if (isSpecific) pkgInput.placeholder = PKG_PLACEHOLDERS[eco] ?? "";
-    downloadStatsRow.hidden = isSpecific && eco !== "python";
+  function applyRowVisibility() {
+    const mode = form.elements["input-source"].value;
+    const eco = form.elements["ecosystem"].value;
+
+    urlRow.hidden = !(mode === "github" && eco === "all");
+    pkgRow.hidden = !(mode !== "paste" && eco !== "all");
+    pasteRow.hidden = mode !== "paste";
+
+    if (eco !== "all") pkgInput.placeholder = PKG_PLACEHOLDERS[eco] ?? "";
+    downloadStatsRow.hidden = eco !== "all" && eco !== "python";
+  }
+
+  /**
+   * Applies input-source changes ('github' / 'packages' / 'paste'). Package
+   * search and paste modes always require one specific ecosystem (there is no
+   * meaningful 'All' for a single package list or a single pasted file), so
+   * the 'All' radio is hidden in those modes and the selection is bumped to
+   * 'npm' if it was previously 'all'.
+   * @param {string} mode - selected input-source value
+   */
+  function applyInputSource(mode) {
+    ecoAllOption.hidden = mode !== "github";
+    const ecoRadios = form.elements["ecosystem"];
+    if (mode !== "github" && ecoRadios.value === "all") {
+      ecoRadios.value = "npm";
+    }
+    applyRowVisibility();
   }
 
   document.querySelectorAll('[name="ecosystem"]').forEach((radio) => {
-    radio.addEventListener("change", () => applyEcosystem(radio.value));
+    radio.addEventListener("change", () => applyRowVisibility());
+  });
+  document.querySelectorAll('[name="input-source"]').forEach((radio) => {
+    radio.addEventListener("change", () => applyInputSource(radio.value));
   });
 
-  // Apply the initial state (page load with 'all' pre-selected).
-  applyEcosystem(form.elements["ecosystem"].value);
+  // Apply the initial state (page load with 'github' input source + 'all' ecosystem pre-selected).
+  applyInputSource(form.elements["input-source"].value);
 
-  /** Enables or disables both submit buttons together. */
+  /** Enables or disables all three submit buttons together. */
   function setSubmitting(disabled) {
     submitBtn.disabled = disabled;
     pkgSubmitBtn.disabled = disabled;
+    pasteSubmitBtn.disabled = disabled;
   }
 
   function syncStorageNote() {
@@ -788,6 +836,7 @@ if (typeof document !== "undefined") {
     const includeTests = includeTestsCb.checked;
     const downloadStats = downloadStatsCb.checked;
     const ecosystemFilter = form.elements["ecosystem"].value;
+    const inputSource = form.elements["input-source"].value;
 
     if (rememberTokenCb.checked && token) {
       localStorage.setItem(TOKEN_STORAGE_KEY, token);
@@ -819,8 +868,30 @@ if (typeof document !== "undefined") {
       let ecosystems;
       let githubRef = null;
       let packageInputs = null;
+      let pastedSection = null;
 
-      if (ecosystemFilter === "all") {
+      if (inputSource === "paste") {
+        // Pasted-text mode: detect the format within the selected ecosystem
+        // and parse it directly — no GitHub/network I/O for the file itself.
+        const rawText = pasteInput.value.trim();
+        if (!rawText) {
+          showError("Paste some dependency-file content.");
+          setSubmitting(false);
+          return;
+        }
+
+        let parsed;
+        try {
+          parsed = await parsePastedDependencies(rawText, ecosystemFilter, { includeTests });
+        } catch (err) {
+          showError(err.message);
+          setSubmitting(false);
+          return;
+        }
+        ecosystems = new Set([ecosystemFilter]);
+        pastedSection = parsed;
+        appendProgress(`Pasted content detected as ${parsed.source}. Resolving…\n`);
+      } else if (ecosystemFilter === "all") {
         // GitHub repo mode: analyse all ecosystems detected in the repository.
         const url = urlInput.value.trim();
         if (!url) {
@@ -895,6 +966,7 @@ if (typeof document !== "undefined") {
             includeTests,
             onProgress: appendProgress,
             packageInputs,
+            pastedSection,
             downloadStats,
           })
             .then((section) =>

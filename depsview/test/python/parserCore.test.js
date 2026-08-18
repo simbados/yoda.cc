@@ -9,6 +9,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   parseDependencyString,
+  parseRequirementsTxtLines,
   parseRequiresDist,
   parsePyprojectToml,
   parseSetupCfg,
@@ -63,6 +64,84 @@ describe("parseDependencyString", () => {
 
   it("returns null for empty string", () => {
     assert.equal(parseDependencyString(""), null);
+  });
+});
+
+// ── parseRequirementsTxtLines ────────────────────────────────────────────────────
+
+describe("parseRequirementsTxtLines", () => {
+  it("parses normal name==version dependency lines", () => {
+    const content = "requests==2.31.0\nclick>=8.0.0\n";
+    const result = parseRequirementsTxtLines(content);
+    assert.equal(result.deps.length, 2);
+    assert.deepEqual(result.deps[0], { name: "requests", versionSpec: "==2.31.0" });
+    assert.deepEqual(result.deps[1], { name: "click", versionSpec: ">=8.0.0" });
+  });
+
+  it("parses a bare package name with no version spec", () => {
+    const content = "requests\n";
+    const result = parseRequirementsTxtLines(content);
+    assert.deepEqual(result.deps, [{ name: "requests", versionSpec: null }]);
+  });
+
+  it("ignores blank lines and comment lines", () => {
+    const content = "\n# a comment\nrequests==2.31.0\n\n";
+    const result = parseRequirementsTxtLines(content);
+    assert.equal(result.deps.length, 1);
+    assert.equal(result.deps[0].name, "requests");
+  });
+
+  it("collects a '-r' include line into skippedIncludes instead of following it", () => {
+    const content = "requests==2.31.0\n-r other.txt\n";
+    const result = parseRequirementsTxtLines(content);
+    assert.equal(result.deps.length, 1);
+    assert.deepEqual(result.skippedIncludes, ["other.txt"]);
+  });
+
+  it("collects a '--requirement' include line into skippedIncludes instead of following it", () => {
+    const content = "requests==2.31.0\n--requirement dev-requirements.txt\n";
+    const result = parseRequirementsTxtLines(content);
+    assert.deepEqual(result.skippedIncludes, ["dev-requirements.txt"]);
+  });
+
+  it("collects multiple include lines into skippedIncludes in order", () => {
+    const content = "-r base.txt\nrequests==2.31.0\n--requirement dev.txt\n";
+    const result = parseRequirementsTxtLines(content);
+    assert.deepEqual(result.skippedIncludes, ["base.txt", "dev.txt"]);
+  });
+
+  it("skips other '-flag' lines without treating them as includes or deps", () => {
+    const content = "-e .\n--index-url https://example.invalid/simple\nrequests==2.31.0\n";
+    const result = parseRequirementsTxtLines(content);
+    assert.deepEqual(result.deps, [{ name: "requests", versionSpec: "==2.31.0" }]);
+    assert.deepEqual(result.skippedIncludes, []);
+  });
+
+  it("captures a PEP 508 URL requirement as a dangerous dep instead of a normal dep", () => {
+    const content = "internal-auth @ https://artifacts.corp.invalid/internal-auth-1.0.0.whl\n";
+    const result = parseRequirementsTxtLines(content);
+    assert.equal(result.deps.length, 0);
+    assert.equal(result.dangerousDeps.length, 1);
+    assert.equal(result.dangerousDeps[0].name, "internal-auth");
+    assert.match(result.dangerousDeps[0].reason, /direct URL install/);
+  });
+
+  it("does not flag a PyPI-hosted URL requirement as a dangerous dep", () => {
+    const content = "requests @ https://files.pythonhosted.org/packages/requests.tar.gz\n";
+    const result = parseRequirementsTxtLines(content);
+    assert.equal(result.deps.length, 0);
+    assert.equal(result.dangerousDeps.length, 0);
+  });
+
+  it("returns empty arrays for empty content", () => {
+    const result = parseRequirementsTxtLines("");
+    assert.deepEqual(result, { deps: [], dangerousDeps: [], skippedIncludes: [] });
+  });
+
+  it("strips a trailing backslash line-continuation marker before parsing the line", () => {
+    const content = "requests\\\n    ==2.31.0\n";
+    const result = parseRequirementsTxtLines(content);
+    assert.deepEqual(result.deps, [{ name: "requests", versionSpec: null }]);
   });
 });
 
