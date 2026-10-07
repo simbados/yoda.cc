@@ -1,0 +1,43 @@
+# syntax=docker/sandbox-kit:3
+#
+# JavaScript/TypeScript mixin for sbx-up (github.com/simbados/sandbox-templates). Lives in a
+# project as .sbx-kits/javascript/javascript.yaml; `sbx-up shell|claude` adds it with --kit on top
+# of shell-base. After an edit, run sbx-up again: it recreates the sandbox.
+#
+# Installs the TypeScript language server for helix. The helix side is the project's
+# .helix/languages.toml, which points typescript-language-server at this global TypeScript.
+schemaVersion: "3"
+kind: mixin
+displayName: JavaScript / TypeScript
+capabilities:
+  - type: com.docker.sandbox/network-policy@1
+    config:
+      install:
+        # npm registry for the install command below. Open only while it runs, at sandbox creation.
+        allow:
+          - registry.npmjs.org
+
+  - type: com.docker.sandbox/lifecycle@1
+    config:
+      install:
+        # As the agent user, into npm's global prefix /usr/local/share/npm-global (owned by agent).
+        # Install commands do not get the sandbox's environment, so everything npm needs is set
+        # here (a first run without NPM_CONFIG_PREFIX installed into mise's node directory):
+        # - HOME=/home/agent: `npm` on PATH is a mise shim that finds mise's node/npm (11.x) only
+        #   through the agent's HOME.
+        # - NPM_CONFIG_PREFIX: the directory .helix/languages.toml points at, and whose bin/ is on
+        #   the sandbox's PATH.
+        # - The other NPM_CONFIG_* variables beat every .npmrc, so the presets apply no matter which
+        #   config file npm reads.
+        # - The check aborts when the npm that runs does not know min-release-age (npm 9 ignores
+        #   it silently) instead of installing without it.
+        # Versions pinned; scanned with deps.dev.
+        - command: >-
+            export HOME=/home/agent NPM_CONFIG_PREFIX=/usr/local/share/npm-global
+            NPM_CONFIG_MIN_RELEASE_AGE=7 NPM_CONFIG_IGNORE_SCRIPTS=true;
+            if ! npm config ls -l | grep -q '^min-release-age = 7'; then
+            echo "npm $(npm --version) does not support min-release-age, not installing" >&2; exit 1;
+            fi;
+            npm install -g typescript@6.0.3 typescript-language-server@6.0.1
+          user: "1000"
+          description: TypeScript and its language server for helix

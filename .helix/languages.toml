@@ -1,0 +1,5 @@
+# helix already uses typescript-language-server for javascript, typescript, jsx and tsx; this only
+# points it at the TypeScript that .sbx-kits/javascript installs globally in the sandbox.
+[language-server.typescript-language-server.config]
+tsserver = { path = "/usr/local/share/npm-global/lib/node_modules/typescript/lib" }
+disableAutomaticTypingAcquisition = true

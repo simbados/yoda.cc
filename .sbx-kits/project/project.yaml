@@ -1,0 +1,20 @@
+# syntax=docker/sandbox-kit:3
+#
+# rss-feed's additions on top of sandbox-templates' shell-base (sbx-up shell|claude).
+# Taken from the sandbox-scoped allow rules of the earlier rss-feed sandbox
+# (sbx policy ls rss-feed --wide). After an edit, run sbx-up again: it recreates the sandbox.
+schemaVersion: "3"
+kind: mixin
+displayName: rss-feed additions
+capabilities:
+  - type: com.docker.sandbox/network-policy@1
+    config:
+      runtime:
+        allow:
+          - api.cloudflare.com
+          - workers.cloudflare.com
+          - developers.cloudflare.com
+          - sparrow.cloudflare.com
+          - deps.yoda.cc
+          - brew.yoda.cc
+          - top10.owasp.org
