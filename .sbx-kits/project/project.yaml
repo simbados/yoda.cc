@@ -18,3 +18,8 @@ capabilities:
           - deps.yoda.cc
           - brew.yoda.cc
           - top10.owasp.org
+
+  - type: com.docker.sandbox/port@1
+    config:
+      name: devserver
+      container: 8787

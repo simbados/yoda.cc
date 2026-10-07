@@ -1,0 +1,46 @@
+# syntax=docker/sandbox-kit:3
+#
+# Go mixin for sbx-up (github.com/simbados/sandbox-templates). Copy this directory into a project
+# as .sbx-kits/go/; `sbx-up shell|claude` adds it with --kit on top of shell-base. After an edit,
+# run sbx-up -r: a sandbox keeps the kits it was created with.
+#
+# Installs Go and gopls through mise. helix already uses gopls for go and finds it on PATH through
+# mise's shims, so no .helix/languages.toml entry is needed (check with `hx --health go`).
+schemaVersion: "3"
+kind: mixin
+displayName: Go
+capabilities:
+  - type: com.docker.sandbox/network-policy@1
+    config:
+      install:
+        # Open only while the install command below runs, at sandbox creation. If `mise use` cannot
+        # list Go versions (it runs git ls-remote against github.com/golang/go), add github.com here.
+        allow:
+          - dl.google.com      # Go release tarball and its .sha256 (mise's built-in Go support)
+          - proxy.golang.org   # gopls source, built by mise's go: backend
+          - storage.googleapis.com # proxy.golang.org redirects module .zip downloads here
+          - sum.golang.org     # Go checksum database
+      runtime:
+        allow:
+          - proxy.golang.org   # go mod download / go get while working
+          - storage.googleapis.com
+          - sum.golang.org
+
+  - type: com.docker.sandbox/lifecycle@1
+    config:
+      install:
+        # As the agent user. Install commands do not get the sandbox's environment, so:
+        # - HOME=/home/agent: mise reads its global config (with minimum_release_age) from the
+        #   agent's HOME and adds go and gopls there.
+        # - PATH: mise itself (~/.local/bin) and its shims, so `go` below is mise's.
+        # - GOTOOLCHAIN=local stops go from downloading a newer toolchain that a go.mod asks for,
+        #   which would bypass the pinned version. `go env -w` writes ~/.config/go/env, so it holds
+        #   without the sandbox environment too.
+        # Versions pinned (match go to the project's go.mod); gopls scanned with deps.dev.
+        - command: >-
+            export HOME=/home/agent
+            PATH=/home/agent/.local/bin:/home/agent/.local/share/mise/shims:$PATH;
+            mise use --global go@1.27.1 go:golang.org/x/tools/gopls@v0.23.0 &&
+            go env -w GOTOOLCHAIN=local
+          user: "1000"
+          description: Go and gopls for helix
