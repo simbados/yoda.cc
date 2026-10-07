@@ -114,7 +114,7 @@ Behaviour per surface:
 - **CLI text:** each section is separated by a `=== <ecosystem> ===` header (header omitted when only one ecosystem is present).
 - **JSON:** top-level object keyed by ecosystem — see the [JSON output](#json-output) section below.
 - **HTML report:** one `<section>` per ecosystem with an independently-sortable table.
-- **Web UI:** one block per ecosystem, each block sortable on its own.
+- **Web UI:** one block per ecosystem, each block sortable on its own and independently collapsible (click the ecosystem name to hide/show its table — the package count stays visible while collapsed, so you can jump to the next ecosystem without scrolling past a large one).
 
 Errors are isolated per section — if `go.mod` is malformed but `package.json` is fine, only the Go section reports the error and npm still resolves.
 

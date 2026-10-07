@@ -26,6 +26,7 @@ These apply across every subproject. Subproject CLAUDE.md files may layer additi
 - **Mandatory docstrings.** Every new function gets a JSDoc-style comment explaining its purpose, arguments, and return value. Pre-existing functions you modify keep their existing docstring style.
 - **Explain before editing.** Briefly state in chat what you are about to change and why, before making the change.
 - **No silent rewrites.** Do not refactor or rename across files without saying so first.
+- **No browser automation without asking.** Do not launch Playwright, chromium-cli, or any other tool that drives a real browser to verify UI/frontend changes, without first asking for explicit permission. This overrides the general "test UI changes in a browser before reporting done" default. Instead, verify what you can via static review (read the rendered DOM structure and CSS, reason about behavior from the code) and then explicitly tell the user the change hasn't been verified live in a browser and ask if they want that done.
 
 ## Coding style
 

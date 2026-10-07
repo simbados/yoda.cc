@@ -212,6 +212,12 @@ function addCell(row, text) {
  * given container. Returns the section element so the caller can attach
  * per-section sort handlers.
  *
+ * When `cfg.showHeader` is true (multiple ecosystems detected), the section is
+ * a native `<details open>` element with the ecosystem name + package count as
+ * its `<summary>`, so each ecosystem can be collapsed independently without
+ * hiding the count. With a single ecosystem there is nothing to collapse, so
+ * the section renders as a plain `<section>` unchanged.
+ *
  * Column visibility:
  *   - First Release: shown unless `ecosystem === 'go'`.
  *   - Releases:      always shown.
@@ -219,7 +225,7 @@ function addCell(row, text) {
  * @param {HTMLElement} container
  * @param {object}      cfg
  * @param {'npm'|'python'|'go'|'rust'} cfg.ecosystem
- * @param {boolean}     cfg.showHeader        - emit a section title above the table
+ * @param {boolean}     cfg.showHeader        - render as a collapsible <details> with a name+count summary
  * @param {Array<object>} cfg.sorted          - already-sorted rows from sortResultsBy
  * @param {number}      cfg.directCount       - 0 when unknown (lock-file resolution)
  * @param {string|null} cfg.source            - dependency file name
@@ -232,27 +238,45 @@ function addCell(row, text) {
  * @returns {HTMLElement} the section element
  */
 function renderSection(container, cfg) {
-  const sectionEl = document.createElement("section");
-  sectionEl.className = "result-section";
-  sectionEl.dataset.ecosystem = cfg.ecosystem;
-
-  if (cfg.showHeader) {
-    const h2 = document.createElement("h2");
-    h2.className = "section-title";
-    h2.textContent = cfg.ecosystem;
-    sectionEl.appendChild(h2);
-  }
-
   const total = cfg.sorted.length;
-  const summary = document.createElement("p");
-  summary.className = "summary";
+  let summaryText;
   if (cfg.directCount > 0) {
     const transitiveCount = total - cfg.directCount;
-    summary.textContent = `${total} package${total !== 1 ? "s" : ""} total (${cfg.directCount} direct, ${transitiveCount} transitive)`;
+    summaryText = `${total} package${total !== 1 ? "s" : ""} total (${cfg.directCount} direct, ${transitiveCount} transitive)`;
   } else {
-    summary.textContent = `${total} package${total !== 1 ? "s" : ""} total`;
+    summaryText = `${total} package${total !== 1 ? "s" : ""} total`;
   }
-  sectionEl.appendChild(summary);
+
+  let sectionEl;
+  if (cfg.showHeader) {
+    // A <details> element so each ecosystem section can be collapsed
+    // independently — the summary line (name + package count) stays visible
+    // when collapsed, everything else is hidden natively by the browser.
+    sectionEl = document.createElement("details");
+    sectionEl.className = "result-section eco-section";
+    sectionEl.open = true;
+    sectionEl.dataset.ecosystem = cfg.ecosystem;
+
+    const summaryEl = document.createElement("summary");
+    summaryEl.className = "eco-summary";
+    const titleEl = document.createElement("span");
+    titleEl.className = "section-title";
+    titleEl.textContent = cfg.ecosystem;
+    const summary = document.createElement("span");
+    summary.className = "summary";
+    summary.textContent = summaryText;
+    summaryEl.append(titleEl, summary);
+    sectionEl.appendChild(summaryEl);
+  } else {
+    sectionEl = document.createElement("section");
+    sectionEl.className = "result-section";
+    sectionEl.dataset.ecosystem = cfg.ecosystem;
+
+    const summary = document.createElement("p");
+    summary.className = "summary";
+    summary.textContent = summaryText;
+    sectionEl.appendChild(summary);
+  }
 
   if (cfg.source) {
     const sourceEl = document.createElement("p");
@@ -1033,7 +1057,11 @@ if (typeof document !== "undefined") {
 
         function rerender() {
           // Tear down the existing section element if it exists, then redraw.
+          // renderSection() always appends at the end of resultsDiv, so without
+          // restoring the original position a re-sort would bump this section
+          // after every ecosystem that hasn't been re-rendered yet.
           const prior = resultsDiv.querySelector(`section[data-ecosystem="${section.ecosystem}"]`);
+          const priorNextSibling = prior ? prior.nextSibling : null;
           if (prior) prior.remove();
 
           const sortedRows = sortResultsBy(section.results, sortCol, sortDir);
@@ -1054,6 +1082,7 @@ if (typeof document !== "undefined") {
             showSupplyChain,
             socketSlug: showSupplyChain ? (SOCKET_URL_SLUG[section.ecosystem] ?? null) : null,
           });
+          if (priorNextSibling) resultsDiv.insertBefore(sectionEl, priorNextSibling);
           appendNonStandardSources(
             sectionEl,
             section.dangerousDeps ?? [],

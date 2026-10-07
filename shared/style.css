@@ -602,11 +602,42 @@ code {
   color: var(--accent);
   letter-spacing: 0.02em;
 }
+.eco-summary .section-title {
+  margin: 0;
+}
 
 .summary {
   font-size: 0.88rem;
   color: var(--muted);
   margin: 0 0 0.25rem;
+}
+
+/* ── Collapsible ecosystem section (multi-ecosystem results) ────────────────── */
+.eco-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  cursor: pointer;
+  list-style: none;
+  margin: 0 0 0.5rem;
+}
+.eco-summary::-webkit-details-marker {
+  display: none;
+}
+.eco-summary::before {
+  content: "▾";
+  font-size: 1.1em;
+  color: var(--muted);
+  vertical-align: -0.05em;
+}
+.eco-section:not([open]) > .eco-summary::before {
+  content: "▸";
+}
+.eco-summary:hover .section-title {
+  color: var(--text);
+}
+.eco-summary .summary {
+  margin: 0;
 }
 
 .source-files {
