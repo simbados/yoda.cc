@@ -1,0 +1,421 @@
+{
+  "responses": [
+    {
+      "request": {
+        "versionKey": {
+          "system": "NPM",
+          "name": "react",
+          "version": "19.2.0"
+        }
+      },
+      "findings": {
+        "versionKey": {
+          "system": "NPM",
+          "name": "react",
+          "version": "19.2.0"
+        },
+        "recommendedVersions": [
+          {
+            "versionKey": {
+              "system": "NPM",
+              "name": "react",
+              "version": "19.3.0"
+            },
+            "isDefault": true,
+            "findings": [],
+            "cooldownEnd": "2026-09-24T17:21:30Z"
+          }
+        ],
+        "requestedVersion": {
+          "versionKey": {
+            "system": "NPM",
+            "name": "react",
+            "version": "19.2.0"
+          },
+          "isDefault": false,
+          "findings": [],
+          "cooldownEnd": "2025-10-16T21:38:32Z"
+        },
+        "defaultVersion": {
+          "versionKey": {
+            "system": "NPM",
+            "name": "react",
+            "version": "19.3.0"
+          },
+          "isDefault": true,
+          "findings": [],
+          "cooldownEnd": "2026-09-24T17:21:30Z"
+        },
+        "packageFindings": []
+      }
+    },
+    {
+      "request": {
+        "versionKey": {
+          "system": "NPM",
+          "name": "axios",
+          "version": "0.21.0"
+        }
+      },
+      "findings": {
+        "versionKey": {
+          "system": "NPM",
+          "name": "axios",
+          "version": "0.21.0"
+        },
+        "recommendedVersions": [
+          {
+            "versionKey": {
+              "system": "NPM",
+              "name": "axios",
+              "version": "1.20.0"
+            },
+            "isDefault": true,
+            "findings": [
+              {
+                "type": "REMEDIATION",
+                "risk": "RISK_INFORMATIONAL"
+              }
+            ],
+            "cooldownEnd": "2026-08-26T08:20:14Z"
+          }
+        ],
+        "requestedVersion": {
+          "versionKey": {
+            "system": "NPM",
+            "name": "axios",
+            "version": "0.21.0"
+          },
+          "isDefault": false,
+          "findings": [
+            {
+              "type": "DEPRECATED",
+              "risk": "RISK_MEDIUM",
+              "deprecatedContext": {
+                "reason": "Critical security vulnerability fixed in v0.21.1. For more information, see https://github.com/axios/axios/pull/3410"
+              }
+            }
+          ],
+          "cooldownEnd": "2020-11-07T16:27:13Z"
+        },
+        "defaultVersion": {
+          "versionKey": {
+            "system": "NPM",
+            "name": "axios",
+            "version": "1.20.0"
+          },
+          "isDefault": true,
+          "findings": [
+            {
+              "type": "REMEDIATION",
+              "risk": "RISK_INFORMATIONAL"
+            }
+          ],
+          "cooldownEnd": "2026-08-26T08:20:14Z"
+        },
+        "packageFindings": []
+      }
+    },
+    {
+      "request": {
+        "versionKey": {
+          "system": "NPM",
+          "name": "next",
+          "version": "14.0.0"
+        }
+      },
+      "findings": {
+        "versionKey": {
+          "system": "NPM",
+          "name": "next",
+          "version": "14.0.0"
+        },
+        "recommendedVersions": [],
+        "requestedVersion": {
+          "versionKey": {
+            "system": "NPM",
+            "name": "next",
+            "version": "14.0.0"
+          },
+          "isDefault": false,
+          "findings": [
+            {
+              "type": "VULNERABLE",
+              "risk": "RISK_CRITICAL"
+            },
+            {
+              "type": "DEPRECATED",
+              "risk": "RISK_MEDIUM",
+              "deprecatedContext": {
+                "reason": "This version has a security vulnerability. Please upgrade to a patched version. See https://nextjs.org/blog/security-update-2025-12-11 for more details."
+              }
+            }
+          ],
+          "cooldownEnd": "2023-11-10T16:13:48Z"
+        },
+        "defaultVersion": {
+          "versionKey": {
+            "system": "NPM",
+            "name": "next",
+            "version": "16.4.0"
+          },
+          "isDefault": true,
+          "findings": [
+            {
+              "type": "COOLDOWN",
+              "risk": "RISK_HIGH",
+              "cooldownContext": {
+                "end": "2026-10-21T18:35:31Z"
+              }
+            }
+          ],
+          "cooldownEnd": "2026-10-21T18:35:31Z"
+        },
+        "packageFindings": []
+      }
+    },
+    {
+      "request": {
+        "versionKey": {
+          "system": "PYPI",
+          "name": "django",
+          "version": "3.2.0"
+        }
+      },
+      "findings": {
+        "versionKey": {
+          "system": "PYPI",
+          "name": "django",
+          "version": "3.2.0"
+        },
+        "recommendedVersions": [],
+        "requestedVersion": {
+          "versionKey": {
+            "system": "PYPI",
+            "name": "django",
+            "version": "3.2.0"
+          },
+          "isDefault": false,
+          "findings": [
+            {
+              "type": "VULNERABLE",
+              "risk": "RISK_CRITICAL"
+            }
+          ],
+          "cooldownEnd": "2021-04-11T09:33:15Z"
+        },
+        "defaultVersion": {
+          "versionKey": {
+            "system": "PYPI",
+            "name": "django",
+            "version": "6.1.2"
+          },
+          "isDefault": true,
+          "findings": [
+            {
+              "type": "COOLDOWN",
+              "risk": "RISK_HIGH",
+              "cooldownContext": {
+                "end": "2026-10-11T12:53:17Z"
+              }
+            }
+          ],
+          "cooldownEnd": "2026-10-11T12:53:17Z"
+        },
+        "packageFindings": []
+      }
+    },
+    {
+      "request": {
+        "versionKey": {
+          "system": "PYPI",
+          "name": "jinja2",
+          "version": "2.10"
+        }
+      },
+      "findings": {
+        "versionKey": {
+          "system": "PYPI",
+          "name": "jinja2",
+          "version": "2.10.0"
+        },
+        "recommendedVersions": [
+          {
+            "versionKey": {
+              "system": "PYPI",
+              "name": "jinja2",
+              "version": "3.1.6"
+            },
+            "isDefault": true,
+            "findings": [
+              {
+                "type": "REMEDIATION",
+                "risk": "RISK_INFORMATIONAL"
+              }
+            ],
+            "cooldownEnd": "2025-03-05T20:05:00Z"
+          }
+        ],
+        "requestedVersion": {
+          "versionKey": {
+            "system": "PYPI",
+            "name": "jinja2",
+            "version": "2.10.0"
+          },
+          "isDefault": false,
+          "findings": [],
+          "cooldownEnd": "2017-11-13T20:13:42Z"
+        },
+        "defaultVersion": {
+          "versionKey": {
+            "system": "PYPI",
+            "name": "jinja2",
+            "version": "3.1.6"
+          },
+          "isDefault": true,
+          "findings": [
+            {
+              "type": "REMEDIATION",
+              "risk": "RISK_INFORMATIONAL"
+            }
+          ],
+          "cooldownEnd": "2025-03-05T20:05:00Z"
+        },
+        "packageFindings": []
+      }
+    },
+    {
+      "request": {
+        "versionKey": {
+          "system": "GO",
+          "name": "github.com/dgrijalva/jwt-go",
+          "version": "v3.2.0+incompatible"
+        }
+      },
+      "findings": {
+        "versionKey": {
+          "system": "GO",
+          "name": "github.com/dgrijalva/jwt-go",
+          "version": "v3.2.0+incompatible"
+        },
+        "recommendedVersions": [
+          {
+            "versionKey": {
+              "system": "GO",
+              "name": "github.com/dgrijalva/jwt-go",
+              "version": "v3.2.0+incompatible"
+            },
+            "isDefault": true,
+            "findings": [],
+            "cooldownEnd": "2018-03-18T23:13:08Z"
+          }
+        ],
+        "requestedVersion": {
+          "versionKey": {
+            "system": "GO",
+            "name": "github.com/dgrijalva/jwt-go",
+            "version": "v3.2.0+incompatible"
+          },
+          "isDefault": true,
+          "findings": [],
+          "cooldownEnd": "2018-03-18T23:13:08Z"
+        },
+        "defaultVersion": {
+          "versionKey": {
+            "system": "GO",
+            "name": "github.com/dgrijalva/jwt-go",
+            "version": "v3.2.0+incompatible"
+          },
+          "isDefault": true,
+          "findings": [],
+          "cooldownEnd": "2018-03-18T23:13:08Z"
+        },
+        "packageFindings": []
+      }
+    },
+    {
+      "request": {
+        "packageKey": {
+          "system": "NPM",
+          "name": "reqeusts"
+        }
+      },
+      "findings": {
+        "packageKey": {
+          "system": "NPM",
+          "name": "reqeusts"
+        },
+        "recommendedVersions": [],
+        "packageFindings": [
+          {
+            "type": "NOT_FOUND",
+            "risk": "RISK_CRITICAL"
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "versionKey": {
+          "system": "NPM",
+          "name": "ua-parser-js",
+          "version": "0.7.29"
+        }
+      },
+      "findings": {
+        "versionKey": {
+          "system": "NPM",
+          "name": "ua-parser-js",
+          "version": "0.7.29"
+        },
+        "recommendedVersions": [
+          {
+            "versionKey": {
+              "system": "NPM",
+              "name": "ua-parser-js",
+              "version": "2.0.10"
+            },
+            "isDefault": true,
+            "findings": [
+              {
+                "type": "REMEDIATION",
+                "risk": "RISK_INFORMATIONAL"
+              }
+            ],
+            "cooldownEnd": "2026-05-21T06:32:19Z"
+          }
+        ],
+        "requestedVersion": {
+          "versionKey": {
+            "system": "NPM",
+            "name": "ua-parser-js",
+            "version": "0.7.29"
+          },
+          "isDefault": false,
+          "findings": [
+            {
+              "type": "NOT_FOUND",
+              "risk": "RISK_CRITICAL"
+            }
+          ]
+        },
+        "defaultVersion": {
+          "versionKey": {
+            "system": "NPM",
+            "name": "ua-parser-js",
+            "version": "2.0.10"
+          },
+          "isDefault": true,
+          "findings": [
+            {
+              "type": "REMEDIATION",
+              "risk": "RISK_INFORMATIONAL"
+            }
+          ],
+          "cooldownEnd": "2026-05-21T06:32:19Z"
+        },
+        "packageFindings": []
+      }
+    }
+  ]
+}

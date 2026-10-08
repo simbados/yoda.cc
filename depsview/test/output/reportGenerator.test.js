@@ -484,3 +484,205 @@ describe("generateReport — error rows", () => {
     assert.ok(html.includes("row-error"), "sort script must reference row-error class");
   });
 });
+
+function ddRecord(overrides = {}) {
+  return {
+    versionFound: true,
+    versionFindings: [],
+    packageFindings: [],
+    cooldownEnd: null,
+    recommended: null,
+    ...overrides,
+  };
+}
+
+describe("generateReport — depsDevFindings", () => {
+  const results = makeResults([
+    { name: "lodahs", version: "1.0.0", releaseDate: "2024-01-05" },
+    { name: "ua-parser-js", version: "0.7.29", releaseDate: "2024-01-04" },
+    { name: "django", version: "3.2.0", releaseDate: "2024-01-03" },
+    { name: "left-pad", version: "1.3.0", releaseDate: "2024-01-02" },
+    { name: "requests", version: "2.31.0", releaseDate: "2024-01-01" },
+    { name: "nofindings", version: "1.0.0", releaseDate: "2023-12-31" },
+  ]);
+  const findings = new Map([
+    [
+      "pypi:lodahs@1.0.0",
+      ddRecord({
+        versionFindings: [{ type: "NOT_FOUND" }],
+        packageFindings: [{ type: "MALICIOUS" }],
+      }),
+    ],
+    ["pypi:ua-parser-js@0.7.29", ddRecord({ versionFindings: [{ type: "NOT_FOUND" }] })],
+    [
+      "pypi:django@3.2.0",
+      ddRecord({
+        versionFindings: [{ type: "VULNERABLE" }],
+        recommended: { version: "4.2.0", types: ["REMEDIATION"] },
+      }),
+    ],
+    ["pypi:left-pad@1.3.0", ddRecord({ packageFindings: [{ type: "DEPRECATED" }] })],
+    ["pypi:requests@2.31.0", ddRecord()],
+  ]);
+
+  function rowsOf(html) {
+    return extractScriptData(html).sections[0].rows;
+  }
+
+  describe("column header", () => {
+    it("adds a deps.dev header sorting by depsDevSeverity", () => {
+      const html = generateReport(results, new Set(), { depsDevFindings: findings });
+      assert.ok(html.includes('<th data-col="depsDevSeverity">deps.dev</th>'));
+    });
+
+    it("omits the deps.dev header when depsDevFindings is not given", () => {
+      const html = generateReport(results, new Set());
+      assert.ok(!html.includes('data-col="depsDevSeverity"'));
+    });
+
+    it("adds the header even when the findings Map is empty", () => {
+      const html = generateReport(results, new Set(), { depsDevFindings: new Map() });
+      assert.ok(html.includes('data-col="depsDevSeverity"'));
+    });
+  });
+
+  describe("banner", () => {
+    it("renders malicious and pulled banners as note-danger alerts", () => {
+      const html = generateReport(results, new Set(), { depsDevFindings: findings });
+      assert.ok(
+        html.includes(
+          '<p class="note-danger" role="alert">⚠ 1 package is flagged as malicious: lodahs@1.0.0. Do not install it — remove it from your dependencies.</p>',
+        ),
+      );
+      assert.ok(
+        html.includes(
+          '<p class="note-danger" role="alert">⚠ 1 locked version was pulled from the registry (often after a compromise): ua-parser-js@0.7.29. Upgrade or remove it.</p>',
+        ),
+      );
+    });
+
+    it("places the banner before the table", () => {
+      const html = generateReport(results, new Set(), { depsDevFindings: findings });
+      assert.ok(html.indexOf('role="alert"') < html.indexOf('<div class="table-scroll">'));
+    });
+
+    it("renders no banner when nothing is malicious or pulled", () => {
+      const html = generateReport(results, new Set(), {
+        depsDevFindings: new Map([["pypi:requests@2.31.0", ddRecord()]]),
+      });
+      assert.ok(!html.includes('<p class="note-danger"'));
+    });
+
+    it("renders no banner when depsDevFindings is not given", () => {
+      const html = generateReport(results, new Set());
+      assert.ok(!html.includes('<p class="note-danger"'));
+    });
+
+    it("HTML-escapes a package name containing a script tag in the banner", () => {
+      const evil = makeResults([
+        { name: "<script>alert(1)</script>", version: "1.0.0", releaseDate: "2024-01-01" },
+      ]);
+      const html = generateReport(evil, new Set(), {
+        depsDevFindings: new Map([
+          [
+            "pypi:<script>alert(1)</script>@1.0.0",
+            ddRecord({ packageFindings: [{ type: "MALICIOUS" }] }),
+          ],
+        ]),
+      });
+      assert.ok(html.includes('<p class="note-danger" role="alert">'));
+      assert.ok(html.includes("&lt;script&gt;alert(1)&lt;/script&gt;@1.0.0"));
+      assert.ok(!html.includes("<script>alert"));
+    });
+
+    it("HTML-escapes quotes and ampersands in the banner", () => {
+      const evil = makeResults([{ name: `a"b'&c`, version: "1.0.0", releaseDate: "2024-01-01" }]);
+      const html = generateReport(evil, new Set(), {
+        depsDevFindings: new Map([
+          [`pypi:a"b'&c@1.0.0`, ddRecord({ versionFindings: [{ type: "NOT_FOUND" }] })],
+        ]),
+      });
+      assert.ok(html.includes("a&quot;b&#x27;&amp;c@1.0.0"));
+    });
+  });
+
+  describe("embedded row fields", () => {
+    it("embeds text, class, tooltip, URL and severity for a malicious row", () => {
+      const row = rowsOf(generateReport(results, new Set(), { depsDevFindings: findings })).find(
+        (r) => r.name === "lodahs",
+      );
+      assert.equal(row.depsDevText, "malicious +1");
+      assert.equal(row.depsDevClass, "score-bad");
+      assert.equal(
+        row.depsDevTitle,
+        "Flagged as malicious (OSSF Malicious Packages). Do not install.\nThis version is no longer in the registry — often removed after a compromise.",
+      );
+      assert.equal(row.depsDevUrl, "https://deps.dev/pypi/lodahs/1.0.0");
+      assert.equal(row.depsDevSeverity, 7);
+    });
+
+    it("maps each colour band to its CSS class", () => {
+      const rows = rowsOf(generateReport(results, new Set(), { depsDevFindings: findings }));
+      const cls = Object.fromEntries(rows.map((r) => [r.name, r.depsDevClass]));
+      assert.equal(cls["ua-parser-js"], "score-bad");
+      assert.equal(cls.django, "age-orange");
+      assert.equal(cls["left-pad"], "score-warn");
+      assert.equal(cls.requests, "score-good");
+    });
+
+    it("includes the recommended upgrade in the tooltip", () => {
+      const row = rowsOf(generateReport(results, new Set(), { depsDevFindings: findings })).find(
+        (r) => r.name === "django",
+      );
+      assert.equal(
+        row.depsDevTitle,
+        "Affected by a critical vulnerability.\nRecommended: 4.2.0 (fixes a known vulnerability)",
+      );
+    });
+
+    it("embeds an en dash and null link and severity for a row without a record", () => {
+      const row = rowsOf(generateReport(results, new Set(), { depsDevFindings: findings })).find(
+        (r) => r.name === "nofindings",
+      );
+      assert.equal(row.depsDevText, "–");
+      assert.equal(row.depsDevClass, "");
+      assert.equal(row.depsDevTitle, "");
+      assert.equal(row.depsDevUrl, null);
+      assert.equal(row.depsDevSeverity, null);
+    });
+
+    it("embeds no deps.dev fields when depsDevFindings is not given", () => {
+      const rows = rowsOf(generateReport(results, new Set()));
+      for (const r of rows) {
+        for (const k of [
+          "depsDevText",
+          "depsDevClass",
+          "depsDevTitle",
+          "depsDevUrl",
+          "depsDevSeverity",
+        ]) {
+          assert.ok(!(k in r), `${k} must be absent`);
+        }
+      }
+    });
+
+    it("percent-encodes a Go module path in the deps.dev URL", () => {
+      const goResults = makeResults([
+        { name: "github.com/gin-gonic/gin", version: "v1.9.1", releaseDate: "2024-01-01" },
+      ]);
+      const html = generateReport(goResults, new Set(), {
+        ecosystem: "go",
+        depsDevFindings: new Map([["golang:github.com/gin-gonic/gin@v1.9.1", ddRecord()]]),
+      });
+      assert.equal(
+        rowsOf(html)[0].depsDevUrl,
+        "https://deps.dev/go/github.com%2Fgin-gonic%2Fgin/v1.9.1",
+      );
+    });
+
+    it("sorts depsDevSeverity numerically in the embedded sort script", () => {
+      const html = generateReport(results, new Set(), { depsDevFindings: findings });
+      assert.ok(html.includes("col==='depsDevSeverity'"));
+    });
+  });
+});

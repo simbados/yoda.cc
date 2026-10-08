@@ -4,12 +4,13 @@
  * and basic output correctness for both formatJson and formatTable.
  */
 
-import { test, describe } from "node:test";
+import { test, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   formatTable,
   formatMulti,
   formatJson,
+  sortedResults,
   daysSince,
   ECOSYSTEM_ORDER,
   ANSI_RED,
@@ -1122,5 +1123,309 @@ describe("formatJson — rust downloadsLastMonth", () => {
 describe("ECOSYSTEM_ORDER", () => {
   test("is the fixed npm → python → go → rust sequence", () => {
     assert.deepEqual(ECOSYSTEM_ORDER, ["npm", "python", "go", "rust"]);
+  });
+});
+
+function withTty(fn) {
+  const desc = Object.getOwnPropertyDescriptor(process.stdout, "isTTY");
+  Object.defineProperty(process.stdout, "isTTY", {
+    value: true,
+    configurable: true,
+    writable: true,
+  });
+  try {
+    return fn();
+  } finally {
+    if (desc) Object.defineProperty(process.stdout, "isTTY", desc);
+    else delete process.stdout.isTTY;
+  }
+}
+
+function ddRecord(overrides = {}) {
+  return {
+    versionFound: true,
+    versionFindings: [],
+    packageFindings: [],
+    cooldownEnd: null,
+    recommended: null,
+    ...overrides,
+  };
+}
+
+describe("sortedResults — depsDevFindings", () => {
+  const results = makeResults([
+    { name: "Django", version: "3.2.0", released: "2021-04-06" },
+    { name: "requests", version: "2.31.0", released: "2023-05-22" },
+  ]);
+  const findings = new Map([
+    ["pypi:django@3.2.0", ddRecord({ versionFindings: [{ type: "VULNERABLE" }] })],
+  ]);
+
+  it("adds no depsDev field when depsDevFindings is not given", () => {
+    const rows = sortedResults(results, new Map(), { ecosystem: "python" });
+    assert.ok(rows.every((r) => !("depsDev" in r)));
+  });
+
+  it("adds no depsDev field when no ecosystem is given", () => {
+    const rows = sortedResults(results, new Map(), { depsDevFindings: findings });
+    assert.ok(rows.every((r) => !("depsDev" in r)));
+  });
+
+  it("classifies a row by its purl-type key with a lower-cased name", () => {
+    const rows = sortedResults(results, new Map(), {
+      ecosystem: "python",
+      depsDevFindings: findings,
+    });
+    const django = rows.find((r) => r.name === "Django");
+    assert.equal(django.depsDev.label, "vulnerable");
+    assert.equal(django.depsDev.color, "orange");
+  });
+
+  it("sets depsDev to null for a row without a findings record", () => {
+    const rows = sortedResults(results, new Map(), {
+      ecosystem: "python",
+      depsDevFindings: findings,
+    });
+    assert.equal(rows.find((r) => r.name === "requests").depsDev, null);
+  });
+
+  it("sets depsDev to null for a row with an error even when a record exists", () => {
+    const errResults = makeResults([
+      { name: "django", version: "3.2.0", released: "unknown", error: "lookup failed" },
+    ]);
+    const rows = sortedResults(errResults, new Map(), {
+      ecosystem: "python",
+      depsDevFindings: findings,
+    });
+    assert.equal(rows[0].depsDev, null);
+  });
+
+  it("uses the golang purl type for go sections", () => {
+    const goResults = makeResults([
+      { name: "github.com/BurntSushi/toml", version: "v1.3.2", released: "2023-06-01" },
+    ]);
+    const rows = sortedResults(goResults, new Map(), {
+      ecosystem: "go",
+      depsDevFindings: new Map([
+        [
+          "golang:github.com/burntsushi/toml@v1.3.2",
+          ddRecord({ packageFindings: [{ type: "DEPRECATED" }] }),
+        ],
+      ]),
+    });
+    assert.equal(rows[0].depsDev.label, "deprecated");
+  });
+});
+
+describe("formatTable — depsDevFindings", () => {
+  const results = makeResults([
+    { name: "lodahs", version: "1.0.0", released: "2024-01-01" },
+    { name: "ua-parser-js", version: "0.7.29", released: "2021-10-22" },
+    { name: "react", version: "19.2.0", released: "2025-10-01" },
+  ]);
+  const findings = new Map([
+    [
+      "npm:lodahs@1.0.0",
+      ddRecord({
+        versionFindings: [{ type: "NOT_FOUND" }],
+        packageFindings: [{ type: "MALICIOUS" }],
+      }),
+    ],
+    ["npm:ua-parser-js@0.7.29", ddRecord({ versionFindings: [{ type: "NOT_FOUND" }] })],
+    ["npm:react@19.2.0", ddRecord()],
+  ]);
+
+  it("shows the deps.dev column header when depsDevFindings and ecosystem are given", () => {
+    const output = captureConsole(() =>
+      formatTable(results, new Set(), { ecosystem: "npm", depsDevFindings: findings }),
+    );
+    assert.ok(output.includes("deps.dev"));
+  });
+
+  it("omits the deps.dev column when depsDevFindings is not given", () => {
+    const output = captureConsole(() => formatTable(results, new Set(), { ecosystem: "npm" }));
+    assert.ok(!output.includes("deps.dev"));
+  });
+
+  it("omits the deps.dev column when no ecosystem is given", () => {
+    const output = captureConsole(() =>
+      formatTable(results, new Set(), { depsDevFindings: findings }),
+    );
+    assert.ok(!output.includes("deps.dev"));
+  });
+
+  it("renders the worst label with a +N suffix and single labels as-is", () => {
+    const output = captureConsole(() =>
+      formatTable(results, new Set(), { ecosystem: "npm", depsDevFindings: findings }),
+    );
+    const lines = output.split("\n");
+    assert.ok(lines.find((l) => l.startsWith("lodahs")).includes("malicious +1"));
+    assert.ok(lines.find((l) => l.startsWith("ua-parser-js")).includes("pulled"));
+    assert.match(
+      lines.find((l) => l.startsWith("react")),
+      /\bok\b/,
+    );
+  });
+
+  it('renders "-" for a package without a findings record', () => {
+    const output = captureConsole(() =>
+      formatTable(results, new Set(), { ecosystem: "npm", depsDevFindings: new Map() }),
+    );
+    const reactLine = output.split("\n").find((l) => l.startsWith("react"));
+    assert.match(reactLine, / - /);
+  });
+
+  it("prints malicious and pulled banner lines above the table header", () => {
+    const output = captureConsole(() =>
+      formatTable(results, new Set(), { ecosystem: "npm", depsDevFindings: findings }),
+    );
+    const maliciousIdx = output.indexOf("⚠ 1 package is flagged as malicious: lodahs@1.0.0.");
+    const pulledIdx = output.indexOf("⚠ 1 locked version was pulled from the registry");
+    const headerIdx = output.indexOf("Package");
+    assert.ok(maliciousIdx >= 0, output);
+    assert.ok(pulledIdx > maliciousIdx, output);
+    assert.ok(headerIdx > pulledIdx, output);
+    assert.ok(output.includes("ua-parser-js@0.7.29. Upgrade or remove it."));
+    assert.ok(!output.includes("lodahs@1.0.0. Upgrade"));
+  });
+
+  it("prints no banner when nothing is malicious or pulled", () => {
+    const output = captureConsole(() =>
+      formatTable(results, new Set(), {
+        ecosystem: "npm",
+        depsDevFindings: new Map([["npm:react@19.2.0", ddRecord()]]),
+      }),
+    );
+    assert.ok(!output.includes("⚠"));
+  });
+
+  it("colours the banner and the red, orange, yellow and green cells on a TTY", () => {
+    const colourResults = makeResults([
+      { name: "lodahs", version: "1.0.0", released: "2024-01-04" },
+      { name: "django", version: "3.2.0", released: "2024-01-03" },
+      { name: "left-pad", version: "1.3.0", released: "2024-01-02" },
+      { name: "react", version: "19.2.0", released: "2024-01-01" },
+    ]);
+    const colourFindings = new Map([
+      ["npm:lodahs@1.0.0", ddRecord({ packageFindings: [{ type: "MALICIOUS" }] })],
+      ["npm:django@3.2.0", ddRecord({ versionFindings: [{ type: "VULNERABLE" }] })],
+      ["npm:left-pad@1.3.0", ddRecord({ packageFindings: [{ type: "DEPRECATED" }] })],
+      ["npm:react@19.2.0", ddRecord()],
+    ]);
+    const output = withTty(() =>
+      captureConsole(() =>
+        formatTable(colourResults, new Set(), {
+          ecosystem: "npm",
+          depsDevFindings: colourFindings,
+        }),
+      ),
+    );
+    const lines = output.split("\n");
+    assert.ok(lines.find((l) => l.includes("⚠")).startsWith(ANSI_RED));
+    assert.ok(lines.find((l) => l.startsWith("lodahs")).includes(`${ANSI_RED}malicious`));
+    assert.ok(lines.find((l) => l.startsWith("django")).includes(`${ANSI_ORANGE}vulnerable`));
+    assert.ok(lines.find((l) => l.startsWith("left-pad")).includes(`${ANSI_YELLOW}deprecated`));
+    assert.ok(lines.find((l) => l.startsWith("react")).includes(`${ANSI_GREEN}ok`));
+  });
+});
+
+describe("formatMulti — depsDevFindings", () => {
+  it("renders the deps.dev column and banner for every section", () => {
+    const sections = new Map([
+      [
+        "npm",
+        {
+          results: makeResults([{ name: "lodahs", version: "1.0.0", released: "2024-01-01" }]),
+          directNames: new Set(),
+        },
+      ],
+      [
+        "python",
+        {
+          results: makeResults([{ name: "PyYAML", version: "5.3", released: "2020-01-01" }]),
+          directNames: new Set(),
+        },
+      ],
+    ]);
+    const findings = new Map([
+      ["npm:lodahs@1.0.0", ddRecord({ packageFindings: [{ type: "MALICIOUS" }] })],
+      ["pypi:pyyaml@5.3", ddRecord({ versionFindings: [{ type: "VULNERABLE" }] })],
+    ]);
+    const output = captureConsole(() => formatMulti(sections, { depsDevFindings: findings }));
+    assert.equal(output.split("deps.dev").length - 1, 2);
+    assert.ok(output.includes("flagged as malicious: lodahs@1.0.0"));
+    assert.ok(
+      output
+        .split("\n")
+        .find((l) => l.startsWith("PyYAML"))
+        .includes("vulnerable"),
+    );
+  });
+
+  it("omits the deps.dev column when depsDevFindings is not given", () => {
+    const sections = new Map([
+      [
+        "npm",
+        {
+          results: makeResults([{ name: "react", version: "19.2.0", released: "2024-01-01" }]),
+          directNames: new Set(),
+        },
+      ],
+    ]);
+    const output = captureConsole(() => formatMulti(sections));
+    assert.ok(!output.includes("deps.dev"));
+  });
+});
+
+describe("formatJson — depsDevFindings", () => {
+  const results = makeResults([
+    { name: "next", version: "14.0.0", released: "2023-10-26" },
+    { name: "requests", version: "2.31.0", released: "2023-05-22" },
+    { name: "broken", version: "1.0.0", released: "unknown", error: "lookup failed" },
+  ]);
+  const findings = new Map([
+    [
+      "npm:next@14.0.0",
+      ddRecord({
+        versionFindings: [{ type: "VULNERABLE" }, { type: "DEPRECATED", reason: "upgrade" }],
+        recommended: { version: "14.2.35", types: ["REMEDIATION"] },
+      }),
+    ],
+    ["npm:broken@1.0.0", ddRecord({ packageFindings: [{ type: "MALICIOUS" }] })],
+  ]);
+
+  it("adds a depsDev object with exactly the public fields", () => {
+    const rows = runFormatJsonRows(results, { depsDevFindings: findings }, "npm");
+    const next = rows.find((r) => r.name === "next");
+    assert.deepEqual(next.depsDev, {
+      label: "vulnerable",
+      labels: ["vulnerable", "deprecated"],
+      color: "orange",
+      severity: 5,
+      details: ["Affected by a critical vulnerability.", "Deprecated: upgrade"],
+      recommended: "14.2.35",
+    });
+  });
+
+  it("sets depsDev to null for a package without a record", () => {
+    const rows = runFormatJsonRows(results, { depsDevFindings: findings }, "npm");
+    assert.equal(rows.find((r) => r.name === "requests").depsDev, null);
+  });
+
+  it("sets depsDev to null for an error row", () => {
+    const rows = runFormatJsonRows(results, { depsDevFindings: findings }, "npm");
+    const broken = rows.find((r) => r.name === "broken");
+    assert.equal(broken.depsDev, null);
+    assert.equal(broken.error, "lookup failed");
+  });
+
+  it("adds depsDev keys even when the findings Map is empty", () => {
+    const rows = runFormatJsonRows(results, { depsDevFindings: new Map() }, "npm");
+    assert.ok(rows.every((r) => "depsDev" in r && r.depsDev === null));
+  });
+
+  it("omits the depsDev key when depsDevFindings is not given", () => {
+    const rows = runFormatJsonRows(results, {}, "npm");
+    assert.ok(rows.every((r) => !("depsDev" in r)));
   });
 });

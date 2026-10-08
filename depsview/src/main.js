@@ -10,7 +10,7 @@
  * Usage:
  *   node src/main.js <path-or-github-url> [--npm] [--python] [--go] [--rust]
  *                    [--json] [--debug] [--include-tests] [--download-stats|--ds]
- *                    [--socket-key=<key>] [--socket-org=<slug>] [--report[=<file>]]
+ *                    [--socket-key=<key>] [--socket-org=<slug>] [--deps-dev] [--report[=<file>]]
  *   node src/main.js --package|-p <name> --npm|--python|--go|--rust
  */
 
@@ -22,6 +22,7 @@ import { orchestrate, packagesForSocket } from "./orchestrator.js";
 import { formatMulti, formatJson, ECOSYSTEM_ORDER } from "./output/formatter.js";
 import { generateReport } from "./output/reportGenerator.js";
 import { fetchSocketScores } from "./socket/client.js";
+import { fetchDepsDevFindings } from "./depsdev/client.js";
 import { setDebug } from "./util/debugging.js";
 import { isGithubUrl, parseGithubUrl } from "./github/url.js";
 import { NPM_LOCK_FILENAMES } from "./npm/lockRegistry.js";
@@ -57,6 +58,9 @@ const PYTHON_FILES = new Set([
  * Socket.dev credentials can also be supplied via `SOCKET_KEY` / `SOCKET_ORG`
  * env vars; the `--socket-key` / `--socket-org` flags take precedence.
  *
+ * `--deps-dev` opts in to deps.dev findings (malicious / pulled / vulnerable / …),
+ * which sends package names and versions to api.deps.dev.
+ *
  * @returns {{
  *   projectPath: string|null,
  *   packageName: string|null,
@@ -67,6 +71,7 @@ const PYTHON_FILES = new Set([
  *   requestedEcosystems: Set<'npm'|'python'|'go'|'rust'>,
  *   socketKey: string|null,
  *   socketOrg: string|null,
+ *   depsDev: boolean,
  *   reportPath: string|null,
  * }}
  */
@@ -76,6 +81,7 @@ function parseArgs() {
   const debugFlag = args.includes("--debug");
   const includeTestsFlag = args.includes("--include-tests");
   const downloadStatsFlag = args.includes("--download-stats") || args.includes("--ds");
+  const depsDevFlag = args.includes("--deps-dev");
 
   const requestedEcosystems = new Set();
   if (args.includes("--npm")) requestedEcosystems.add("npm");
@@ -131,7 +137,7 @@ function parseArgs() {
       "Usage: depsview <path-to-project|github-url> [--npm] [--python] [--go] [--rust] [--json] [--debug] [--include-tests]",
     );
     console.error(
-      "       [--download-stats|--ds] [--socket-key=<key>] [--socket-org=<slug>] [--report[=<file>]]",
+      "       [--download-stats|--ds] [--socket-key=<key>] [--socket-org=<slug>] [--deps-dev] [--report[=<file>]]",
     );
     console.error("       depsview --package|-p <name> --npm|--python|--go|--rust");
     console.error("");
@@ -158,6 +164,7 @@ function parseArgs() {
     requestedEcosystems,
     socketKey,
     socketOrg,
+    depsDev: depsDevFlag,
     reportPath,
   };
 }
@@ -287,6 +294,7 @@ async function main() {
     requestedEcosystems,
     socketKey,
     socketOrg,
+    depsDev,
     reportPath,
   } = parseArgs();
   if (debug) setDebug(true);
@@ -376,8 +384,20 @@ async function main() {
     if (!json) process.stderr.write("\n");
   }
 
+  // ── Single deps.dev findings call across all ecosystems (opt-in) ──────────
+  let depsDevFindings = null;
+  if (depsDev) {
+    if (!json) process.stderr.write("Checking packages against deps.dev…\n");
+    const packages = packagesForSocket(sections);
+    depsDevFindings = await fetchDepsDevFindings(packages);
+    if (packages.length > 0 && depsDevFindings.size === 0) {
+      process.stderr.write("deps.dev lookup failed — the deps.dev column will be empty.\n");
+    }
+    if (!json) process.stderr.write("\n");
+  }
+
   // ── Output ────────────────────────────────────────────────────────────────
-  const outputOpts = { downloadStats, socketScores };
+  const outputOpts = { downloadStats, socketScores, depsDevFindings };
 
   if (json) {
     formatJson(sections, outputOpts);

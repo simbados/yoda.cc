@@ -14,9 +14,43 @@
 import { randomBytes } from "node:crypto";
 import { sortedResults, ECOSYSTEM_ORDER, purlEcosystem } from "./formatter.js";
 import { groupByDomain } from "./nonStandardSources.js";
+import {
+  depsDevCellText,
+  depsDevTooltip,
+  depsDevBannerLines,
+  depsDevPackageUrl,
+} from "../depsdev/signals.js";
 
 /** Maps a depsview ecosystem label to the socket.dev URL slug for "(link)" anchors. */
 const SOCKET_URL_SLUG = { npm: "npm", python: "pypi", go: "go", rust: "cargo" };
+
+/** Maps a deps.dev label colour band to the report CSS class (same classes as the web UI). */
+const DEPSDEV_CLASS = {
+  red: "score-bad",
+  orange: "age-orange",
+  yellow: "score-warn",
+  green: "score-good",
+};
+
+/**
+ * Adds precomputed deps.dev display fields to a row (cell text, CSS class, tooltip,
+ * link, sort key) so the embedded report script only has to place them in the DOM.
+ * Returns a new object; the input row is not modified.
+ * @param {object} row - row from sortedResults (may carry `depsDev`)
+ * @param {'npm'|'python'|'go'|'rust'} ecosystem
+ * @returns {object}
+ */
+function withDepsDevDisplay(row, ecosystem) {
+  const dd = row.depsDev ?? null;
+  return {
+    ...row,
+    depsDevText: depsDevCellText(dd, "\u2013"),
+    depsDevClass: dd ? (DEPSDEV_CLASS[dd.color] ?? "") : "",
+    depsDevTitle: depsDevTooltip(dd),
+    depsDevUrl: dd ? depsDevPackageUrl(ecosystem, row.name, row.version) : null,
+    depsDevSeverity: dd ? dd.severity : null,
+  };
+}
 
 /**
  * Escapes a string for safe insertion into HTML text content or attribute values
@@ -128,6 +162,16 @@ h2.section-title {
 .section { margin-bottom: 2.5rem; }
 .section:last-child { margin-bottom: 0; }
 .summary { color: var(--muted); font-size: 0.88rem; margin: 0 0 0.75rem; }
+.note-danger {
+  color: var(--red);
+  background: rgba(153, 27, 27, 0.25);
+  border-left: 3px solid #dc2626;
+  border-radius: 0 6px 6px 0;
+  padding: 0.5rem 0.85rem;
+  margin: 0 0 0.85rem;
+  font-size: 0.88rem;
+  font-weight: 500;
+}
 .note-warning {
   color: #fcd34d;
   background: rgba(146, 64, 14, 0.2);
@@ -200,10 +244,18 @@ details.nonstd > summary:hover { color: var(--text); }
  * @param {boolean} showHeader      - emit a `<h2>` section title above the table
  * @param {Map<string,number>|null} socketScores
  * @param {boolean} downloadStats
+ * @param {Map<string,object>|null} [depsDevFindings=null] - deps.dev findings records (opt-in)
  * @returns {{ html: string, scriptCfg: object|null }} HTML + the per-section
  *   config object embedded into the sort script (null when section is an error).
  */
-function renderSection(ecosystem, section, showHeader, socketScores, downloadStats) {
+function renderSection(
+  ecosystem,
+  section,
+  showHeader,
+  socketScores,
+  downloadStats,
+  depsDevFindings = null,
+) {
   const sectionId = `sec-${ecosystem}`;
   const headerHtml = showHeader ? `<h2 class="section-title">${escapeHtml(ecosystem)}</h2>` : "";
 
@@ -217,7 +269,12 @@ function renderSection(ecosystem, section, showHeader, socketScores, downloadSta
     };
   }
 
-  const rows = sortedResults(section.results, socketScores ?? new Map(), { ecosystem });
+  const showDepsDev = depsDevFindings != null;
+  const sorted = sortedResults(section.results, socketScores ?? new Map(), {
+    ecosystem,
+    depsDevFindings,
+  });
+  const rows = showDepsDev ? sorted.map((r) => withDepsDevDisplay(r, ecosystem)) : sorted;
   const total = rows.length;
 
   const showFirst = ecosystem !== "go";
@@ -253,6 +310,7 @@ function renderSection(ecosystem, section, showHeader, socketScores, downloadSta
   colDefs.push(["Releases", "releases"]);
   if (showDl) colDefs.push([dlLabel, "downloadsLastMonth"]);
   if (showSocket) colDefs.push(["Supply Chain", "supplyChain"]);
+  if (showDepsDev) colDefs.push(["deps.dev", "depsDevSeverity"]);
 
   const headerCellsHtml = colDefs
     .map(
@@ -261,7 +319,7 @@ function renderSection(ecosystem, section, showHeader, socketScores, downloadSta
     )
     .join("");
 
-  const cfg = { showFirst, showDl, showSocket, socketSlug };
+  const cfg = { showFirst, showDl, showSocket, socketSlug, showDepsDev };
   // tbody is intentionally empty — all rows are rendered client-side by the
   // embedded sort script using DOM methods so no user data touches HTML strings.
 
@@ -274,6 +332,11 @@ function renderSection(ecosystem, section, showHeader, socketScores, downloadSta
     .filter(Boolean)
     .map((n) => `<p class="note-warning">${escapeHtml(n)}</p>`)
     .join("\n");
+  const bannerHtml = showDepsDev
+    ? depsDevBannerLines(rows)
+        .map((line) => `<p class="note-danger" role="alert">${escapeHtml(line)}</p>`)
+        .join("\n")
+    : "";
 
   // Convert private packages to [{domain, names}] server-side so the embedded
   // script receives structured data rather than raw URLs.
@@ -284,6 +347,7 @@ function renderSection(ecosystem, section, showHeader, socketScores, downloadSta
   ${headerHtml}
   <p class="summary">${escapeHtml(summaryText)}</p>
   ${noteHtml}
+  ${bannerHtml}
   <div class="table-scroll">
     <table data-section="${escapeHtml(sectionId)}">
       <thead><tr>${headerCellsHtml}</tr></thead>
@@ -322,7 +386,7 @@ function daysSince(d){if(!d||d==='unknown')return Infinity;var ms=Date.now()-new
 function scoreInfo(v){if(v==null||typeof v!=='number')return{text:'\\u2013',cls:''};var p=Math.round(v*100);return{text:p+'%',cls:v>=0.8?'score-good':v>=0.5?'score-warn':'score-bad'};}
 function socketUrl(name,slug){if(!slug)return null;var n=encodeURIComponent(name).replace(/%40/g,'@').replace(/%2F/gi,'/');return'https://socket.dev/'+slug+'/package/'+n;}
 function buildRowEl(r,cfg){
-  var dataCols=3+(cfg.showFirst?1:0)+(cfg.showDl?1:0)+(cfg.showSocket?1:0);
+  var dataCols=3+(cfg.showFirst?1:0)+(cfg.showDl?1:0)+(cfg.showSocket?1:0)+(cfg.showDepsDev?1:0);
   var tr=document.createElement('tr');
   var nameTd=document.createElement('td');
   var a=document.createElement('a');
@@ -348,12 +412,20 @@ function buildRowEl(r,cfg){
     if(r.supplyChain!=null){var su=socketUrl(r.name,cfg.socketSlug);if(su){var lnk=document.createElement('a');lnk.href=su;lnk.target='_blank';lnk.rel='noopener noreferrer';lnk.textContent=' (link)';sTd.appendChild(lnk);}}
     tr.appendChild(sTd);
   }
+  if(cfg.showDepsDev){
+    var dTd=document.createElement('td');
+    var dTitle=String(r.depsDevTitle??'');if(dTitle)dTd.title=dTitle;
+    var dUrl=String(r.depsDevUrl??'');
+    if(/^https:\\/\\/deps\\.dev\\//.test(dUrl)){var dA=document.createElement('a');dA.href=dUrl;dA.target='_blank';dA.rel='noopener noreferrer';dA.textContent=String(r.depsDevText??'');if(r.depsDevClass)dA.className=r.depsDevClass;dTd.appendChild(dA);}
+    else{dTd.textContent=String(r.depsDevText??'\u2013');if(r.depsDevClass)dTd.className=r.depsDevClass;}
+    tr.appendChild(dTd);
+  }
   return tr;
 }
 function sortedRows(rows,col,dir){
   var sign=dir==='asc'?1:-1;
   var isDate=col==='released'||col==='firstReleased';
-  var isNum=col==='releases'||col==='downloadsLastMonth'||col==='supplyChain';
+  var isNum=col==='releases'||col==='downloadsLastMonth'||col==='supplyChain'||col==='depsDevSeverity';
   return rows.slice().sort(function(a,b){
     var av=a[col],bv=b[col];
     if(isDate){
@@ -454,10 +526,11 @@ D.sections.forEach(function(s){
  * @param {object} [opts]
  * @param {boolean}                 [opts.downloadStats=false]
  * @param {Map<string,number>|null} [opts.socketScores=null]
+ * @param {Map<string,object>|null} [opts.depsDevFindings=null] - adds the deps.dev column + banner
  * @returns {string} complete HTML document
  */
 function generateReport(sections, opts = {}) {
-  const { downloadStats = false, socketScores = null } = opts;
+  const { downloadStats = false, socketScores = null, depsDevFindings = null } = opts;
 
   const present = ECOSYSTEM_ORDER.filter((eco) => sections.has(eco));
   const showHeader = present.length >= 2;
@@ -471,6 +544,7 @@ function generateReport(sections, opts = {}) {
       showHeader,
       socketScores,
       downloadStats,
+      depsDevFindings,
     );
     sectionBlocks.push(html);
     if (scriptCfg) scriptCfgs.push(scriptCfg);

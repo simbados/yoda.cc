@@ -12,6 +12,7 @@ import {
   daysSince,
   sortResults,
   sortResultsBy,
+  collectEnrichmentPackages,
   detectEcosystem,
   detectEcosystems,
   ECOSYSTEM_ORDER,
@@ -472,5 +473,157 @@ describe("detectEcosystems", () => {
 describe("ECOSYSTEM_ORDER", () => {
   it("is the fixed npm → python → go → rust sequence", () => {
     assert.deepEqual(ECOSYSTEM_ORDER, ["npm", "python", "go", "rust"]);
+  });
+});
+
+describe("sortResultsBy — depsDevSeverity", () => {
+  const map = new Map([
+    ["a", { name: "alpha", depsDevSeverity: 3 }],
+    ["b", { name: "beta", depsDevSeverity: null }],
+    ["c", { name: "gamma", depsDevSeverity: 7 }],
+    ["d", { name: "delta", depsDevSeverity: 0 }],
+    ["e", { name: "epsilon" }],
+  ]);
+
+  it("sorts depsDevSeverity numerically descending with nulls last", () => {
+    const sorted = sortResultsBy(map, "depsDevSeverity", "desc").map((r) => r.name);
+    assert.deepEqual(sorted.slice(0, 3), ["gamma", "alpha", "delta"]);
+    assert.deepEqual(sorted.slice(3).sort(), ["beta", "epsilon"]);
+  });
+
+  it("sorts depsDevSeverity numerically ascending with nulls last", () => {
+    const sorted = sortResultsBy(map, "depsDevSeverity", "asc").map((r) => r.name);
+    assert.deepEqual(sorted.slice(0, 3), ["delta", "alpha", "gamma"]);
+    assert.deepEqual(sorted.slice(3).sort(), ["beta", "epsilon"]);
+  });
+
+  it("compares severities as numbers rather than strings", () => {
+    const m = new Map([
+      ["a", { name: "a", depsDevSeverity: 10 }],
+      ["b", { name: "b", depsDevSeverity: 2 }],
+    ]);
+    assert.deepEqual(
+      sortResultsBy(m, "depsDevSeverity", "desc").map((r) => r.name),
+      ["a", "b"],
+    );
+  });
+});
+
+describe("collectEnrichmentPackages", () => {
+  it("maps every ecosystem to its purl type", () => {
+    const settled = [
+      {
+        ok: true,
+        section: {
+          ecosystem: "npm",
+          results: new Map([["e", { name: "express", version: "4.19.2" }]]),
+        },
+      },
+      {
+        ok: true,
+        section: {
+          ecosystem: "python",
+          results: new Map([["r", { name: "Requests", version: "2.31.0" }]]),
+        },
+      },
+      {
+        ok: true,
+        section: {
+          ecosystem: "go",
+          results: new Map([["g", { name: "github.com/a/b", version: "v1.0.0" }]]),
+        },
+      },
+      {
+        ok: true,
+        section: {
+          ecosystem: "rust",
+          results: new Map([["s", { name: "serde", version: "1.0.0" }]]),
+        },
+      },
+    ];
+    assert.deepEqual(collectEnrichmentPackages(settled), [
+      { name: "express", version: "4.19.2", ecosystem: "npm" },
+      { name: "Requests", version: "2.31.0", ecosystem: "pypi" },
+      { name: "github.com/a/b", version: "v1.0.0", ecosystem: "golang" },
+      { name: "serde", version: "1.0.0", ecosystem: "cargo" },
+    ]);
+  });
+
+  it("skips failed settled entries", () => {
+    const settled = [
+      { ok: false, ecosystem: "npm", error: "boom" },
+      {
+        ok: true,
+        section: {
+          ecosystem: "go",
+          results: new Map([["x", { name: "github.com/a/b", version: "v1.0.0" }]]),
+        },
+      },
+    ];
+    assert.deepEqual(collectEnrichmentPackages(settled), [
+      { name: "github.com/a/b", version: "v1.0.0", ecosystem: "golang" },
+    ]);
+  });
+
+  it("skips sections with an unknown ecosystem", () => {
+    const settled = [
+      {
+        ok: true,
+        section: { ecosystem: "maven", results: new Map([["x", { name: "x", version: "1" }]]) },
+      },
+    ];
+    assert.deepEqual(collectEnrichmentPackages(settled), []);
+  });
+
+  it("skips packages with a resolution error", () => {
+    const settled = [
+      {
+        ok: true,
+        section: {
+          ecosystem: "npm",
+          results: new Map([
+            ["a", { name: "a", version: "1.0.0" }],
+            ["b", { name: "b", version: "error", error: "not found" }],
+          ]),
+        },
+      },
+    ];
+    assert.deepEqual(collectEnrichmentPackages(settled), [
+      { name: "a", version: "1.0.0", ecosystem: "npm" },
+    ]);
+  });
+
+  it("keeps only name, version and ecosystem", () => {
+    const settled = [
+      {
+        ok: true,
+        section: {
+          ecosystem: "npm",
+          results: new Map([
+            ["a", { name: "a", version: "1.0.0", releaseDate: "2024-01-01", link: "x" }],
+          ]),
+        },
+      },
+    ];
+    assert.deepEqual(Object.keys(collectEnrichmentPackages(settled)[0]), [
+      "name",
+      "version",
+      "ecosystem",
+    ]);
+  });
+
+  it("returns an empty array for no settled entries", () => {
+    assert.deepEqual(collectEnrichmentPackages([]), []);
+  });
+
+  it("does not mutate the settled entries or their result Maps", () => {
+    const pkg = Object.freeze({ name: "a", version: "1.0.0" });
+    const results = new Map([["a", pkg]]);
+    const settled = Object.freeze([
+      Object.freeze({ ok: true, section: Object.freeze({ ecosystem: "npm", results }) }),
+    ]);
+    collectEnrichmentPackages(settled);
+    assert.equal(results.size, 1);
+    assert.equal(results.get("a"), pkg);
   });
 });

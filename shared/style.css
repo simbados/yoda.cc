@@ -546,6 +546,17 @@ code {
   margin: 0 0 0.85rem;
 }
 
+/* Red banner — used by depsview for deps.dev malicious / pulled packages. */
+.note-danger {
+  background: rgba(153, 27, 27, 0.25);
+  border-left: 3px solid #dc2626;
+  border-radius: 0 6px 6px 0;
+  padding: 0.5rem 0.85rem;
+  color: var(--red);
+  font-weight: 500;
+  margin: 0 0 0.85rem;
+}
+
 .legend {
   font-size: 0.8rem;
   color: var(--muted);

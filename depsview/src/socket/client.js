@@ -6,6 +6,8 @@
  */
 
 import { fetchWithRetry } from "../util/http.js";
+// scoreKey lives in util/ (shared with deps.dev); re-exported below for existing importers.
+import { scoreKey } from "../util/scoreKey.js";
 
 const SOCKET_API = "https://api.socket.dev/v0/orgs";
 
@@ -63,19 +65,6 @@ function parseNdjson(text) {
     }
   }
   return results;
-}
-
-/**
- * Builds the canonical Map key for an ecosystem-tagged package + version pair.
- * Used both when ingesting the socket response and when looking up scores from
- * the formatter / report, so the two sides stay aligned.
- * @param {string} ecosystem - PURL type (`npm`, `pypi`, `golang`)
- * @param {string} name      - package name
- * @param {string} version
- * @returns {string}
- */
-function scoreKey(ecosystem, name, version) {
-  return `${ecosystem}:${name.toLowerCase()}@${version}`;
 }
 
 /**

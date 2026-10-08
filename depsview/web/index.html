@@ -83,8 +83,8 @@
       <p class="tagline-sub">
         External calls go only to <code>api.github.com</code>, <code>pypi.org</code>,
         <code>registry.npmjs.org</code>, <code>proxy.golang.org</code>, and <code>crates.io</code>.
-        With Socket.dev credentials or Python download stats, also to the proxy Worker at
-        <code>socket-proxy.yoda.cc</code>.
+        With deps.dev signals enabled, also to <code>api.deps.dev</code>. With Socket.dev or Python
+        download stats enabled, also to the proxy Worker at <code>socket-proxy.yoda.cc</code>.
       </p>
 
       <form id="form" autocomplete="off">
@@ -202,45 +202,72 @@
           </p>
         </div>
 
+        <!-- ── deps.dev security signals ──────────────────────────────────── -->
+        <div class="form-card">
+          <p class="form-card-label">
+            deps.dev security signals <span class="form-card-optional">optional</span>
+          </p>
+          <div class="option-row align-top">
+            <input id="depsdev-enable" type="checkbox" />
+            <label for="depsdev-enable"
+              >Check packages for malware, pulled versions, critical vulnerabilities and
+              deprecations <span class="option-hint">· remembered in local storage</span></label
+            >
+          </div>
+          <p class="form-card-note">
+            No key needed · package names and versions are sent to <code>api.deps.dev</code>
+            (Google Open Source Insights) · no finding does not mean a package is safe
+          </p>
+        </div>
+
         <!-- ── Socket.dev supply chain ─────────────────────────────────────── -->
         <div class="form-card">
           <p class="form-card-label">
             Socket.dev supply chain <span class="form-card-optional">optional</span>
           </p>
-          <div class="input-row token-row">
-            <input
-              id="socket-key-input"
-              type="password"
-              placeholder="API key"
-              spellcheck="false"
-              autocomplete="off"
-            />
-          </div>
-          <div class="input-row token-row">
-            <input
-              id="socket-org-input"
-              type="text"
-              placeholder="Org slug"
-              spellcheck="false"
-              autocomplete="off"
-            />
-          </div>
-          <div class="option-row align-top">
-            <input id="socket-proxy-consent" type="checkbox" />
-            <label for="socket-proxy-consent"
-              >I understand my API key is forwarded through the Cloudflare Worker at
-              <code>socket-proxy.yoda.cc</code> to <code>api.socket.dev</code></label
+          <div class="option-row">
+            <input id="socket-enable" type="checkbox" />
+            <label for="socket-enable"
+              >Use Socket.dev supply-chain scores
+              <span class="option-hint">· needs a Socket.dev API key</span></label
             >
           </div>
-          <div class="option-row">
-            <input id="remember-socket" type="checkbox" />
-            <label for="remember-socket">Remember key and org</label>
+          <div id="socket-fields" hidden>
+            <div class="input-row token-row">
+              <input
+                id="socket-key-input"
+                type="password"
+                placeholder="API key"
+                spellcheck="false"
+                autocomplete="off"
+              />
+            </div>
+            <div class="input-row token-row">
+              <input
+                id="socket-org-input"
+                type="text"
+                placeholder="Org slug"
+                spellcheck="false"
+                autocomplete="off"
+              />
+            </div>
+            <div class="option-row align-top">
+              <input id="socket-proxy-consent" type="checkbox" />
+              <label for="socket-proxy-consent"
+                >I understand my API key is forwarded through the Cloudflare Worker at
+                <code>socket-proxy.yoda.cc</code> to <code>api.socket.dev</code></label
+              >
+            </div>
+            <div class="option-row">
+              <input id="remember-socket" type="checkbox" />
+              <label for="remember-socket">Remember key and org</label>
+            </div>
+            <p class="storage-note" id="socket-storage-note" hidden>
+              Saved in your browser's <strong>local storage</strong>. Your API key is sent only to
+              the configured proxy Worker, which forwards it to <code>api.socket.dev</code>. Uncheck
+              and submit to remove.
+            </p>
           </div>
-          <p class="storage-note" id="socket-storage-note" hidden>
-            Saved in your browser's <strong>local storage</strong>. Your API key is sent only to the
-            configured proxy Worker, which forwards it to <code>api.socket.dev</code>. Uncheck and
-            submit to remove.
-          </p>
         </div>
       </form>
 
@@ -279,10 +306,17 @@
             >) are silently skipped.
           </p>
           <p class="note">
-            Supply chain scores require a Socket.dev API key and org slug (enter above to add a
-            Supply Chain column). Python download statistics (Downloads/mo column) are fetched via
-            the same proxy Worker at <code>socket-proxy.yoda.cc</code> — enable with the checkbox
-            above.
+            deps.dev signals add a deps.dev column with one label per package: red
+            <em>malicious</em> / <em>pulled</em>, orange <em>vulnerable</em> (critical only) /
+            <em>low usage</em>, yellow <em>deprecated</em> / <em>new</em> / <em>unknown</em>, green
+            <em>ok</em>. Hover a label for details. Malicious or pulled packages also get a warning
+            above the table.
+          </p>
+          <p class="note">
+            Supply chain scores are optional: tick "Use Socket.dev supply-chain scores" and enter a
+            Socket.dev API key and org slug to add a Supply Chain column. Python download statistics
+            (Downloads/mo column) are fetched via the same proxy Worker at
+            <code>socket-proxy.yoda.cc</code> — enable with the checkbox above.
           </p>
         </div>
       </details>

@@ -4,7 +4,7 @@ Lists all dependencies and transitive dependencies of a Python, npm, Go, or Rust
 
 Built with [Claude Code](https://claude.ai/code).
 
-**Data sources:** [PyPI](https://pypi.org/) for Python packages, [registry.npmjs.org](https://registry.npmjs.org) for npm packages, [api.npmjs.org](https://github.com/npm/registry/blob/main/docs/download-counts.md) for npm download counts, [proxy.golang.org](https://proxy.golang.org/) for Go modules, [crates.io](https://crates.io/) for Rust crates, [api.github.com](https://docs.github.com/en/rest) for GitHub URL support, [pypistats.org](https://pypistats.org/) for Python download statistics (optional), [socket.dev](https://socket.dev/) for supply chain security scores (optional).
+**Data sources:** [PyPI](https://pypi.org/) for Python packages, [registry.npmjs.org](https://registry.npmjs.org) for npm packages, [api.npmjs.org](https://github.com/npm/registry/blob/main/docs/download-counts.md) for npm download counts, [proxy.golang.org](https://proxy.golang.org/) for Go modules, [crates.io](https://crates.io/) for Rust crates, [api.github.com](https://docs.github.com/en/rest) for GitHub URL support, [pypistats.org](https://pypistats.org/) for Python download statistics (optional), [deps.dev](https://deps.dev/) for security signals — malware, pulled versions, critical vulnerabilities, deprecation (optional, `--deps-dev`), [socket.dev](https://socket.dev/) for supply chain security scores (optional).
 
 ## Requirements
 
@@ -120,6 +120,8 @@ Errors are isolated per section — if `go.mod` is malformed but `package.json` 
 
 When `--socket-key` / `--socket-org` are supplied, a **single** batched request to socket.dev covers packages from every ecosystem (mixing `pkg:npm/…`, `pkg:pypi/…`, and `pkg:golang/…` PURLs in one call).
 
+The same applies to `--deps-dev`: one batched `POST` to deps.dev covers every ecosystem (up to 5000 packages per request).
+
 ## Flags
 
 | Flag                             | Description                                                                                                                                                                                                                                                                                               |
@@ -134,6 +136,7 @@ When `--socket-key` / `--socket-org` are supplied, a **single** batched request 
 | `--download-stats` / `--ds`      | Fetch Python download counts from pypistats.org (Python only)                                                                                                                                                                                                                                             |
 | `--socket-key=<key>`             | Socket.dev API key — enables the Supply Chain column                                                                                                                                                                                                                                                      |
 | `--socket-org=<slug>`            | Socket.dev organisation slug (required with `--socket-key`)                                                                                                                                                                                                                                               |
+| `--deps-dev`                     | Opt in to deps.dev security signals — adds the deps.dev column and a red banner for malicious / pulled packages. No key needed; sends package names and versions to `api.deps.dev`. See [deps.dev security signals](#depsdev-security-signals).                                                           |
 | `--report[=<file>]`              | Write a self-contained HTML report (default: `depsview-report.html`)                                                                                                                                                                                                                                      |
 | `--debug`                        | Print API errors and warnings to stderr                                                                                                                                                                                                                                                                   |
 
@@ -398,22 +401,48 @@ GITHUB_TOKEN=ghp_... node src/main.js https://github.com/owner/private-repo
 | Downloads/mo    | npm: always shown for unscoped packages (last-month count from api.npmjs.org); scoped packages show `—`. Python: only with `--download-stats` (monthly count from pypistats) |
 | Downloads (90d) | Rust only, always shown (last-90-days count from crates.io)                                                                                                                  |
 | Supply Chain    | Score 0–100 % from socket.dev (requires `--socket-key` + `--socket-org`)                                                                                                     |
+| deps.dev        | One short label per package from deps.dev (requires `--deps-dev`): `malicious`, `pulled`, `vulnerable`, `low usage`, `deprecated`, `new`, `unknown`, `ok`                    |
 | Link            | Registry page URL (CLI only)                                                                                                                                                 |
 
 ### Color coding (CLI)
 
 Date cells use the same scheme in both the `Released` and `First Release` columns:
 
-| Color  | Cell                     | Meaning             |
-| ------ | ------------------------ | ------------------- |
-| Red    | Released / First Release | 3 days ago or less  |
-| Orange | Released / First Release | 7 days ago or less  |
-| Yellow | Released / First Release | 30 days ago or less |
-| Green  | Supply Chain             | Score ≥ 80 %        |
-| Yellow | Supply Chain             | Score 50–79 %       |
-| Red    | Supply Chain             | Score < 50 %        |
+| Color  | Cell                     | Meaning                        |
+| ------ | ------------------------ | ------------------------------ |
+| Red    | Released / First Release | 3 days ago or less             |
+| Orange | Released / First Release | 7 days ago or less             |
+| Yellow | Released / First Release | 30 days ago or less            |
+| Green  | Supply Chain             | Score ≥ 80 %                   |
+| Yellow | Supply Chain             | Score 50–79 %                  |
+| Red    | Supply Chain             | Score < 50 %                   |
+| Red    | deps.dev                 | `malicious`, `pulled`          |
+| Orange | deps.dev                 | `vulnerable`, `low usage`      |
+| Yellow | deps.dev                 | `deprecated`, `new`, `unknown` |
+| Green  | deps.dev                 | `ok`                           |
 
 No color codes are emitted when output is piped or redirected.
+
+### deps.dev security signals
+
+`--deps-dev` (CLI) or the **deps.dev security signals** checkbox (web UI) checks every resolved package version against the [deps.dev GOSSIP findings API](https://blog.deps.dev/gossip/) (`POST https://api.deps.dev/v3alpha/findingsbatch`). It needs no API key and is off by default because it sends the package names and versions to Google's `api.deps.dev`.
+
+Each package gets one label. When several apply, the most severe is shown with a count (e.g. `vulnerable +1`); hover the label in the web UI or the HTML report to see every finding, the deprecation reason, and the recommended version. The label links to the package version on deps.dev.
+
+| Label        | Colour | Meaning                                                                                                            |
+| ------------ | ------ | ------------------------------------------------------------------------------------------------------------------ |
+| `malicious`  | red    | Listed in the OSSF Malicious Packages database. Do not install.                                                    |
+| `pulled`     | red    | This exact version is no longer in the registry — usually removed after a compromise (e.g. `ua-parser-js@0.7.29`). |
+| `vulnerable` | orange | Affected by a **critical** vulnerability. Lower-severity advisories are not reported by this API.                  |
+| `low usage`  | orange | Very low usage; deps.dev may suggest similarly named popular packages (typosquatting check).                       |
+| `deprecated` | yellow | Deprecated by its maintainer; the reason is shown on hover.                                                        |
+| `new`        | yellow | Released very recently and still in deps.dev's cooldown window.                                                    |
+| `unknown`    | yellow | The package is not known to deps.dev (typo, very new, or a private name).                                          |
+| `ok`         | green  | No known issues. **This is not a guarantee** — deps.dev only reports what it knows about.                          |
+
+If any package in a section is `malicious` or `pulled`, a red warning naming those packages is shown directly above that section's table (terminal, web UI and HTML report).
+
+Limitations: the endpoint is `v3alpha` and may change; `vulnerable` covers critical advisories only; Go coverage is limited to modules fetched through proxy.golang.org; a failed lookup leaves the column empty (`-`) instead of failing the run. A row shows `-` when deps.dev returned nothing for that package or when the package itself failed to resolve.
 
 ### JSON output
 
@@ -452,6 +481,7 @@ Per-ecosystem field rules:
 - `firstReleased` is **omitted for Go entries** (the Go module proxy does not expose a cheap first-release timestamp).
 - `downloadsLastMonth` is included for **npm entries always** (api.npmjs.org last-month count), for **Rust entries always** (crates.io `recent_downloads`, a last-90-days count), and for **Python entries when `--download-stats` is passed** (pypistats monthly count). The JSON key is shared, but the counting window differs per ecosystem as noted; `null` when unavailable.
 - `supplyChainScore` is included on every entry when socket.dev credentials are provided.
+- `depsDev` is included on every entry when `--deps-dev` is passed (see below).
 
 When `--socket-key` and `--socket-org` are provided, each entry additionally contains:
 
@@ -462,6 +492,23 @@ When `--socket-key` and `--socket-org` are provided, each entry additionally con
 ```
 
 `supplyChainScore` is `null` when the package was not returned by the socket.dev API.
+
+When `--deps-dev` is passed, each entry additionally contains:
+
+```json
+{
+  "depsDev": {
+    "label": "vulnerable",
+    "labels": ["vulnerable", "deprecated"],
+    "color": "orange",
+    "severity": 5,
+    "details": ["Affected by a critical vulnerability.", "Deprecated: …"],
+    "recommended": "1.2.0"
+  }
+}
+```
+
+`labels` is ordered most severe first; `severity` runs from 7 (`malicious`) to 0 (`ok`); `recommended` is deps.dev's suggested version, or `null`. `depsDev` is `null` when deps.dev returned nothing for the package (or the package failed to resolve).
 
 ### HTML report
 
@@ -534,7 +581,13 @@ For **All**, only GitHub URLs are accepted.
 
 Enter a personal access token in the **GitHub token** field. It is used only for `api.github.com` and never sent elsewhere. Check **Remember token** to persist it in `localStorage`.
 
+### deps.dev security signals in the web UI
+
+Tick **Check packages for malware, pulled versions, critical vulnerabilities and deprecations** in the _deps.dev security signals_ card. The choice is remembered in `localStorage`. The browser calls `api.deps.dev` directly (no proxy, no key); the request is sent as `text/plain` so it is a CORS "simple request", and `https://api.deps.dev` is in the `connect-src` CSP allowlist in `web/_headers`. The deps.dev column is sortable by severity.
+
 ### Socket.dev Supply Chain scores in the web UI
+
+Socket.dev is strictly opt-in: the card only shows a **Use Socket.dev supply-chain scores** checkbox. Ticking it reveals the API key, org slug, proxy consent and "remember" fields; the checkbox state is remembered (including unticking it); if no choice was stored yet, it starts ticked when a key or org slug was saved before. While it is unticked, socket.dev is never called, even if the fields still hold values.
 
 The socket.dev API does not emit CORS headers, so browser requests must go through a Cloudflare Worker proxy. A minimal proxy lives in the `worker/` directory.
 
@@ -559,7 +612,7 @@ After that, all visitors can use the supply chain feature — they only need the
 
 **Using the feature:**
 
-Enter your Socket.dev API key and organisation slug in the corresponding fields. When both are provided and `SOCKET_PROXY_BASE` is set, a Supply Chain column is added to the results table. Check **Remember Socket key and org slug** to persist them in `localStorage`.
+Tick **Use Socket.dev supply-chain scores**, then enter your Socket.dev API key and organisation slug in the fields that appear. When both are provided and `SOCKET_PROXY_BASE` is set, a Supply Chain column is added to the results table. Check **Remember Socket key and org slug** to persist them in `localStorage`.
 
 Requests flow: **browser → Cloudflare Worker → api.socket.dev**. The API key is forwarded by the Worker and is never stored in it.
 

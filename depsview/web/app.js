@@ -28,7 +28,16 @@ import { setGithubToken } from "./src/github/client.js";
 import { listDirectory } from "./src/github/client.js";
 import { parseMultiPackageInput } from "./src/multiPackageParser.js";
 import { parsePastedDependencies } from "./src/pastedDepsParser.js";
-import { fetchSocketScores, scoreKey } from "./src/socket/client.js";
+import { fetchSocketScores } from "./src/socket/client.js";
+import { scoreKey } from "./src/util/scoreKey.js";
+import { fetchDepsDevFindings } from "./src/depsdev/client.js";
+import {
+  classifyFindings,
+  depsDevCellText,
+  depsDevTooltip,
+  depsDevBannerLines,
+  depsDevPackageUrl,
+} from "./src/depsdev/signals.js";
 import { groupByDomain } from "./src/output/nonStandardSources.js";
 import { NPM_LOCK_FILENAMES } from "./src/npm/lockRegistry.js";
 
@@ -57,6 +66,14 @@ const ECOSYSTEM_PURL_TYPE = { npm: "npm", python: "pypi", go: "golang", rust: "c
 
 /** Maps ecosystem to the socket.dev URL slug used in package detail links. */
 const SOCKET_URL_SLUG = { npm: "npm", python: "pypi", go: "go", rust: "cargo" };
+
+/** Maps a deps.dev label colour band to an existing CSS colour class (shared/style.css). */
+const DEPSDEV_CLASS = {
+  red: "score-bad",
+  orange: "age-orange",
+  yellow: "score-warn",
+  green: "score-good",
+};
 
 // ── Pure utility functions (exported for testing) ─────────────────────────────
 
@@ -102,7 +119,7 @@ export function daysSince(dateStr) {
  * ISO-8601 strings lexicographically; numeric columns compare by value.
  * All sorts use name as a tiebreaker.
  * @param {Map<string, object>} resultsMap
- * @param {'name'|'version'|'releaseDate'|'firstReleaseDate'|'releaseCount'|'downloadsLastMonth'|'supplyChain'} column
+ * @param {'name'|'version'|'releaseDate'|'firstReleaseDate'|'releaseCount'|'downloadsLastMonth'|'supplyChain'|'depsDevSeverity'} column
  * @param {'asc'|'desc'} direction
  * @returns {Array<object>}
  */
@@ -110,7 +127,10 @@ export function sortResultsBy(resultsMap, column, direction) {
   const sign = direction === "asc" ? 1 : -1;
   const isDate = column === "releaseDate" || column === "firstReleaseDate";
   const isNum =
-    column === "releaseCount" || column === "downloadsLastMonth" || column === "supplyChain";
+    column === "releaseCount" ||
+    column === "downloadsLastMonth" ||
+    column === "supplyChain" ||
+    column === "depsDevSeverity";
 
   return [...resultsMap.values()].sort((a, b) => {
     const aVal = a[column] ?? (isDate ? "unknown" : null);
@@ -150,6 +170,35 @@ export function sortResultsBy(resultsMap, column, direction) {
  */
 export function sortResults(resultsMap) {
   return sortResultsBy(resultsMap, "releaseDate", "desc");
+}
+
+/**
+ * Flattens the successfully resolved packages of every settled ecosystem entry into
+ * the `{ name, version, ecosystem }` list expected by the socket.dev and deps.dev
+ * clients (`ecosystem` is the PURL type). Failed sections, unknown ecosystems and
+ * packages with a resolution error are skipped. Does not mutate the input.
+ *
+ * Example:
+ *   collectEnrichmentPackages([
+ *     { ok: true, section: { ecosystem: "go", results: new Map([["x", { name: "github.com/a/b", version: "v1.0.0" }]]) } },
+ *     { ok: false, ecosystem: "npm", error: "boom" },
+ *   ])
+ *   → [{ name: "github.com/a/b", version: "v1.0.0", ecosystem: "golang" }]
+ *
+ * @param {Array<{ ok: boolean, section?: { ecosystem: string, results: Map<string, object> } }>} settled
+ * @returns {Array<{ name: string, version: string, ecosystem: 'npm'|'pypi'|'golang'|'cargo' }>}
+ */
+export function collectEnrichmentPackages(settled) {
+  const all = [];
+  for (const entry of settled) {
+    if (!entry.ok) continue;
+    const purlType = ECOSYSTEM_PURL_TYPE[entry.section.ecosystem];
+    if (!purlType) continue;
+    for (const pkg of entry.section.results.values()) {
+      if (!pkg.error) all.push({ name: pkg.name, version: pkg.version, ecosystem: purlType });
+    }
+  }
+  return all;
 }
 
 /**
@@ -235,6 +284,8 @@ function addCell(row, text) {
  * @param {boolean}     [cfg.showSupplyChain]  - when true, render a Supply Chain % column
  * @param {string|null} [cfg.socketSlug]       - socket.dev URL slug ('npm'|'pypi'|'go'); adds (link) anchors in score cells
  * @param {boolean}     [cfg.showDownloads]    - when true, render a downloads column (label depends on ecosystem)
+ * @param {boolean}     [cfg.showDepsDev]      - when true, render the deps.dev label column and, if any
+ *                                               package is malicious or pulled, a red banner above the table
  * @returns {HTMLElement} the section element
  */
 function renderSection(container, cfg) {
@@ -297,6 +348,16 @@ function renderSection(container, cfg) {
     sectionEl.appendChild(noteEl);
   }
 
+  if (cfg.showDepsDev) {
+    for (const line of depsDevBannerLines(cfg.sorted)) {
+      const bannerEl = document.createElement("p");
+      bannerEl.className = "note note-danger";
+      bannerEl.setAttribute("role", "alert");
+      bannerEl.textContent = line;
+      sectionEl.appendChild(bannerEl);
+    }
+  }
+
   if (total === 0) {
     const msg = document.createElement("p");
     msg.textContent = "No dependencies found.";
@@ -323,6 +384,7 @@ function renderSection(container, cfg) {
       "downloadsLastMonth",
     ]);
   if (cfg.showSupplyChain) COL_DEFS.push(["Supply Chain", "supplyChain"]);
+  if (cfg.showDepsDev) COL_DEFS.push(["deps.dev", "depsDevSeverity"]);
 
   for (const [label, col] of COL_DEFS) {
     const th = document.createElement("th");
@@ -392,6 +454,28 @@ function renderSection(container, cfg) {
         }
       }
       tr.appendChild(scoreCell);
+    }
+    if (cfg.showDepsDev) {
+      // Label text, tooltip and link are set via DOM properties only — the tooltip
+      // carries registry-controlled text (deprecation reasons, alternative names).
+      const ddCell = document.createElement("td");
+      const dd = pkg.depsDev ?? null;
+      const text = depsDevCellText(dd, "–");
+      const url = dd ? depsDevPackageUrl(cfg.ecosystem, pkg.name, pkg.version) : null;
+      if (url) {
+        const ddLink = document.createElement("a");
+        ddLink.href = url;
+        ddLink.target = "_blank";
+        ddLink.rel = "noopener noreferrer";
+        ddLink.textContent = text;
+        ddLink.className = DEPSDEV_CLASS[dd.color] ?? "";
+        ddCell.appendChild(ddLink);
+      } else {
+        ddCell.textContent = text;
+      }
+      const tooltip = depsDevTooltip(dd);
+      if (tooltip) ddCell.title = tooltip;
+      tr.appendChild(ddCell);
     }
   }
 
@@ -695,6 +779,9 @@ if (typeof document !== "undefined") {
   const tokenInput = document.getElementById("token-input");
   const rememberTokenCb = document.getElementById("remember-token");
   const storageNote = document.getElementById("storage-note");
+  const depsDevEnableCb = document.getElementById("depsdev-enable");
+  const socketEnableCb = document.getElementById("socket-enable");
+  const socketFields = document.getElementById("socket-fields");
   const socketKeyInput = document.getElementById("socket-key-input");
   const socketOrgInput = document.getElementById("socket-org-input");
   const socketConsentCb = document.getElementById("socket-proxy-consent");
@@ -711,6 +798,8 @@ if (typeof document !== "undefined") {
   const TOKEN_STORAGE_KEY = "depsview.github_token";
   const SOCKET_KEY_STORAGE_KEY = "depsview.socket_key";
   const SOCKET_ORG_STORAGE_KEY = "depsview.socket_org";
+  const SOCKET_ENABLED_STORAGE_KEY = "depsview.socket_enabled";
+  const DEPSDEV_ENABLED_STORAGE_KEY = "depsview.depsdev_enabled";
 
   /** Textarea placeholder text per ecosystem. */
   const PKG_PLACEHOLDERS = {
@@ -816,6 +905,33 @@ if (typeof document !== "undefined") {
     syncSocketStorageNote();
   }
 
+  /** Shows the socket.dev key/org/consent fields only while the opt-in checkbox is ticked. */
+  function syncSocketFields() {
+    socketFields.hidden = !socketEnableCb.checked;
+  }
+
+  // Socket.dev is strictly opt-in: only the checkbox is visible until it is ticked.
+  // The stored choice ("1" / "0") wins; with no stored choice, users who already
+  // saved a key/org keep their setup (checkbox starts ticked).
+  const storedSocketEnabled = localStorage.getItem(SOCKET_ENABLED_STORAGE_KEY);
+  socketEnableCb.checked =
+    storedSocketEnabled === "1" ||
+    (storedSocketEnabled == null && Boolean(savedSocketKey || savedSocketOrg));
+  syncSocketFields();
+
+  socketEnableCb.addEventListener("change", () => {
+    syncSocketFields();
+    // Store an explicit "0" so an opt-out survives reloads even when a key/org is saved.
+    localStorage.setItem(SOCKET_ENABLED_STORAGE_KEY, socketEnableCb.checked ? "1" : "0");
+  });
+
+  // deps.dev signals are opt-in; the decision is remembered across visits.
+  depsDevEnableCb.checked = localStorage.getItem(DEPSDEV_ENABLED_STORAGE_KEY) === "1";
+  depsDevEnableCb.addEventListener("change", () => {
+    if (depsDevEnableCb.checked) localStorage.setItem(DEPSDEV_ENABLED_STORAGE_KEY, "1");
+    else localStorage.removeItem(DEPSDEV_ENABLED_STORAGE_KEY);
+  });
+
   rememberSocketCb.addEventListener("change", () => {
     syncSocketStorageNote();
     if (rememberSocketCb.checked) {
@@ -878,7 +994,11 @@ if (typeof document !== "undefined") {
       localStorage.removeItem(SOCKET_ORG_STORAGE_KEY);
     }
 
-    if (socketKey && socketOrg && !socketConsentCb.checked) {
+    // Socket is only used while its opt-in checkbox is ticked, even if fields hold values.
+    const socketActive = socketEnableCb.checked && Boolean(socketKey && socketOrg);
+    const depsDevActive = depsDevEnableCb.checked;
+
+    if (socketActive && !socketConsentCb.checked) {
       const row = socketConsentCb.closest(".option-row");
       row.classList.add("consent-required");
       row.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -1005,17 +1125,8 @@ if (typeof document !== "undefined") {
       // Enrich resolved packages with supply chain scores when the user has
       // provided a socket.dev API key, org slug, and a proxy URL is configured.
       let showSupplyChain = false;
-      if (socketKey && socketOrg && SOCKET_PROXY_BASE && socketConsentCb.checked) {
-        const allPkgs = [];
-        for (const entry of settled) {
-          if (!entry.ok) continue;
-          const purlType = ECOSYSTEM_PURL_TYPE[entry.section.ecosystem];
-          if (!purlType) continue;
-          for (const pkg of entry.section.results.values()) {
-            if (!pkg.error)
-              allPkgs.push({ name: pkg.name, version: pkg.version, ecosystem: purlType });
-          }
-        }
+      if (socketActive && SOCKET_PROXY_BASE && socketConsentCb.checked) {
+        const allPkgs = collectEnrichmentPackages(settled);
 
         if (allPkgs.length > 0) {
           appendProgress("Fetching supply chain scores…\n");
@@ -1037,6 +1148,40 @@ if (typeof document !== "undefined") {
                 if (score != null) pkg.supplyChain = score;
               }
             }
+          }
+        }
+      }
+
+      // deps.dev findings (opt-in, keyless): one batched call for every ecosystem.
+      let showDepsDev = false;
+      if (depsDevActive) {
+        const allPkgs = collectEnrichmentPackages(settled);
+        if (allPkgs.length > 0) {
+          appendProgress("Checking packages against deps.dev…\n");
+          progressDiv.hidden = false;
+          const findings = await fetchDepsDevFindings(allPkgs);
+          progressDiv.hidden = true;
+
+          if (findings.size > 0) {
+            showDepsDev = true;
+            for (const entry of settled) {
+              if (!entry.ok) continue;
+              const purlType = ECOSYSTEM_PURL_TYPE[entry.section.ecosystem];
+              if (!purlType) continue;
+              for (const pkg of entry.section.results.values()) {
+                if (pkg.error) continue;
+                const dd = classifyFindings(
+                  findings.get(scoreKey(purlType, pkg.name, pkg.version)),
+                  pkg.version,
+                );
+                pkg.depsDev = dd;
+                pkg.depsDevSeverity = dd ? dd.severity : null;
+              }
+            }
+          } else {
+            appendProgress(
+              "deps.dev lookup failed — results are shown without the deps.dev column.\n",
+            );
           }
         }
       }
@@ -1081,6 +1226,7 @@ if (typeof document !== "undefined") {
               (section.downloadStats && section.ecosystem === "python"),
             showSupplyChain,
             socketSlug: showSupplyChain ? (SOCKET_URL_SLUG[section.ecosystem] ?? null) : null,
+            showDepsDev,
           });
           if (priorNextSibling) resultsDiv.insertBefore(sectionEl, priorNextSibling);
           appendNonStandardSources(

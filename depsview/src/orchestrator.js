@@ -305,11 +305,11 @@ async function orchestrate(ctx, opts) {
 
 /**
  * Flattens all resolved packages from every section into the shape expected by
- * the socket.dev client (`{ name, version, ecosystem }` where ecosystem is the
- * PURL type — `npm`, `pypi`, `golang`).
- * Excludes packages flagged with an error so failed lookups are not retried via socket.
+ * the socket.dev and deps.dev clients (`{ name, version, ecosystem }` where
+ * ecosystem is the PURL type — `npm`, `pypi`, `golang`, `cargo`).
+ * Excludes packages flagged with an error so failed lookups are not retried via socket / deps.dev.
  * @param {Map<'npm'|'python'|'go'|'rust', object>} sections
- * @returns {Array<{ name: string, version: string, ecosystem: 'npm'|'pypi'|'golang' }>}
+ * @returns {Array<{ name: string, version: string, ecosystem: 'npm'|'pypi'|'golang'|'cargo' }>}
  */
 function packagesForSocket(sections) {
   const all = [];

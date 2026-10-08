@@ -8,6 +8,9 @@
  *   orange — 7 days ago or less  (recent)
  *   yellow — 30 days ago or less (somewhat recent)
  * Supply chain scores use a separate tri-colour scale: green ≥ 80 %, yellow 50–79 %, red < 50 %.
+ * deps.dev labels (opt-in, --deps-dev) use four bands: red (malicious, pulled), orange
+ * (vulnerable, low usage), yellow (deprecated, new, unknown), green (ok). Malicious or
+ * pulled packages additionally get a red banner above the table.
  *
  * Multi-ecosystem output is rendered as one section per ecosystem in the fixed
  * order npm → python → go. Single-ecosystem projects are still rendered as a
@@ -16,12 +19,17 @@
  */
 
 import { domainOf, groupByDomain } from "./nonStandardSources.js";
+import { scoreKey } from "../util/scoreKey.js";
+import { classifyFindings, depsDevCellText, depsDevBannerLines } from "../depsdev/signals.js";
 
 const ANSI_RED = "\x1b[31m";
 const ANSI_ORANGE = "\x1b[38;5;208m";
 const ANSI_YELLOW = "\x1b[33m";
 const ANSI_GREEN = "\x1b[32m";
 const ANSI_RESET = "\x1b[0m";
+
+/** Maps a deps.dev label colour band to its ANSI escape code. */
+const DEPSDEV_ANSI = { red: ANSI_RED, orange: ANSI_ORANGE, yellow: ANSI_YELLOW, green: ANSI_GREEN };
 
 /** Ecosystems are always rendered in this fixed order. */
 const ECOSYSTEM_ORDER = ["npm", "python", "go", "rust"];
@@ -99,14 +107,20 @@ function socketScoreDisplay(score) {
  * ecosystem is provided, lookups are attempted unscoped for backwards-compat
  * with existing tests.
  *
+ * deps.dev findings (when `opts.depsDevFindings` is given) are joined by the same
+ * key and classified into `row.depsDev` (see depsdev/signals.js); rows without a
+ * record get `depsDev: null`. Without `opts.depsDevFindings` (or without an
+ * ecosystem) rows carry no `depsDev` field at all.
+ *
  * @param {Map<string, object>} results - per-ecosystem resolved package map
  * @param {Map<string, number>} [socketScores] - shared scores Map
- * @param {{ ecosystem?: 'npm'|'python'|'go'|'rust' }} [opts]
+ * @param {{ ecosystem?: 'npm'|'python'|'go'|'rust', depsDevFindings?: Map<string, object>|null }} [opts]
  * @returns {Array<object>}
  */
 function sortedResults(results, socketScores = new Map(), opts = {}) {
-  const { ecosystem } = opts;
+  const { ecosystem, depsDevFindings = null } = opts;
   const purlEco = ecosystem ? purlEcosystem(ecosystem) : null;
+  const withDepsDev = depsDevFindings != null && purlEco != null;
 
   return [...results.values()]
     .map((r) => ({
@@ -121,6 +135,16 @@ function sortedResults(results, socketScores = new Map(), opts = {}) {
       supplyChain: purlEco
         ? (socketScores.get(`${purlEco}:${r.name.toLowerCase()}@${r.version}`) ?? null)
         : (socketScores.get(`${r.name.toLowerCase()}@${r.version}`) ?? null),
+      ...(withDepsDev
+        ? {
+            depsDev: r.error
+              ? null
+              : classifyFindings(
+                  depsDevFindings.get(scoreKey(purlEco, r.name, r.version)),
+                  r.version,
+                ),
+          }
+        : {}),
     }))
     .sort((a, b) => {
       const aUnknown = a.released === "unknown";
@@ -183,9 +207,11 @@ function printNonStandardSources(dangerousDeps, privatePkgs) {
  *                    by `downloadsLabel` (Python/npm: "Downloads/mo"; Rust:
  *                    "Downloads (90d)" — crates.io's 90-day figure).
  *   - Supply Chain:  shown when `socketScores` is provided (any ecosystem).
+ *   - deps.dev:      shown when `depsDevFindings` is provided (any ecosystem).
  *
  * When `printHeader` is true (multi-ecosystem output), a section heading is
- * emitted above the table.
+ * emitted above the table. A red deps.dev banner is printed above the table when
+ * any package is malicious or pulled.
  *
  * @param {Map<string, object>} results
  * @param {Set<string>} directNames - normalised direct dep names for the footer
@@ -194,6 +220,7 @@ function printNonStandardSources(dangerousDeps, privatePkgs) {
  * @param {boolean}                  [opts.downloadStats=false] - show the downloads column
  * @param {string}                   [opts.downloadsLabel='Downloads/mo'] - downloads column heading
  * @param {Map<string,number>|null}  [opts.socketScores=null]   - shared supply chain scores
+ * @param {Map<string,object>|null}  [opts.depsDevFindings=null] - shared deps.dev findings records
  * @param {string|null}              [opts.source=null]         - dep file name(s) shown in footer
  * @param {string|null}              [opts.note=null]           - per-section warning shown after header
  * @param {boolean}                  [opts.firstRelease=true]   - show First Release column
@@ -205,6 +232,7 @@ function formatTable(results, directNames, opts = {}) {
     downloadStats = false,
     downloadsLabel = "Downloads/mo",
     socketScores = null,
+    depsDevFindings = null,
     source = null,
     note = null,
     privateCount = 0,
@@ -223,7 +251,7 @@ function formatTable(results, directNames, opts = {}) {
       `[note] ${privateCount} private package${privateCount === 1 ? "" : "s"} skipped (not on public registry).`,
     );
 
-  const rows = sortedResults(results, socketScores ?? new Map(), { ecosystem });
+  const rows = sortedResults(results, socketScores ?? new Map(), { ecosystem, depsDevFindings });
   if (rows.length === 0) {
     console.log("No dependencies found.");
     if (source) console.log(`Files: ${source}`);
@@ -232,7 +260,12 @@ function formatTable(results, directNames, opts = {}) {
   }
 
   const showSocket = socketScores != null;
+  const showDepsDev = depsDevFindings != null && ecosystem != null;
   const showFirst = firstRelease;
+
+  if (showDepsDev) {
+    for (const line of depsDevBannerLines(rows)) console.log(applyColor(line, ANSI_RED));
+  }
 
   // Compute column widths based on the widest value in each column
   const colName = Math.max(7, ...rows.map((r) => r.name.length)) + 2;
@@ -249,11 +282,14 @@ function formatTable(results, directNames, opts = {}) {
   const colSocket = showSocket
     ? Math.max(12, ...rows.map((r) => socketScoreDisplay(r.supplyChain).text.length)) + 2
     : 0;
+  const colDepsDev = showDepsDev
+    ? Math.max(8, ...rows.map((r) => depsDevCellText(r.depsDev).length)) + 2
+    : 0;
   const colLink = Math.max(4, ...rows.map((r) => r.link.length)) + 2;
 
   const pad = (s, n) => String(s).padEnd(n);
   const divider = "-".repeat(
-    colName + colVer + colRel + colFirst + colPop + colDl + colSocket + colLink,
+    colName + colVer + colRel + colFirst + colPop + colDl + colSocket + colDepsDev + colLink,
   );
 
   console.log(
@@ -264,6 +300,7 @@ function formatTable(results, directNames, opts = {}) {
       pad("Releases", colPop) +
       (downloadStats ? pad(downloadsLabel, colDl) : "") +
       (showSocket ? pad("Supply Chain", colSocket) : "") +
+      (showDepsDev ? pad("deps.dev", colDepsDev) : "") +
       pad("Link", colLink),
   );
   console.log(divider);
@@ -295,6 +332,14 @@ function formatTable(results, directNames, opts = {}) {
       socketCell = applyColor(pad(text, colSocket), color);
     }
 
+    let depsDevCell = "";
+    if (showDepsDev) {
+      depsDevCell = applyColor(
+        pad(depsDevCellText(row.depsDev), colDepsDev),
+        row.depsDev ? DEPSDEV_ANSI[row.depsDev.color] : null,
+      );
+    }
+
     let line =
       pad(row.name, colName) +
       pad(row.version, colVer) +
@@ -303,6 +348,7 @@ function formatTable(results, directNames, opts = {}) {
       pad(row.releases, colPop) +
       (downloadStats ? pad(formatDownloads(row.downloadsLastMonth), colDl) : "") +
       socketCell +
+      depsDevCell +
       pad(row.link, colLink);
     if (row.error) line += `  [${row.error}]`;
     console.log(line);
@@ -334,9 +380,10 @@ function formatTable(results, directNames, opts = {}) {
  * @param {object} [opts]
  * @param {boolean}                 [opts.downloadStats=false]
  * @param {Map<string,number>|null} [opts.socketScores=null]
+ * @param {Map<string,object>|null} [opts.depsDevFindings=null]
  */
 function formatMulti(sections, opts = {}) {
-  const { downloadStats = false, socketScores = null } = opts;
+  const { downloadStats = false, socketScores = null, depsDevFindings = null } = opts;
   const present = ECOSYSTEM_ORDER.filter((eco) => sections.has(eco));
   const printHeader = present.length >= 2;
 
@@ -360,6 +407,7 @@ function formatMulti(sections, opts = {}) {
         ecosystem === "rust" || ecosystem === "npm" || (downloadStats && ecosystem === "python"),
       downloadsLabel: ecosystem === "rust" ? "Downloads (90d)" : "Downloads/mo",
       socketScores,
+      depsDevFindings,
       source,
       note,
       privateCount,
@@ -382,15 +430,19 @@ function formatMulti(sections, opts = {}) {
  *                            (api.npmjs.org last-month count); Python when
  *                            `downloadStats: true` (pypistats monthly count)
  *   - supplyChainScore     — any ecosystem, when `socketScores` is provided
+ *   - depsDev              — any ecosystem, when `depsDevFindings` is provided:
+ *                            `{ label, labels, color, severity, details, recommended }`,
+ *                            or null when deps.dev returned nothing for the package
  *   - error                — when resolution failed for that package
  *
  * @param {Map<'npm'|'python'|'go'|'rust', { results }>} sections
  * @param {object} [opts]
  * @param {boolean}                 [opts.downloadStats=false]
  * @param {Map<string,number>|null} [opts.socketScores=null]
+ * @param {Map<string,object>|null} [opts.depsDevFindings=null]
  */
 function formatJson(sections, opts = {}) {
-  const { downloadStats = false, socketScores = null } = opts;
+  const { downloadStats = false, socketScores = null, depsDevFindings = null } = opts;
   const out = {};
 
   for (const ecosystem of ECOSYSTEM_ORDER) {
@@ -400,7 +452,10 @@ function formatJson(sections, opts = {}) {
     const includeDownloads =
       ecosystem === "rust" || ecosystem === "npm" || (downloadStats && ecosystem === "python");
 
-    out[ecosystem] = sortedResults(results, socketScores ?? new Map(), { ecosystem }).map((r) => {
+    out[ecosystem] = sortedResults(results, socketScores ?? new Map(), {
+      ecosystem,
+      depsDevFindings,
+    }).map((r) => {
       const obj = {
         name: r.name,
         version: r.version,
@@ -411,6 +466,18 @@ function formatJson(sections, opts = {}) {
       if (includeFirst) obj.firstReleased = r.firstReleased;
       if (includeDownloads) obj.downloadsLastMonth = r.downloadsLastMonth;
       if (socketScores != null) obj.supplyChainScore = r.supplyChain;
+      if (depsDevFindings != null) {
+        obj.depsDev = r.depsDev
+          ? {
+              label: r.depsDev.label,
+              labels: r.depsDev.labels,
+              color: r.depsDev.color,
+              severity: r.depsDev.severity,
+              details: r.depsDev.details,
+              recommended: r.depsDev.recommended,
+            }
+          : null;
+      }
       if (r.error) obj.error = r.error;
       return obj;
     });

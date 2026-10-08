@@ -2,7 +2,7 @@
 
 depsview lists the dependencies and transitive dependencies of a Python, npm, Go, or Rust project. It runs as a CLI and as a browser-only web UI. All metadata is fetched live from public registries — no local language toolchain is required.
 
-External data sources: `pypi.org`, `pypistats.org` (optional Python download stats), `registry.npmjs.org`, `api.npmjs.org` (npm download counts), `proxy.golang.org`, `crates.io`, `api.github.com`, `socket.dev` (optional supply-chain scores).
+External data sources: `pypi.org`, `pypistats.org` (optional Python download stats), `registry.npmjs.org`, `api.npmjs.org` (npm download counts), `proxy.golang.org`, `crates.io`, `api.github.com`, `api.deps.dev` (optional deps.dev findings, `--deps-dev`), `socket.dev` (optional supply-chain scores).
 
 Cross-cutting rules (no third-party deps, plan-first, mandatory docstrings, coding style, the three project agents, Definition of Done) live in `yoda/CLAUDE.md` and apply here.
 
@@ -62,7 +62,14 @@ src/
     nonStandardSources.js   Groups private/dangerous deps by domain for the warning block
 
   socket/
-    client.js               Fetches supply-chain scores from socket.dev
+    client.js               Fetches supply-chain scores from socket.dev; re-exports scoreKey from util/scoreKey.js
+
+  depsdev/
+    client.js               deps.dev findingsbatch client (api.deps.dev, keyless, fail-soft → Map) — browser-safe
+    signals.js              Pure label classification, tooltip, banner lines, deps.dev URLs — browser-safe
+
+  util/
+    scoreKey.js             Shared Map key for per-package enrichment data (socket.dev, deps.dev) — browser-safe
 
 web/
   app.js                    Browser entry point — GitHub mode UI, calls src/github/parser.js
@@ -85,7 +92,7 @@ Both paths use the **same** parser cores (`parserCore.js`, `lockParser.js`, etc.
 
 ## Content-Security-Policy allowlist (web only)
 
-The web app is served by Cloudflare Pages with a strict CSP defined in `web/_headers`. `default-src 'none'` blocks everything by default, so **every host the browser fetches directly must be listed in `connect-src`**. It is not enough for the upstream host to send CORS headers — a missing `connect-src` entry makes the browser refuse the request before it is sent (`Refused to connect … violates the document's Content Security Policy`). Current `connect-src` hosts: `api.github.com`, `pypi.org`, `registry.npmjs.org`, `api.npmjs.org` (npm download counts), `proxy.golang.org`, `crates.io`, `socket-proxy.yoda.cc` (the Worker proxy for pypistats + socket.dev). Whenever a resolver or client starts fetching a new host from browser-loaded code, add it here or the feature works on the CLI but silently fails in the web UI. The standalone HTML report (`src/output/reportGenerator.js`) has its own inline CSP but makes no network requests (all data is baked in), so it needs no `connect-src`.
+The web app is served by Cloudflare Pages with a strict CSP defined in `web/_headers`. `default-src 'none'` blocks everything by default, so **every host the browser fetches directly must be listed in `connect-src`**. It is not enough for the upstream host to send CORS headers — a missing `connect-src` entry makes the browser refuse the request before it is sent (`Refused to connect … violates the document's Content Security Policy`). Current `connect-src` hosts: `api.github.com`, `pypi.org`, `registry.npmjs.org`, `api.npmjs.org` (npm download counts), `proxy.golang.org`, `crates.io`, `api.deps.dev` (opt-in deps.dev findings), `socket-proxy.yoda.cc` (the Worker proxy for pypistats + socket.dev). Whenever a resolver or client starts fetching a new host from browser-loaded code, add it here or the feature works on the CLI but silently fails in the web UI. The standalone HTML report (`src/output/reportGenerator.js`) has its own inline CSP but makes no network requests (all data is baked in), so it needs no `connect-src`.
 
 ## Parser contract
 
@@ -109,7 +116,7 @@ where `deps` contains only public-registry packages (private ones are in `privat
 
 ## Browser-compatibility rule
 
-Files ending in `parserCore.js`, all individual lock parser files (`lockParser.js`, `pnpmLockParser.js`, `bunLockParser.js`, `yarnLockParser.js`, `lockRegistry.js`), the npm registry/download clients (`npm/npmClient.js`, `npm/npmStatsClient.js`), and the Rust browser-loaded helpers (`rust/versionResolver.js`, `rust/crateFilter.js`) **must not import Node.js built-ins** (`fs`, `path`, etc.). They are loaded directly in the browser via the `web/src` symlink. The `parser.js` files (including `rust/parser.js`) are the Node-only fs wrappers and are never loaded in the browser.
+Files ending in `parserCore.js`, all individual lock parser files (`lockParser.js`, `pnpmLockParser.js`, `bunLockParser.js`, `yarnLockParser.js`, `lockRegistry.js`), the npm registry/download clients (`npm/npmClient.js`, `npm/npmStatsClient.js`), the Rust browser-loaded helpers (`rust/versionResolver.js`, `rust/crateFilter.js`), and the deps.dev / enrichment helpers (`depsdev/client.js`, `depsdev/signals.js`, `util/scoreKey.js`) **must not import Node.js built-ins** (`fs`, `path`, etc.). They are loaded directly in the browser via the `web/src` symlink. The `parser.js` files (including `rust/parser.js`) are the Node-only fs wrappers and are never loaded in the browser.
 
 ## How to add a new npm lock file format
 
@@ -121,11 +128,12 @@ Files ending in `parserCore.js`, all individual lock parser files (`lockParser.j
 
 1. Create `src/{eco}/parserCore.js` (pure string parser), `src/{eco}/parser.js` (fs wrapper), `src/{eco}/depResolver.js`. Add any registry-client or resolver helpers the ecosystem needs (e.g. Rust adds `cratesClient.js`, `versionResolver.js`, `crateFilter.js`); browser-loaded helpers must not import `node:*` and go in the browser-compatibility list.
 2. Add web support in `src/github/parser.js` (new `parseGithub{Eco}Dependencies` function + export).
-3. Register in `src/orchestrator.js` (import + wire into parseSection / resolveSectionDeps / directNamesForSection / packagesForSocket, including the PURL type).
+3. Register in `src/orchestrator.js` (import + wire into parseSection / resolveSectionDeps / directNamesForSection / packagesForSocket, including the PURL type). `packagesForSocket` feeds both socket.dev and deps.dev.
 4. Register in `web/app.js` (detectEcosystems, ECOSYSTEM_ORDER, ECOSYSTEM_PURL_TYPE, SOCKET_URL_SLUG, section rendering) and add the radio in `web/index.html`.
 5. Register in `src/main.js` (ecosystem flag + `{ECO}_FILES` set + detection).
 6. Register in `src/output/formatter.js` (ECOSYSTEM_ORDER + PURL mapping) and `src/packageInput.js` (`parse{Eco}` for `--package` input).
-7. If the ecosystem's browser-loaded code fetches any new host (registry, stats API, etc.), add that host to the `connect-src` allowlist in `web/_headers` — otherwise the web UI is blocked by CSP even though the CLI works.
+7. Add the deps.dev system mappings: `SYSTEM_BY_PURL_TYPE` in `src/depsdev/client.js` (PURL type → API `system` enum) and `DEPSDEV_SITE_SYSTEM` in `src/depsdev/signals.js` (ecosystem → deps.dev site URL segment). Unmapped ecosystems are silently skipped.
+8. If the ecosystem's browser-loaded code fetches any new host (registry, stats API, etc.), add that host to the `connect-src` allowlist in `web/_headers` — otherwise the web UI is blocked by CSP even though the CLI works.
 
 ## Test layout
 
@@ -135,8 +143,11 @@ test/
   python/   mirrors src/python/
   go/       mirrors src/go/
   rust/     mirrors src/rust/
+  depsdev/  mirrors src/depsdev/
+  util/     mirrors src/util/
   fixtures/ minimal real-world lock files used by parser tests
-            (cargo-lock, cargo-toml, cargo-private for Rust)
+            (cargo-lock, cargo-toml, cargo-private for Rust;
+             depsdev/ holds a recorded findingsbatch API response)
 ```
 
 Framework: Node.js built-in `node:test` + `node:assert/strict`. Run with `npm test`.
