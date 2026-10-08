@@ -109,7 +109,9 @@ function socketScoreDisplay(score) {
  *
  * deps.dev findings (when `opts.depsDevFindings` is given) are joined by the same
  * key and classified into `row.depsDev` (see depsdev/signals.js); rows without a
- * record get `depsDev: null`. Without `opts.depsDevFindings` (or without an
+ * record get `depsDev: null`. In that case the primary sort becomes deps.dev
+ * severity descending (malicious → pulled → vulnerable → low usage → deprecated →
+ * new → unknown → ok → no label), with the release-date order as tiebreaker. Without `opts.depsDevFindings` (or without an
  * ecosystem) rows carry no `depsDev` field at all.
  *
  * @param {Map<string, object>} results - per-ecosystem resolved package map
@@ -147,6 +149,13 @@ function sortedResults(results, socketScores = new Map(), opts = {}) {
         : {}),
     }))
     .sort((a, b) => {
+      // With deps.dev findings, most severe first (rows without a label last);
+      // release-date order below is the tiebreaker within one severity.
+      if (withDepsDev) {
+        const aSev = a.depsDev?.severity ?? -1;
+        const bSev = b.depsDev?.severity ?? -1;
+        if (aSev !== bSev) return bSev - aSev;
+      }
       const aUnknown = a.released === "unknown";
       const bUnknown = b.released === "unknown";
       if (aUnknown !== bUnknown) return aUnknown ? 1 : -1;

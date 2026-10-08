@@ -2,8 +2,9 @@
 
 Status: **IMPLEMENTED 2026-10-08** (uncommitted). Definition-of-Done agents run in parallel at the user's request.
 Correction found during implementation: neither the CLI nor the web UI sorted by socket score (CLI sorts by release
-date; web by the clicked column), so decision 3 became "deps.dev column is sortable by severity" — default sort
-order is unchanged.
+date; web by the clicked column), so decision 3 became "deps.dev column is sortable by severity". Follow-up 2026-10-08 (user confirmed): when deps.dev
+is enabled, all outputs default to severity descending (CLI: release date as tiebreaker; web/report: name).
+Also fixed: web re-sort stacked duplicate `<details>` sections for multi-ecosystem results.
 Sources: <https://blog.deps.dev/gossip/>, <https://docs.deps.dev/api/v3alpha/>,
 `examples/skills/scan-dependencies/SKILL.md` in github.com/google/deps.dev, and live probes of `api.deps.dev`
 (2026-10-07 and 2026-10-08, ~40 packages across npm / PyPI / Go / Cargo).

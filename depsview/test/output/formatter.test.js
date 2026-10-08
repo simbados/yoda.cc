@@ -1215,6 +1215,42 @@ describe("sortedResults — depsDevFindings", () => {
     });
     assert.equal(rows[0].depsDev.label, "deprecated");
   });
+
+  it("sorts by deps.dev severity first, release date second, unlabelled rows last", () => {
+    const mixed = makeResults([
+      { name: "newest-ok", version: "1.0.0", released: "2026-10-01" },
+      { name: "old-dep", version: "1.0.0", released: "2015-01-01" },
+      { name: "fresh-new", version: "1.0.0", released: "2026-10-05" },
+      { name: "mal", version: "1.0.0", released: "2018-01-01" },
+      { name: "new-dep", version: "1.0.0", released: "2024-01-01" },
+      { name: "no-record", version: "1.0.0", released: "2026-10-07" },
+      { name: "pulled", version: "1.0.0", released: "2019-01-01" },
+    ]);
+    const mixedFindings = new Map([
+      ["npm:newest-ok@1.0.0", ddRecord({})],
+      ["npm:old-dep@1.0.0", ddRecord({ versionFindings: [{ type: "DEPRECATED" }] })],
+      ["npm:fresh-new@1.0.0", ddRecord({ versionFindings: [{ type: "COOLDOWN" }] })],
+      ["npm:mal@1.0.0", ddRecord({ packageFindings: [{ type: "MALICIOUS" }] })],
+      ["npm:new-dep@1.0.0", ddRecord({ versionFindings: [{ type: "DEPRECATED" }] })],
+      ["npm:pulled@1.0.0", ddRecord({ versionFindings: [{ type: "NOT_FOUND" }] })],
+    ]);
+    const rows = sortedResults(mixed, new Map(), {
+      ecosystem: "npm",
+      depsDevFindings: mixedFindings,
+    });
+    assert.deepEqual(
+      rows.map((r) => r.name),
+      ["mal", "pulled", "new-dep", "old-dep", "fresh-new", "newest-ok", "no-record"],
+    );
+  });
+
+  it("keeps the release-date order when depsDevFindings is not given", () => {
+    const rows = sortedResults(results, new Map(), { ecosystem: "python" });
+    assert.deepEqual(
+      rows.map((r) => r.name),
+      ["requests", "Django"],
+    );
+  });
 });
 
 describe("formatTable — depsDevFindings", () => {

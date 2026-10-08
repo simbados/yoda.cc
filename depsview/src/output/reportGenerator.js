@@ -312,10 +312,13 @@ function renderSection(
   if (showSocket) colDefs.push(["Supply Chain", "supplyChain"]);
   if (showDepsDev) colDefs.push(["deps.dev", "depsDevSeverity"]);
 
+  // Default sort: deps.dev severity (most severe first) when the column is shown,
+  // otherwise newest release first. Must match the embedded script's initial state.
+  const initialSortCol = showDepsDev ? "depsDevSeverity" : "released";
   const headerCellsHtml = colDefs
     .map(
       ([label, col]) =>
-        `<th data-col="${escapeHtml(col)}"${col === "released" ? ' class="th-sort-desc"' : ""}>${escapeHtml(label)}</th>`,
+        `<th data-col="${escapeHtml(col)}"${col === initialSortCol ? ' class="th-sort-desc"' : ""}>${escapeHtml(label)}</th>`,
     )
     .join("");
 
@@ -381,7 +384,7 @@ function buildSortScript(scriptDataJson) {
   return `(function(){
 var D=${scriptDataJson};
 var state={};
-D.sections.forEach(function(s){state[s.id]={col:'released',dir:'desc'};});
+D.sections.forEach(function(s){state[s.id]={col:s.showDepsDev?'depsDevSeverity':'released',dir:'desc'};});
 function daysSince(d){if(!d||d==='unknown')return Infinity;var ms=Date.now()-new Date(d).getTime();return isNaN(ms)?Infinity:Math.floor(ms/86400000);}
 function scoreInfo(v){if(v==null||typeof v!=='number')return{text:'\\u2013',cls:''};var p=Math.round(v*100);return{text:p+'%',cls:v>=0.8?'score-good':v>=0.5?'score-warn':'score-bad'};}
 function socketUrl(name,slug){if(!slug)return null;var n=encodeURIComponent(name).replace(/%40/g,'@').replace(/%2F/gi,'/');return'https://socket.dev/'+slug+'/package/'+n;}

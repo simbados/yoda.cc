@@ -440,6 +440,8 @@ Each package gets one label. When several apply, the most severe is shown with a
 | `unknown`    | yellow | The package is not known to deps.dev (typo, very new, or a private name).                                          |
 | `ok`         | green  | No known issues. **This is not a guarantee** — deps.dev only reports what it knows about.                          |
 
+With deps.dev enabled, every output (terminal table, JSON, HTML report, web UI) lists packages by severity — malicious → pulled → vulnerable → low usage → deprecated → new → unknown → ok, then packages without a label — and by release date within each group in the CLI.
+
 If any package in a section is `malicious` or `pulled`, a red warning naming those packages is shown directly above that section's table (terminal, web UI and HTML report).
 
 Limitations: the endpoint is `v3alpha` and may change; `vulnerable` covers critical advisories only; Go coverage is limited to modules fetched through proxy.golang.org; a failed lookup leaves the column empty (`-`) instead of failing the run. A row shows `-` when deps.dev returned nothing for that package or when the package itself failed to resolve.
@@ -519,7 +521,7 @@ node src/main.js <path-or-url> --report=custom-name.html
 
 Generates a self-contained HTML file (all CSS inlined, no external dependencies) that replicates the terminal table with the same dark theme used by the web UI. The report can be opened directly in a browser, attached to a PR, or shared via email. All flags that affect the terminal table (`--download-stats`, `--socket-key`, etc.) are reflected in the report. The `--report` flag can be combined with `--json` — the JSON goes to stdout and the HTML is written to the file.
 
-Every column header is clickable: click once to sort ascending, click again to toggle descending. The default sort is release date descending (newest first). String columns (Package, Version) default to ascending on first click; all other columns (dates, counts, Supply Chain score) default to descending.
+Every column header is clickable: click once to sort ascending, click again to toggle descending. The default sort is release date descending (newest first) — or deps.dev severity descending when `--deps-dev` is passed. String columns (Package, Version) default to ascending on first click; all other columns (dates, counts, Supply Chain score) default to descending.
 
 ## Excluding test dependencies
 
@@ -583,7 +585,7 @@ Enter a personal access token in the **GitHub token** field. It is used only for
 
 ### deps.dev security signals in the web UI
 
-Tick **Check packages for malware, pulled versions, critical vulnerabilities and deprecations** in the _deps.dev security signals_ card. The choice is remembered in `localStorage`. The browser calls `api.deps.dev` directly (no proxy, no key); the request is sent as `text/plain` so it is a CORS "simple request", and `https://api.deps.dev` is in the `connect-src` CSP allowlist in `web/_headers`. The deps.dev column is sortable by severity.
+Tick **Check packages for malware, pulled versions, critical vulnerabilities and deprecations** in the _deps.dev security signals_ card. The choice is remembered in `localStorage`. The browser calls `api.deps.dev` directly (no proxy, no key); the request is sent as `text/plain` so it is a CORS "simple request", and `https://api.deps.dev` is in the `connect-src` CSP allowlist in `web/_headers`. When deps.dev signals are shown, results open sorted by deps.dev severity (most severe first); click any column header to re-sort.
 
 ### Socket.dev Supply Chain scores in the web UI
 

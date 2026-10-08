@@ -1197,15 +1197,22 @@ if (typeof document !== "undefined") {
         }
 
         const section = entry.section;
-        let sortCol = "releaseDate";
+        // Default sort: deps.dev severity (most severe first) when that column is
+        // shown, otherwise newest release first.
+        let sortCol = showDepsDev ? "depsDevSeverity" : "releaseDate";
         let sortDir = "desc";
+        // The element rendered last time. Kept as a direct reference because the
+        // section is a <section> (single ecosystem) or a <details> (several), so a
+        // tag-based selector missed the <details> case and stacked duplicate
+        // sections at the bottom on every re-sort.
+        let renderedEl = null;
 
         function rerender() {
           // Tear down the existing section element if it exists, then redraw.
           // renderSection() always appends at the end of resultsDiv, so without
           // restoring the original position a re-sort would bump this section
           // after every ecosystem that hasn't been re-rendered yet.
-          const prior = resultsDiv.querySelector(`section[data-ecosystem="${section.ecosystem}"]`);
+          const prior = renderedEl;
           const priorNextSibling = prior ? prior.nextSibling : null;
           if (prior) prior.remove();
 
@@ -1229,6 +1236,7 @@ if (typeof document !== "undefined") {
             showDepsDev,
           });
           if (priorNextSibling) resultsDiv.insertBefore(sectionEl, priorNextSibling);
+          renderedEl = sectionEl;
           appendNonStandardSources(
             sectionEl,
             section.dangerousDeps ?? [],

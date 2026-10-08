@@ -532,7 +532,18 @@ describe("generateReport — depsDevFindings", () => {
   describe("column header", () => {
     it("adds a deps.dev header sorting by depsDevSeverity", () => {
       const html = generateReport(results, new Set(), { depsDevFindings: findings });
-      assert.ok(html.includes('<th data-col="depsDevSeverity">deps.dev</th>'));
+      assert.ok(html.includes('<th data-col="depsDevSeverity" class="th-sort-desc">deps.dev</th>'));
+    });
+
+    it("makes deps.dev severity the default sort (header marker + initial script state)", () => {
+      const html = generateReport(results, new Set(), { depsDevFindings: findings });
+      assert.ok(html.includes('<th data-col="released">Released</th>'));
+      assert.ok(html.includes("col:s.showDepsDev?'depsDevSeverity':'released'"));
+    });
+
+    it("keeps release date as the default sort without depsDevFindings", () => {
+      const html = generateReport(results, new Set());
+      assert.ok(html.includes('<th data-col="released" class="th-sort-desc">Released</th>'));
     });
 
     it("omits the deps.dev header when depsDevFindings is not given", () => {
