@@ -40,7 +40,7 @@ capabilities:
         - command: >-
             export HOME=/home/agent
             PATH=/home/agent/.local/bin:/home/agent/.local/share/mise/shims:$PATH;
-            mise use --global go@1.27.1 go:golang.org/x/tools/gopls@v0.23.0 &&
+            mise use --global go@1.27.3 go:golang.org/x/tools/gopls@v0.23.0 &&
             go env -w GOTOOLCHAIN=local
           user: "1000"
           description: Go and gopls for helix
