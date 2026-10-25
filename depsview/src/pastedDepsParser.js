@@ -66,7 +66,9 @@ function detectNpmFormat(content) {
     data = JSON.parse(stripTrailingCommas(content));
   } catch {
     const firstLine = firstNonBlankLine(content);
-    if (firstLine && /^lockfileVersion:\s*['"]?\d/.test(firstLine)) return "pnpm-lock.yaml";
+    // pnpm 10+/11 emits multi-document lockfiles that begin with a YAML "---" separator.
+    const pnpmHeader = firstNonBlankLine(content.replace(/^(\s*---[ \t]*\r?\n)+/, ""));
+    if (pnpmHeader && /^lockfileVersion:\s*['"]?\d/.test(pnpmHeader)) return "pnpm-lock.yaml";
     if (/^# yarn lockfile v1\s*$/m.test(content)) return "yarn.lock";
     if (firstLine === "__metadata:") return "yarn.lock";
     return null;

@@ -219,6 +219,15 @@ describe("detectPastedFormat", () => {
       assert.equal(detectPastedFormat(PNPM_LOCK, "npm"), "pnpm-lock.yaml");
     });
 
+    it("detects pnpm-lock.yaml that starts with a '---' document separator", () => {
+      assert.equal(detectPastedFormat(`---\n${PNPM_LOCK}`, "npm"), "pnpm-lock.yaml");
+    });
+
+    it("detects a multi-document pnpm-lock.yaml (env document followed by main document)", () => {
+      const multi = `---\nlockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    configDependencies: {}\n\n---\n${PNPM_LOCK}`;
+      assert.equal(detectPastedFormat(multi, "npm"), "pnpm-lock.yaml");
+    });
+
     it("detects yarn.lock (classic v1) via the '# yarn lockfile v1' header", () => {
       assert.equal(detectPastedFormat(YARN_CLASSIC_LOCK, "npm"), "yarn.lock");
     });

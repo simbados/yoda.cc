@@ -170,6 +170,8 @@ Supports lockfile versions 5, 6, and 9:
 | 6       | 7/8  | `dev: true` flag inside each entry                                     |
 | 9       | 9+   | `devDependencies` across every importer (see workspace handling below) |
 
+**Multi-document lockfiles** — pnpm 10+/11 can write a leading `---` YAML document (the `packageManagerDependencies` environment lockfile) before the main document. Pasted text that starts with `---` is still detected as `pnpm-lock.yaml`, and entries from both documents are merged into one package list.
+
 **depPath parsing (v6/v9)** follows pnpm's own [`@pnpm/deps.path`](https://github.com/pnpm/pnpm/blob/main/deps/path/src/index.ts) algorithm: `indexOf('@', 1)` for the name/version boundary (so npm aliases and `git+ssh://` URLs in the spec don't break splitting) and a backwards paren-counting walk for the outermost peer-deps and `(patch_hash=…)` suffix groups. Keys like `@tanstack/react-query@5.0.0(react@18.0.0)(react-dom@18.0.0)` are stripped correctly even with multiple peer groups, nested parens, or a patch-hash suffix.
 
 **Non-tarball resolutions** — pnpm's `Resolution` union allows variants other than the implicit `TarballResolution`:
