@@ -523,7 +523,7 @@ node src/main.js <path-or-url> --report=custom-name.html
 
 Generates a self-contained HTML file (all CSS inlined, no external dependencies) that replicates the terminal table with the same dark theme used by the web UI. The report can be opened directly in a browser, attached to a PR, or shared via email. All flags that affect the terminal table (`--download-stats`, `--socket-key`, etc.) are reflected in the report. The `--report` flag can be combined with `--json` — the JSON goes to stdout and the HTML is written to the file.
 
-Every column header is clickable: click once to sort ascending, click again to toggle descending. The default sort is release date descending (newest first) — or deps.dev severity descending when `--deps-dev` is passed. String columns (Package, Version) default to ascending on first click; all other columns (dates, counts, Supply Chain score) default to descending.
+Every column header is clickable: click once to sort ascending, click again to toggle descending. The default sort is release date descending (newest first) — or deps.dev severity descending when `--deps-dev` is passed (packages with the same severity are ordered by release date, newest first). String columns (Package, Version) default to ascending on first click; all other columns (dates, counts, Supply Chain score) default to descending.
 
 ## Excluding test dependencies
 
@@ -587,7 +587,7 @@ Enter a personal access token in the **GitHub token** field. It is used only for
 
 ### deps.dev security signals in the web UI
 
-Tick **Check packages for malware, pulled versions, critical vulnerabilities and deprecations** in the _deps.dev security signals_ card. The choice is remembered in `localStorage`. The browser calls `api.deps.dev` directly (no proxy, no key); the request is sent as `text/plain` so it is a CORS "simple request", and `https://api.deps.dev` is in the `connect-src` CSP allowlist in `web/_headers`. When deps.dev signals are shown, results open sorted by deps.dev severity (most severe first); click any column header to re-sort.
+Tick **Check packages for malware, pulled versions, critical vulnerabilities and deprecations** in the _deps.dev security signals_ card. The choice is remembered in `localStorage`. The browser calls `api.deps.dev` directly (no proxy, no key); the request is sent as `text/plain` so it is a CORS "simple request", and `https://api.deps.dev` is in the `connect-src` CSP allowlist in `web/_headers`. When deps.dev signals are shown, results open sorted by deps.dev severity (most severe first), then by release age (newest first) within the same severity; click any column header to re-sort.
 
 ### Socket.dev Supply Chain scores in the web UI
 

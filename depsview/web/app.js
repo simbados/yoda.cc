@@ -128,11 +128,29 @@ export function formatDaysAgo(dateStr, fallback) {
 }
 
 /**
+ * Compares two release-date strings so that newer dates come first and
+ * missing/"unknown" dates come last. Used as a tie-breaker.
+ * Examples: ("2024-05-01", "2023-01-01") → negative; (null, "2023-01-01") → positive.
+ * @param {string|null|undefined} a
+ * @param {string|null|undefined} b
+ * @returns {number} negative if a sorts first, positive if b does, 0 if equal
+ */
+function compareReleaseDateDesc(a, b) {
+  const aUnk = !a || a === "unknown";
+  const bUnk = !b || b === "unknown";
+  if (aUnk && bUnk) return 0;
+  if (aUnk) return 1;
+  if (bUnk) return -1;
+  return b.localeCompare(a);
+}
+
+/**
  * Sorts a Map of resolved dependency results by an arbitrary column.
  * "unknown" date strings and null numeric values always sink to the bottom
  * regardless of direction. String columns use localeCompare; date columns compare
  * ISO-8601 strings lexicographically; numeric columns compare by value.
- * All sorts use name as a tiebreaker.
+ * All sorts use name as a tiebreaker; deps.dev severity ties are first broken by
+ * release date, newest first.
  * @param {Map<string, object>} resultsMap
  * @param {'name'|'version'|'releaseDate'|'firstReleaseDate'|'releaseCount'|'downloadsLastMonth'|'supplyChain'|'depsDevSeverity'} column
  * @param {'asc'|'desc'} direction
@@ -168,7 +186,14 @@ export function sortResultsBy(resultsMap, column, direction) {
       if (aNull) return 1;
       if (bNull) return -1;
       const cmp = aVal - bVal;
-      return cmp !== 0 ? sign * cmp : a.name.localeCompare(b.name);
+      if (cmp !== 0) return sign * cmp;
+      // deps.dev severity ties: newest release first (regardless of direction),
+      // unknown dates last, then name.
+      if (column === "depsDevSeverity") {
+        const byRelease = compareReleaseDateDesc(a.releaseDate, b.releaseDate);
+        if (byRelease !== 0) return byRelease;
+      }
+      return a.name.localeCompare(b.name);
     }
 
     const cmp = String(aVal ?? "").localeCompare(String(bVal ?? ""));

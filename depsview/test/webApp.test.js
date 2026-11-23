@@ -548,6 +548,112 @@ describe("sortResultsBy — depsDevSeverity", () => {
       ["a", "b"],
     );
   });
+
+  describe("release date tie-break", () => {
+    const tied = new Map([
+      ["a", { name: "alpha", depsDevSeverity: 5, releaseDate: "2022-01-01" }],
+      ["b", { name: "beta", depsDevSeverity: 5, releaseDate: "2024-06-01" }],
+      ["c", { name: "gamma", depsDevSeverity: 5, releaseDate: "2023-03-01" }],
+    ]);
+
+    it("orders same-severity rows newest release first when descending", () => {
+      assert.deepEqual(
+        sortResultsBy(tied, "depsDevSeverity", "desc").map((r) => r.name),
+        ["beta", "gamma", "alpha"],
+      );
+    });
+
+    it("orders same-severity rows newest release first when ascending", () => {
+      assert.deepEqual(
+        sortResultsBy(tied, "depsDevSeverity", "asc").map((r) => r.name),
+        ["beta", "gamma", "alpha"],
+      );
+    });
+
+    it("places unknown, null and missing dates last within a severity group in desc", () => {
+      const m = new Map([
+        ["a", { name: "aaa", depsDevSeverity: 5, releaseDate: "unknown" }],
+        ["b", { name: "bbb", depsDevSeverity: 5, releaseDate: "2020-01-01" }],
+        ["c", { name: "ccc", depsDevSeverity: 5, releaseDate: null }],
+        ["d", { name: "ddd", depsDevSeverity: 5 }],
+        ["e", { name: "eee", depsDevSeverity: 5, releaseDate: "2021-01-01" }],
+      ]);
+      assert.deepEqual(
+        sortResultsBy(m, "depsDevSeverity", "desc").map((r) => r.name),
+        ["eee", "bbb", "aaa", "ccc", "ddd"],
+      );
+    });
+
+    it("places unknown, null and missing dates last within a severity group in asc", () => {
+      const m = new Map([
+        ["a", { name: "aaa", depsDevSeverity: 5, releaseDate: "unknown" }],
+        ["b", { name: "bbb", depsDevSeverity: 5, releaseDate: "2020-01-01" }],
+        ["c", { name: "ccc", depsDevSeverity: 5, releaseDate: null }],
+        ["d", { name: "ddd", depsDevSeverity: 5 }],
+        ["e", { name: "eee", depsDevSeverity: 5, releaseDate: "2021-01-01" }],
+      ]);
+      assert.deepEqual(
+        sortResultsBy(m, "depsDevSeverity", "asc").map((r) => r.name),
+        ["eee", "bbb", "aaa", "ccc", "ddd"],
+      );
+    });
+
+    it("falls back to name when severity and release date are both equal", () => {
+      const m = new Map([
+        ["a", { name: "zeta", depsDevSeverity: 5, releaseDate: "2024-01-01" }],
+        ["b", { name: "alpha", depsDevSeverity: 5, releaseDate: "2024-01-01" }],
+      ]);
+      assert.deepEqual(
+        sortResultsBy(m, "depsDevSeverity", "desc").map((r) => r.name),
+        ["alpha", "zeta"],
+      );
+    });
+
+    it("does not let release date override a differing severity", () => {
+      const m = new Map([
+        ["a", { name: "old-high", depsDevSeverity: 9, releaseDate: "2010-01-01" }],
+        ["b", { name: "new-low", depsDevSeverity: 1, releaseDate: "2025-01-01" }],
+      ]);
+      assert.deepEqual(
+        sortResultsBy(m, "depsDevSeverity", "desc").map((r) => r.name),
+        ["old-high", "new-low"],
+      );
+      assert.deepEqual(
+        sortResultsBy(m, "depsDevSeverity", "asc").map((r) => r.name),
+        ["new-low", "old-high"],
+      );
+    });
+
+    it("keeps null severity rows last regardless of their release date", () => {
+      const m = new Map([
+        ["a", { name: "nullsev", depsDevSeverity: null, releaseDate: "2025-01-01" }],
+        ["b", { name: "sev", depsDevSeverity: 2, releaseDate: "2000-01-01" }],
+      ]);
+      assert.deepEqual(
+        sortResultsBy(m, "depsDevSeverity", "desc").map((r) => r.name),
+        ["sev", "nullsev"],
+      );
+      assert.deepEqual(
+        sortResultsBy(m, "depsDevSeverity", "asc").map((r) => r.name),
+        ["sev", "nullsev"],
+      );
+    });
+
+    it("still breaks releaseCount ties by name rather than release date", () => {
+      const m = new Map([
+        ["a", { name: "zeta", releaseCount: 4, releaseDate: "2025-01-01" }],
+        ["b", { name: "alpha", releaseCount: 4, releaseDate: "2020-01-01" }],
+      ]);
+      assert.deepEqual(
+        sortResultsBy(m, "releaseCount", "desc").map((r) => r.name),
+        ["alpha", "zeta"],
+      );
+      assert.deepEqual(
+        sortResultsBy(m, "releaseCount", "asc").map((r) => r.name),
+        ["alpha", "zeta"],
+      );
+    });
+  });
 });
 
 describe("collectEnrichmentPackages", () => {
