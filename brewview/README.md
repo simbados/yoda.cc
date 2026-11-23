@@ -24,7 +24,7 @@ Optionally check **Include build dependencies** to include packages that are onl
 | ------------- | ---------------------------------------------------------------------------------------------- |
 | Package       | Formula name (links to formulae.brew.sh)                                                       |
 | Version       | Current stable version                                                                         |
-| Updated       | Date of the most recent BrewTestBot commit (author or committer) to the formula — last release |
+| Updated       | Age of the most recent BrewTestBot commit (author or committer) to the formula — last release — shown as days ago (e.g. `12 days ago`, `today`); hover for the exact date |
 | Installs/year | Total installs over the past 365 days (all versions combined)                                  |
 
 ### Color coding

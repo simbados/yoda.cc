@@ -46,6 +46,21 @@ export function daysSince(dateStr) {
 }
 
 /**
+ * Formats an ISO date string as a relative age in days.
+ * Examples: today → "today", yesterday → "1 day ago", 12 days → "12 days ago".
+ * Returns the fallback when the date is missing or unparseable.
+ * @param {string|null|undefined} dateStr
+ * @param {string} fallback - text to show when no age can be computed
+ * @returns {string}
+ */
+export function formatDaysAgo(dateStr, fallback) {
+  const days = daysSince(dateStr);
+  if (!Number.isFinite(days)) return fallback;
+  if (days <= 0) return "today";
+  return days === 1 ? "1 day ago" : `${days} days ago`;
+}
+
+/**
  * Formats an integer with locale-aware thousand separators (e.g. 1234 → "1,234").
  * Returns "–" when the value is null or undefined.
  * @param {number|null|undefined} n
@@ -199,7 +214,8 @@ function renderResults(container, sorted) {
     }
 
     addCell(tr, pkg.version);
-    const updatedCell = addCell(tr, pkg.updatedAt ?? "–");
+    const updatedCell = addCell(tr, formatDaysAgo(pkg.updatedAt, "–"));
+    if (pkg.updatedAt) updatedCell.title = pkg.updatedAt;
     if (daysSince(pkg.updatedAt) <= 7) updatedCell.className = "age-new";
     else if (daysSince(pkg.updatedAt) <= 30) updatedCell.className = "age-fresh";
     addCell(tr, formatInstalls(pkg.installs365));

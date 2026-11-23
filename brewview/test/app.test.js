@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { parseBrewInput } from "../web/app.js";
+import { parseBrewInput, formatDaysAgo } from "../web/app.js";
 
 describe("parseBrewInput", () => {
   describe("comma-separated input", () => {
@@ -120,5 +120,45 @@ describe("parseBrewInput", () => {
     it("lowercases names in brew outdated format", () => {
       assert.deepEqual(parseBrewInput("FZF (0.72.0) < 0.73.0"), ["fzf"]);
     });
+  });
+});
+
+describe("formatDaysAgo", () => {
+  const ago = (days) => new Date(Date.now() - days * 86_400_000 - 1000).toISOString();
+
+  it("returns 'today' for a date from the current moment", () => {
+    assert.equal(formatDaysAgo(new Date().toISOString(), "x"), "today");
+  });
+
+  it("returns 'today' for a future date", () => {
+    assert.equal(formatDaysAgo(new Date(Date.now() + 5 * 86_400_000).toISOString(), "x"), "today");
+  });
+
+  it("returns '1 day ago' for a date one day in the past", () => {
+    assert.equal(formatDaysAgo(ago(1), "x"), "1 day ago");
+  });
+
+  it("returns 'N days ago' for a date several days in the past", () => {
+    assert.equal(formatDaysAgo(ago(12), "x"), "12 days ago");
+  });
+
+  it("returns the fallback for null", () => {
+    assert.equal(formatDaysAgo(null, "fb"), "fb");
+  });
+
+  it("returns the fallback for undefined", () => {
+    assert.equal(formatDaysAgo(undefined, "fb"), "fb");
+  });
+
+  it("returns the fallback for an empty string", () => {
+    assert.equal(formatDaysAgo("", "fb"), "fb");
+  });
+
+  it("returns the fallback for 'unknown'", () => {
+    assert.equal(formatDaysAgo("unknown", "fb"), "fb");
+  });
+
+  it("returns the fallback for an unparseable date", () => {
+    assert.equal(formatDaysAgo("not-a-date", "fb"), "fb");
   });
 });

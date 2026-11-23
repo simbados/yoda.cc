@@ -113,6 +113,21 @@ export function daysSince(dateStr) {
 }
 
 /**
+ * Formats an ISO date string as a relative age in days.
+ * Examples: today → "today", yesterday → "1 day ago", 12 days → "12 days ago".
+ * Returns the fallback when the date is missing or unparseable.
+ * @param {string|null|undefined} dateStr
+ * @param {string} fallback - text to show when no age can be computed
+ * @returns {string}
+ */
+export function formatDaysAgo(dateStr, fallback) {
+  const days = daysSince(dateStr);
+  if (!Number.isFinite(days)) return fallback;
+  if (days <= 0) return "today";
+  return days === 1 ? "1 day ago" : `${days} days ago`;
+}
+
+/**
  * Sorts a Map of resolved dependency results by an arbitrary column.
  * "unknown" date strings and null numeric values always sink to the bottom
  * regardless of direction. String columns use localeCompare; date columns compare
@@ -417,14 +432,16 @@ function renderSection(container, cfg) {
 
     addCell(tr, pkg.version);
 
-    const relCell = addCell(tr, pkg.releaseDate ?? "unknown");
+    const relCell = addCell(tr, formatDaysAgo(pkg.releaseDate, "unknown"));
+    if (pkg.releaseDate) relCell.title = pkg.releaseDate;
     const relAge = daysSince(pkg.releaseDate);
     if (relAge <= 3) relCell.className = "age-new";
     else if (relAge <= 7) relCell.className = "age-orange";
     else if (relAge <= 30) relCell.className = "age-fresh";
 
     if (showFirst) {
-      const firstCell = addCell(tr, pkg.firstReleaseDate ?? "unknown");
+      const firstCell = addCell(tr, formatDaysAgo(pkg.firstReleaseDate, "unknown"));
+      if (pkg.firstReleaseDate) firstCell.title = pkg.firstReleaseDate;
       const firstAge = daysSince(pkg.firstReleaseDate);
       if (firstAge <= 3) firstCell.className = "age-new";
       else if (firstAge <= 7) firstCell.className = "age-orange";
